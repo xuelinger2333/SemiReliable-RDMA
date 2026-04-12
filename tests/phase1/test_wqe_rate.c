@@ -44,6 +44,7 @@ static const char *fmt_size(size_t bytes, char *out, size_t out_len)
         snprintf(out, out_len, "%zu MB", bytes / (1024*1024));
     else
         snprintf(out, out_len, "%zu KB", bytes / 1024);
+    out[out_len - 1] = '\0';
     return out;
 }
 
@@ -74,7 +75,7 @@ static void run_server(const char *dev_name)
         bind(lfd, (struct sockaddr *)&a, sizeof(a));
         listen(lfd, 1);
         int cfd = accept(lfd, NULL, NULL);
-        uint8_t b; read(cfd, &b, 1);
+        uint8_t b; ssize_t r = read(cfd, &b, 1); (void)r;
         close(cfd); close(lfd);
     }
     printf("[Server] Done.\n");
@@ -108,7 +109,7 @@ static void run_client(const char *dev_name, const char *server_ip)
 
     for (size_t ci = 0; ci < N_CHUNKS; ci++) {
         size_t chunk = CHUNKS[ci];
-        char sz[16];
+        char sz[32];
         fmt_size(chunk, sz, sizeof(sz));
 
         /* ── Warmup ── */
@@ -171,7 +172,7 @@ next_chunk:;
         };
         inet_pton(AF_INET, server_ip, &a.sin_addr);
         connect(fd, (struct sockaddr *)&a, sizeof(a));
-        uint8_t b = 1; write(fd, &b, 1);
+        uint8_t b = 1; ssize_t r = write(fd, &b, 1); (void)r;
         close(fd);
     }
 

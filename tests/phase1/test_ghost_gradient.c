@@ -60,8 +60,8 @@ static int tcp_connect_to(const char *ip, int port)
 }
 
 /* Blocking one-byte send / recv for round synchronization */
-static void tcp_signal(int fd) { uint8_t b = 1; write(fd, &b, 1); }
-static void tcp_wait(int fd)   { uint8_t b;     read(fd, &b, 1);  }
+static void tcp_signal(int fd) { uint8_t b = 1; ssize_t r = write(fd, &b, 1); (void)r; }
+static void tcp_wait(int fd)   { uint8_t b;     ssize_t r = read(fd, &b, 1);  (void)r; }
 
 /* ── Server ──────────────────────────────────────── */
 
@@ -83,8 +83,10 @@ static void run_server(const char *dev_name)
 
     /* Persistent TCP — exchange QP info, keep connection open */
     int tcp = tcp_listen_accept(TCP_PORT);
-    write(tcp, &ctx.local_info, sizeof(ctx.local_info));
-    read(tcp,  &remote,         sizeof(remote));
+    ssize_t nw = write(tcp, &ctx.local_info, sizeof(ctx.local_info));
+    CHECK(nw == (ssize_t)sizeof(ctx.local_info), "TCP write failed");
+    ssize_t nr = read(tcp,  &remote,         sizeof(remote));
+    CHECK(nr == (ssize_t)sizeof(remote), "TCP read failed");
     LOG_INFO("QP exchange done (remote qpn=%u)", remote.qpn);
 
     rdma_modify_qp_to_rtr(&ctx, &remote);
@@ -172,8 +174,10 @@ static void run_client(const char *dev_name, const char *server_ip)
 
     /* Persistent TCP — exchange QP info */
     int tcp = tcp_connect_to(server_ip, TCP_PORT);
-    read(tcp,  &remote,         sizeof(remote));
-    write(tcp, &ctx.local_info, sizeof(ctx.local_info));
+    ssize_t nr = read(tcp,  &remote,         sizeof(remote));
+    CHECK(nr == (ssize_t)sizeof(remote), "TCP read failed");
+    ssize_t nw = write(tcp, &ctx.local_info, sizeof(ctx.local_info));
+    CHECK(nw == (ssize_t)sizeof(ctx.local_info), "TCP write failed");
     LOG_INFO("QP exchange done (remote qpn=%u)", remote.qpn);
 
     rdma_modify_qp_to_rtr(&ctx, &remote);

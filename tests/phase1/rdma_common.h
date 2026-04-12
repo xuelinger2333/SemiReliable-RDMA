@@ -270,8 +270,10 @@ tcp_server_exchange(int port, struct qp_info *local, struct qp_info *remote)
     CHECK(connfd >= 0, "accept() failed");
     close(listenfd);
 
-    write(connfd, local, sizeof(*local));
-    read(connfd, remote, sizeof(*remote));
+    ssize_t nw = write(connfd, local, sizeof(*local));
+    CHECK(nw == (ssize_t)sizeof(*local), "TCP write failed");
+    ssize_t nr = read(connfd, remote, sizeof(*remote));
+    CHECK(nr == (ssize_t)sizeof(*remote), "TCP read failed");
     close(connfd);
     LOG_INFO("TCP exchange done (remote qpn=%u)", remote->qpn);
     return 0;
@@ -294,8 +296,10 @@ tcp_client_exchange(const char *server_ip, int port,
     CHECK(ret == 0, "connect(%s:%d) failed: %s", server_ip, port, strerror(errno));
 
     /* Server sends first, client receives first */
-    read(sockfd, remote, sizeof(*remote));
-    write(sockfd, local, sizeof(*local));
+    ssize_t nr = read(sockfd, remote, sizeof(*remote));
+    CHECK(nr == (ssize_t)sizeof(*remote), "TCP read failed");
+    ssize_t nw = write(sockfd, local, sizeof(*local));
+    CHECK(nw == (ssize_t)sizeof(*local), "TCP write failed");
     close(sockfd);
     LOG_INFO("TCP exchange done (remote qpn=%u)", remote->qpn);
     return 0;
