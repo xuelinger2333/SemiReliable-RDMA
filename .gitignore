@@ -1,0 +1,41 @@
+# Build
+build/
+*.o
+*.so
+*.a
+*.dylib
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+*.egg
+.eggs/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Experiment outputs
+experiments/results/
+outputs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Secrets
+.env
+.env.*
+credentials.json
+*.pem
+*.key
+
+# RDMA test binaries
+tests/integration/uc_server
+tests/integration/uc_client
+tests/integration/wqe_bench
