@@ -222,8 +222,10 @@ rdma_modify_qp_to_rtr(struct rdma_ctx *rctx, struct qp_info *remote)
     attr.ah_attr.sl            = 0;
     attr.ah_attr.src_path_bits = 0;
     attr.ah_attr.port_num      = rctx->ib_port;
+    attr.rq_psn                = 0;
 
-    int flags = IBV_QP_STATE | IBV_QP_PATH_MTU | IBV_QP_DEST_QPN | IBV_QP_AV;
+    int flags = IBV_QP_STATE | IBV_QP_PATH_MTU | IBV_QP_DEST_QPN | IBV_QP_AV
+              | IBV_QP_RQ_PSN;
     int ret = ibv_modify_qp(rctx->qp, &attr, flags);
     CHECK(ret == 0, "QP->RTR failed: %s", strerror(errno));
     LOG_INFO("QP -> RTR (dest_qpn=%u)", remote->qpn);
