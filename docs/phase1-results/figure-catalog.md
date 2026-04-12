@@ -1,15 +1,15 @@
-# Phase 1 Figure Catalog
+# Phase 1 图表目录
 
-## Figure 1: WQE Rate vs. Chunk Size (Dual-Axis)
+## 图 1：WQE 速率 vs. Chunk 大小（双轴图）
 
-- **Filename:** `figures/figure-01-wqe-rate-vs-chunk.txt` (ASCII; no plotting library available)
-- **Purpose:** Show the tradeoff between WQE posting rate and throughput across chunk sizes
-- **Data source:** Test 3 output (1000 iters per chunk, SoftRoCE UC QP)
+- **文件名：** `figures/figure-01-wqe-rate-vs-chunk.txt`（ASCII；无绘图库可用）
+- **用途：** 展示不同 chunk 大小下 WQE 发射速率与吞吐量的权衡
+- **数据来源：** Test 3 输出（每种 chunk 1000 次迭代，SoftRoCE UC QP）
 
-### ASCII Visualization
+### ASCII 可视化
 
 ```
-WQE/s (log scale)                          Throughput (MB/s)
+WQE/s (对数刻度)                            吞吐量 (MB/s)
 100,000 |  *                                    |         600
         |                                       |
  10,000 |      *                                |         500  + --- + --- +
@@ -20,57 +20,57 @@ WQE/s (log scale)                          Throughput (MB/s)
         +---+-------+-------+---------+-----   +
            4KB    16KB    64KB     256KB   1MB
         
-        * = WQE/s (left axis)     + = Throughput (right axis)
+        * = WQE/s（左轴）     + = 吞吐量（右轴）
 ```
 
-### Caption Requirements
-- State device (SoftRoCE rxe0), transport (UC QP RDMA Write), iterations (1000)
-- Label both y-axes clearly
-- Note that WQE/s uses log scale
-- Include caveat: "SoftRoCE software emulation; hardware RDMA rates expected 10–100x higher"
+### 标题要求
+- 注明设备（SoftRoCE rxe0）、传输方式（UC QP RDMA Write）、迭代次数（1000）
+- 清晰标注两个 y 轴
+- 注明 WQE/s 使用对数刻度
+- 包含警告："SoftRoCE 软件模拟；硬件 RDMA 速率预计高 10–100 倍"
 
-### Key Observation
-Throughput peaks at 16KB–64KB (~500 MB/s) then declines. WQE/s decreases monotonically. The crossover suggests **16KB–64KB** is the optimal chunk size range on SoftRoCE where per-WQE overhead is amortized without excessive per-chunk latency.
+### 关键观察
+吞吐量在 16KB–64KB（~500 MB/s）达到峰值后下降。WQE/s 单调递减。交叉点表明 **16KB–64KB** 是 SoftRoCE 上的最优 chunk 大小范围——per-WQE 开销已被摊薄，且单 chunk 延迟尚未过大。
 
-### Interpretation Checklist
-1. **Why this figure?** To identify the chunk size sweet spot that balances WQE overhead against loss granularity.
-2. **What to notice?** Throughput plateau at 16–256KB; sharp WQE/s drop at larger sizes; 4KB under-performs.
-3. **What it changes:** Sets the initial chunk size range for the Chunk Manager implementation (Week 3–4). Below 16KB is likely inefficient even on hardware.
+### 解读清单
+1. **为什么需要这张图？** 识别在 WQE 开销与丢失粒度之间取得平衡的 chunk 大小最优点。
+2. **应该注意什么？** 16–256KB 的吞吐量平台期；大尺寸时 WQE/s 急剧下降；4KB 性能不佳。
+3. **改变了什么？** 为 Chunk Manager 实现（第 3–4 周）设定了初始 chunk 大小范围。低于 16KB 即使在硬件上也可能效率不高。
 
 ---
 
-## Figure 2: Write-with-Immediate Behavior Matrix
+## 图 2：Write-with-Immediate 行为矩阵
 
-- **Filename:** (table, not plot)
-- **Purpose:** Summarize the observed UC Write-with-Immediate behavior under different conditions
+- **文件名：**（表格，非图表）
+- **用途：** 总结 UC Write-with-Immediate 在不同条件下的观察行为
 
-### Data
+### 数据
 
-| Condition | RDMA Data Written? | Receiver CQE? | Buffer State | Implication |
-|-----------|--------------------|---------------|--------------|-------------|
-| Normal (RQ WR posted) | Yes | Yes (`RECV_RDMA_WITH_IMM`) | New data | Happy path |
-| No RQ WR posted | **Yes** | **No** | New data (undetected) | CQE is sole signal |
-| Packet loss (not yet tested) | Partial/No | No | Stale/partial data | True ghost gradient |
+| 条件 | RDMA 数据写入？ | 接收端 CQE？ | Buffer 状态 | 含义 |
+|------|----------------|-------------|------------|------|
+| 正常（已 post RQ WR） | 是 | 是 (`RECV_RDMA_WITH_IMM`) | 新数据 | 正常路径 |
+| 未 post RQ WR | **是** | **否** | 新数据（未检测到） | CQE 是唯一信号 |
+| 丢包（尚未测试） | 部分/否 | 否 | 旧/部分数据 | 真正的 ghost gradient |
 
-### Key Observation
-The Write-with-Immediate operation is **decomposable**: data transfer and CQE generation are independent. This has a direct design consequence — the Ratio Controller MUST rely on CQE count, never on buffer content inspection.
+### 关键观察
+Write-with-Immediate 操作是**可分解的**：数据传输和 CQE 生成是独立的。这直接影响设计——Ratio Controller **必须**依赖 CQE 计数，**绝不能**检查 buffer 内容。
 
-### Interpretation Checklist
-1. **Why?** To clarify what "ghost gradient" means in the SemiRDMA context.
-2. **What to notice?** Row 2 — data arrives but receiver doesn't know. This is worse than "no data" because the receiver can't distinguish new data from old.
-3. **What it changes:** Confirms masked aggregation must be CQE-bitmap-driven. Buffer content is not a reliable completion signal.
+### 解读清单
+1. **为什么？** 澄清 SemiRDMA 语境下"ghost gradient"的确切含义。
+2. **注意什么？** 第 2 行——数据到达但接收端不知道。这比"没有数据"更糟糕，因为接收端无法区分新数据和旧数据。
+3. **改变了什么？** 确认 masked aggregation 必须由 CQE bitmap 驱动。Buffer 内容不是可靠的完成信号。
 
 ---
 
-## Figure 3: Per-Loss Impact vs. Chunk Size
+## 图 3：单次丢失影响 vs. Chunk 大小
 
-- **Filename:** `figures/figure-03-loss-impact.txt` (ASCII)
-- **Purpose:** Connect chunk size to gradient loss impact for a typical model
+- **文件名：** `figures/figure-03-loss-impact.txt`（ASCII）
+- **用途：** 将 chunk 大小与典型模型的梯度丢失影响关联
 
-### ASCII Visualization
+### ASCII 可视化
 
 ```
-Loss impact per dropped chunk (% of gradient)
+每个丢失 chunk 的影响（% 梯度）
 
   1.0% |                                          *  (1 MB)
        |
@@ -83,17 +83,17 @@ Loss impact per dropped chunk (% of gradient)
        +--+------+------+-----------+-----------+---
          4KB   16KB   64KB       256KB         1MB
 
-Reference: 25M-parameter model (ResNet-50), 100 MB total gradient
+参考模型：25M 参数（ResNet-50），100 MB 总梯度
 ```
 
-### Caption Requirements
-- State the model used for reference (ResNet-50, 25M params, float32)
-- Note this is per-chunk impact; actual gradient loss depends on loss rate × chunk count
+### 标题要求
+- 注明参考模型（ResNet-50，25M 参数，float32）
+- 说明这是单 chunk 影响；实际梯度丢失率取决于丢包率 × chunk 数量
 
-### Key Observation
-At 64KB chunks, a single lost chunk affects only 0.064% of the gradient — well within the 1–5% tolerance established by MLT/OptiReduce. Even at 1MB, a single loss is only 1%. This validates fine-grained chunking as a viable strategy.
+### 关键观察
+64KB chunk 时，单次丢失仅影响 0.064% 的梯度——远在 MLT/OptiReduce 确立的 1–5% 容忍度范围内。即使 1MB chunk，单次丢失也仅为 1%。这验证了细粒度分块策略的可行性。
 
-### Interpretation Checklist
-1. **Why?** To quantify the RQ1 tradeoff between chunk size and per-loss damage.
-2. **What to notice?** Impact scales linearly with chunk size. At the optimal throughput range (16–64KB), per-loss impact is negligible.
-3. **What it changes:** Combined with Figure 1, this narrows the design space: 16–64KB chunks give near-peak throughput with minimal per-loss impact.
+### 解读清单
+1. **为什么？** 量化 RQ1 中 chunk 大小与单次丢失损害的权衡。
+2. **注意什么？** 影响与 chunk 大小成线性关系。在最优吞吐量范围（16–64KB）内，单次丢失影响可忽略。
+3. **改变了什么？** 结合图 1，缩小了设计空间：16–64KB chunk 提供接近峰值的吞吐量且单次丢失影响极小。

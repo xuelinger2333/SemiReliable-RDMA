@@ -1,129 +1,129 @@
-# Phase 1 Statistics Appendix
+# Phase 1 统计附录
 
-## Test 1: UC Write-with-Immediate CQE Verification
+## Test 1：UC Write-with-Immediate CQE 验证
 
-### Nature of Test
-Deterministic correctness test (not statistical). A single successful run is sufficient because:
-- CQE generation is a deterministic protocol behavior, not a stochastic outcome.
-- The test verifies 4 binary conditions (CQE received, opcode correct, imm_data correct, buffer written).
-- All 4 conditions passed.
+### 测试性质
+确定性正确性测试（非统计性测试）。单次成功运行即可，原因：
+- CQE 生成是确定性的协议行为，不是随机结果。
+- 测试验证 4 个二元条件（CQE 是否收到、opcode 是否正确、imm_data 是否正确、buffer 是否写入）。
+- 所有 4 个条件均通过。
 
-### Raw Observations
+### 原始观察
 
-| Metric | Expected | Observed | Status |
-|--------|----------|----------|--------|
-| CQE received | Yes | Yes | PASS |
+| 指标 | 期望值 | 观察值 | 状态 |
+|------|--------|--------|------|
+| CQE 收到 | 是 | 是 | PASS |
 | CQE opcode | `RECV_RDMA_WITH_IMM` | `RECV_RDMA_WITH_IMM` | PASS |
 | CQE imm_data | `0xDEADBEEF` | `0xDEADBEEF` | PASS |
 | Buffer[0] | `0x42` | `0x42` | PASS |
-| Buffer content (64B) | All `0x42` | All `0x42` | PASS |
-| Sender CQE status | `SUCCESS` | `SUCCESS` | PASS |
-| Sender CQE opcode | `RDMA_WRITE` | `RDMA_WRITE` | PASS |
+| Buffer 内容 (64B) | 全部 `0x42` | 全部 `0x42` | PASS |
+| 发送端 CQE 状态 | `SUCCESS` | `SUCCESS` | PASS |
+| 发送端 CQE opcode | `RDMA_WRITE` | `RDMA_WRITE` | PASS |
 
-### Inferential Claims
-Not applicable — this is a correctness assertion, not a measurement.
+### 推断性声明
+不适用——这是正确性断言，不是测量。
 
 ---
 
-## Test 2: Ghost Gradient Verification
+## Test 2：Ghost Gradient 验证
 
-### Nature of Test
-Deterministic behavior test with unexpected outcome.
+### 测试性质
+确定性行为测试，结果与预期不同。
 
-### Raw Observations
+### 原始观察
 
-**Round 1 (normal Write-with-Immediate, Receive WR posted):**
+**Round 1（正常 Write-with-Immediate，已 post Receive WR）：**
 
-| Metric | Expected | Observed | Status |
-|--------|----------|----------|--------|
-| CQE received | Yes | Yes | OK |
+| 指标 | 期望值 | 观察值 | 状态 |
+|------|--------|--------|------|
+| CQE 收到 | 是 | 是 | OK |
 | CQE opcode | `RECV_RDMA_WITH_IMM` | `RECV_RDMA_WITH_IMM` | OK |
 | imm_data | `0x11111111` | `0x11111111` | OK |
 | Buffer[0] | `0x42` | `0x42` | OK |
 
-**Round 2 (Write-with-Immediate, NO Receive WR posted):**
+**Round 2（Write-with-Immediate，未 post Receive WR）：**
 
-| Metric | Hypothesis A (full drop) | Hypothesis B (data only) | Observed |
-|--------|--------------------------|--------------------------|----------|
-| CQE received | No | No | **No** |
-| Buffer[0] | `0x42` (old) | `0xFF` (new) | **`0xFF` (new)** |
-| Buffer content (32B) | All `0x42` | All `0xFF` | **All `0xFF`** |
+| 指标 | 假设 A（完全丢弃） | 假设 B（仅数据到达） | 观察值 |
+|------|-------------------|---------------------|--------|
+| CQE 收到 | 否 | 否 | **否** |
+| Buffer[0] | `0x42`（旧值） | `0xFF`（新值） | **`0xFF`（新值）** |
+| Buffer 内容 (32B) | 全部 `0x42` | 全部 `0xFF` | **全部 `0xFF`** |
 
-**Conclusion:** Hypothesis B confirmed. On SoftRoCE UC QP, Write-with-Immediate without a posted Receive WR:
-- RDMA Write data transfer: **succeeds**
-- CQE generation: **does not occur**
+**结论：** 假设 B 成立。在 SoftRoCE UC QP 上，没有 Receive WR 的 Write-with-Immediate：
+- RDMA Write 数据传输：**成功**
+- CQE 生成：**不发生**
 
-### Limitation
-This test exercises a different failure mode than real-world packet loss:
-- Tested: no Receive WR → no CQE, but data arrives
-- Real world: packet loss → PSN mismatch → data does NOT arrive (partially or fully)
-- The packet-loss scenario requires tc netem testing (not yet done)
+### 限制
+本测试触发的失败模式与真实丢包场景不同：
+- 已测试：无 Receive WR → 无 CQE，但数据到达
+- 真实场景：丢包 → PSN 失序 → 数据**不**到达（部分或全部）
+- 丢包场景需要 tc netem 测试（尚未完成）
 
 ---
 
-## Test 3: WQE Rate Micro-benchmark
+## Test 3：WQE 速率微基准测试
 
-### Experiment Parameters
+### 实验参数
 
-| Parameter | Value |
-|-----------|-------|
-| Transport | UC QP, RDMA Write (no Immediate) |
-| Device | SoftRoCE (rxe0) |
-| Topology | Single-machine loopback |
-| Buffer size | 16 MB (source and target) |
-| Iterations | 1000 per chunk size |
-| Warmup | 10 iterations |
-| Signal interval | Every 64th WQE |
-| Runs | 1 (no repeated measurements) |
+| 参数 | 值 |
+|------|-----|
+| 传输方式 | UC QP，RDMA Write（无 Immediate） |
+| 设备 | SoftRoCE (rxe0) |
+| 拓扑 | 单机 loopback |
+| Buffer 大小 | 16 MB（发送端和接收端） |
+| 每种 chunk 大小迭代次数 | 1000 |
+| 预热 | 10 次迭代 |
+| 信号间隔 | 每 64 个 WQE |
+| 运行次数 | 1（无重复测量） |
 
-### Raw Results
+### 原始结果
 
-| Chunk Size | Time (ms) | WQE/s | Throughput (MB/s) |
-|------------|-----------|-------|-------------------|
+| Chunk 大小 | 耗时 (ms) | WQE/s | 吞吐量 (MB/s) |
+|------------|-----------|-------|---------------|
 | 4 KB | 10.5 | 95,201 | 371.9 |
 | 16 KB | 31.3 | 31,945 | 499.1 |
 | 64 KB | 123.8 | 8,075 | 504.7 |
 | 256 KB | 503.6 | 1,986 | 496.4 |
 | 1 MB | 2,314.7 | 432 | 432.0 |
 
-### Derived Metrics
+### 衍生指标
 
-| Chunk Size | Per-WQE Latency (μs) | Throughput Efficiency (% of peak) | Loss Impact (% of 25M-param gradient) |
-|------------|----------------------|-----------------------------------|---------------------------------------|
+| Chunk 大小 | 单 WQE 延迟 (μs) | 吞吐效率 (% 峰值) | 单次丢失影响 (25M 参数梯度) |
+|------------|------------------|-------------------|---------------------------|
 | 4 KB | 10.5 | 73.7% | 0.004% |
 | 16 KB | 31.3 | 98.9% | 0.016% |
-| 64 KB | 123.8 | 100.0% (peak) | 0.064% |
+| 64 KB | 123.8 | 100.0%（峰值） | 0.064% |
 | 256 KB | 503.6 | 98.4% | 0.256% |
 | 1 MB | 2,314.7 | 85.6% | 1.0% |
 
-*Loss Impact = chunk_size / (25M params × 4 bytes/param) = chunk_size / 100MB*
+*单次丢失影响 = chunk_size / (25M params × 4 bytes/param) = chunk_size / 100MB*
 
-### Scaling Analysis
+### 缩放分析
 
-WQE/s vs. chunk size follows an approximate inverse relationship:
+WQE/s 与 chunk 大小近似满足反比关系：
 
 ```
 WQE/s ≈ K / chunk_size_KB
 ```
 
-Fitting: K ≈ 95,201 × 4 = 380,804. Checking:
-- 16 KB: predicted 380,804/16 = 23,800 → observed 31,945 (higher)
-- 64 KB: predicted 380,804/64 = 5,950 → observed 8,075 (higher)
-- 256 KB: predicted 380,804/256 = 1,488 → observed 1,986 (higher)
-- 1 MB: predicted 380,804/1024 = 372 → observed 432 (higher)
+拟合：K ≈ 95,201 × 4 = 380,804。验证：
+- 16 KB：预测 380,804/16 = 23,800 → 观察 31,945（偏高）
+- 64 KB：预测 380,804/64 = 5,950 → 观察 8,075（偏高）
+- 256 KB：预测 380,804/256 = 1,488 → 观察 1,986（偏高）
+- 1 MB：预测 380,804/1024 = 372 → 观察 432（偏高）
 
-The model under-predicts at larger sizes, suggesting SoftRoCE has a per-WQE fixed cost (~10μs) plus a per-byte cost that is sub-linear.
+模型在较大尺寸时低估，说明 SoftRoCE 有一个固定的 per-WQE 开销（~10μs）加上一个亚线性的 per-byte 开销。
 
-### Statistical Limitations
+### 统计限制
 
-- **No variance estimates.** Single run per chunk size. Cannot compute confidence intervals.
-- **No seed variation.** Deterministic benchmark, but system load could cause variance.
-- **SoftRoCE-specific.** Software emulation path (kernel module + memory copy) is fundamentally different from hardware DMA. These numbers inform code structure, not paper claims.
-- **No Write-with-Immediate variant.** Benchmarked plain RDMA Write only. Write-with-Immediate adds Receive WR posting overhead on the receiver side.
+- **无方差估计。** 每种 chunk 大小仅单次运行，无法计算置信区间。
+- **无 seed 变化。** 确定性基准测试，但系统负载可能引入方差。
+- **SoftRoCE 特有。** 软件模拟路径（内核模块 + 内存拷贝）与硬件 DMA 本质不同。这些数据指导代码结构，不用于论文声明。
+- **未测试 Write-with-Immediate 变体。** 仅测试了纯 RDMA Write。Write-with-Immediate 在接收端有额外的 Receive WR post 开销。
 
-### Blockers for Paper-Quality Data
+### 论文质量数据的阻塞项
 
-1. Run 5+ repetitions to get `mean ± std`
-2. Add Write-with-Immediate variant for direct comparison
-3. Replicate on ConnectX-5 hardware (CloudLab)
-4. Test with concurrent traffic to simulate cloud contention
+1. 运行 5+ 次以获取 `mean ± std`
+2. 添加 Write-with-Immediate 变体进行直接对比
+3. 在 ConnectX-5 硬件上重复测试（CloudLab）
+4. 在并发流量下测试以模拟云环境竞争

@@ -1,74 +1,74 @@
-# Phase 1 Code Walkthrough
+# Phase 1 代码详解
 
-## Architecture Overview
+## 架构概览
 
-All three tests share the same pattern: **server/client dual-process over SoftRoCE loopback**.
+三个测试共享相同的模式：**SoftRoCE loopback 上的 server/client 双进程**。
 
 ```
-  Process A (server)              Process B (client)
+  进程 A (server)                 进程 B (client)
   ┌──────────────────┐            ┌──────────────────┐
-  │ 1. Open rxe0     │            │ 1. Open rxe0     │
-  │ 2. Create UC QP  │            │ 2. Create UC QP  │
+  │ 1. 打开 rxe0     │            │ 1. 打开 rxe0     │
+  │ 2. 创建 UC QP    │            │ 2. 创建 UC QP    │
   │ 3. QP → INIT     │            │ 3. QP → INIT     │
   │ 4. Post Recv WR  │            │                  │
   │                  │            │                  │
-  │ 5. TCP listen ◄──── exchange ────► 5. TCP connect │
-  │    {qpn, gid,    │   QP info  │    {qpn, gid,   │
+  │ 5. TCP listen ◄──── 交换 QP ────► 5. TCP connect │
+  │    {qpn, gid,    │    元数据   │    {qpn, gid,   │
   │     rkey, addr}  │            │     rkey, addr}  │
   │                  │            │                  │
   │ 6. QP → RTR      │            │ 6. QP → RTR     │
   │                  │            │ 7. QP → RTS      │
   │                  │            │                  │
-  │ 7. Poll CQ ◄─────── RDMA Write ──── 8. Post Send │
-  │    (wait CQE)    │  with Imm  │    (poll CQ)     │
+  │ 7. 轮询 CQ ◄────── RDMA Write ──── 8. Post Send │
+  │    (等待 CQE)    │  with Imm  │    (轮询 CQ)     │
   └──────────────────┘            └──────────────────┘
 ```
 
-Server stays in RTR (only receives). Client goes to RTS (sends).
+Server 停留在 RTR 状态（只接收）。Client 进入 RTS 状态（发送）。
 
 ---
 
-## rdma_common.h — Shared RDMA Utilities
+## rdma_common.h — 共享 RDMA 工具库
 
-### Key Data Structures
+### 核心数据结构
 
 ```c
-struct qp_info {          // Exchanged via TCP between server & client
-    uint32_t      qpn;    // QP number — needed for dest_qp_num in RTR
-    uint32_t      rkey;   // Remote key — authorizes RDMA Write to this MR
-    uint64_t      addr;   // Virtual address of registered buffer
-    union ibv_gid gid;    // GID for RoCE addressing (16 bytes)
+struct qp_info {          // 通过 TCP 在 server 与 client 之间交换
+    uint32_t      qpn;    // QP 编号 — RTR 中的 dest_qp_num 需要
+    uint32_t      rkey;   // Remote key — 授权 RDMA Write 写入此 MR
+    uint64_t      addr;   // 注册 buffer 的虚拟地址
+    union ibv_gid gid;    // RoCE 寻址用的 GID（16 字节）
 };
 
-struct rdma_ctx {          // All RDMA resources bundled
-    ibv_context/pd/cq/qp/mr  // Standard RDMA resource chain
-    void *buf;                // Data buffer (page-aligned)
-    struct qp_info local_info; // Our side's metadata
+struct rdma_ctx {          // 所有 RDMA 资源捆绑在一起
+    ibv_context/pd/cq/qp/mr  // 标准 RDMA 资源链
+    void *buf;                // 数据 buffer（页对齐）
+    struct qp_info local_info; // 本端元数据
 };
 ```
 
-### Resource Initialization: `rdma_init_ctx()`
+### 资源初始化：`rdma_init_ctx()`
 
-The initialization chain follows the standard RDMA pattern:
+初始化链遵循标准 RDMA 模式：
 
 ```
 ibv_open_device(rxe0)
   → ibv_alloc_pd()          // Protection Domain
-    → ibv_create_cq()       // Completion Queue (256 entries)
-      → aligned_alloc()     // Page-aligned buffer
-        → ibv_reg_mr()      // Register buffer for RDMA (LOCAL_WRITE | REMOTE_WRITE)
-          → ibv_query_gid() // Find valid GID (prefer index 1 = RoCEv2)
+    → ibv_create_cq()       // Completion Queue（256 条目）
+      → aligned_alloc()     // 页对齐 buffer
+        → ibv_reg_mr()      // 注册 buffer 用于 RDMA（LOCAL_WRITE | REMOTE_WRITE）
+          → ibv_query_gid() // 查找有效 GID（优先 index 1 = RoCEv2）
             → ibv_create_qp(IBV_QPT_UC)  // Unreliable Connected QP
 ```
 
-Critical detail: the MR access flags include `IBV_ACCESS_REMOTE_WRITE` — this allows the remote peer to RDMA Write into our buffer.
+关键细节：MR access flags 包含 `IBV_ACCESS_REMOTE_WRITE`——允许远端对等方 RDMA Write 写入我们的 buffer。
 
-### UC QP State Machine
+### UC QP 状态机
 
 ```
   RESET ──► INIT ──► RTR ──► RTS
               │         │       │
-              │ attrs:   │ attrs:│ attrs:
+              │ 属性:    │ 属性: │ 属性:
               │ port     │ mtu   │ sq_psn
               │ pkey     │ dest  │
               │ access   │ qpn   │
@@ -76,13 +76,13 @@ Critical detail: the MR access flags include `IBV_ACCESS_REMOTE_WRITE` — this 
               │          │ rq_psn│
 ```
 
-**UC-specific notes (vs. RC):**
-- RTR needs `rq_psn` (the PSN we expect to receive)
-- RTR does NOT need `max_dest_rd_atomic` or `min_rnr_timer` (RC-only)
-- RTS does NOT need `timeout`, `retry_cnt`, `rnr_retry`, `max_rd_atomic` (RC-only)
-- `ah_attr.is_global = 1` with GRH is required for RoCE (uses GID, not LID)
+**UC 特有注意事项（vs. RC）：**
+- RTR 需要 `rq_psn`（期望接收的 PSN）—— 这是我们最初遗漏导致 `Invalid argument` 的参数
+- RTR **不需要** `max_dest_rd_atomic` 或 `min_rnr_timer`（RC 专用）
+- RTS **不需要** `timeout`、`retry_cnt`、`rnr_retry`、`max_rd_atomic`（RC 专用）
+- RoCE 环境下 `ah_attr.is_global = 1` 且使用 GRH 是必须的（用 GID 寻址，不用 LID）
 
-### TCP Exchange Protocol
+### TCP 交换协议
 
 ```
 Server                           Client
@@ -93,150 +93,150 @@ read(remote_info) ◄──────────── write(local_info)
 close()                          close()
 ```
 
-Server sends first, client receives first. This ordering prevents deadlock.
+Server 先发送，Client 先接收。此顺序避免死锁。
 
-### Post Operations
+### Post 操作
 
-**`rdma_post_write_imm()`** — the core operation for SemiRDMA:
+**`rdma_post_write_imm()`** — SemiRDMA 的核心操作：
 ```c
 wr.opcode     = IBV_WR_RDMA_WRITE_WITH_IMM;
-wr.imm_data   = htonl(imm_data);   // Network byte order!
+wr.imm_data   = htonl(imm_data);   // 网络字节序！
 wr.wr.rdma.remote_addr = remote->addr;
 wr.wr.rdma.rkey        = remote->rkey;
 ```
 
-The NIC reads from our local buffer (`sge.addr`) and writes directly to the remote buffer (`remote_addr`) — zero-copy. The `imm_data` is delivered via the receiver's CQE.
+NIC 从我们的本地 buffer（`sge.addr`）读取数据，直接写入远端 buffer（`remote_addr`）——零拷贝。`imm_data` 通过接收端的 CQE 传递。
 
-**`rdma_post_recv()`** — posted with NULL scatter list:
+**`rdma_post_recv()`** — 使用空散列表 post：
 ```c
 wr.sg_list = NULL;
 wr.num_sge = 0;
 ```
-For Write-with-Immediate, the Receive WR exists solely to generate a CQE. The data goes to the RDMA address, not the Receive WR's scatter list.
+对于 Write-with-Immediate，Receive WR 存在的唯一目的是生成 CQE。数据去往 RDMA 地址，不是 Receive WR 的散列表。
 
 ---
 
-## Test 1: test_uc_write_imm.c
+## Test 1：test_uc_write_imm.c
 
-### Purpose
-Verify that UC Write-with-Immediate generates a receiver-side CQE on SoftRoCE.
+### 目的
+验证 UC Write-with-Immediate 在 SoftRoCE 上是否生成接收端 CQE。
 
-### Flow
+### 流程
 
-| Step | Server | Client |
+| 步骤 | Server | Client |
 |------|--------|--------|
-| 1 | Fill buffer with `0xAA` | Fill buffer with `0x42` |
+| 1 | 用 `0xAA` 填充 buffer | 用 `0x42` 填充 buffer |
 | 2 | Post Receive WR (wr_id=1) | — |
-| 3 | TCP exchange | TCP exchange |
+| 3 | TCP 交换 | TCP 交换 |
 | 4 | QP → RTR | QP → RTR → RTS |
-| 5 | Poll CQ (10s timeout) | Post Write-with-Immediate (imm=`0xDEADBEEF`) |
-| 6 | Check: CQE opcode, imm_data, buffer | Check: send CQE status |
+| 5 | 轮询 CQ（10s 超时） | Post Write-with-Immediate (imm=`0xDEADBEEF`) |
+| 6 | 检查：CQE opcode, imm_data, buffer | 检查：发送 CQE 状态 |
 
-### Key Verification Points
+### 关键验证点
 
 ```c
-// Server checks 4 things:
+// Server 检查 4 项：
 pass_status = (wc.status == IBV_WC_SUCCESS);
 pass_opcode = (wc.opcode == IBV_WC_RECV_RDMA_WITH_IMM);
 pass_imm    = (ntohl(wc.imm_data) == 0xDEADBEEF);
 pass_buf    = (buf[0] == 0x42);
 ```
 
-### Why imm_data uses htonl/ntohl
+### 为什么 imm_data 需要 htonl/ntohl
 
-The `ibv_send_wr.imm_data` field is defined as `__be32` (big-endian). Setting it requires `htonl()` on the sender. The receiver's `ibv_wc.imm_data` is also big-endian, so `ntohl()` is needed to recover the original value.
+`ibv_send_wr.imm_data` 字段定义为 `__be32`（大端序）。发送时需要 `htonl()` 转换。接收端的 `ibv_wc.imm_data` 也是大端序，因此需要 `ntohl()` 恢复原始值。
 
 ---
 
-## Test 2: test_ghost_gradient.c
+## Test 2：test_ghost_gradient.c
 
-### Purpose
-Verify that when a UC Write-with-Immediate fails (no Receive WR), the buffer retains stale data.
+### 目的
+验证 UC Write-with-Immediate 失败（无 Receive WR）时，buffer 是否保留旧数据。
 
-### Key Design: Persistent TCP Connection
+### 关键设计：持久 TCP 连接
 
-Unlike Test 1, this test keeps the TCP connection open for synchronization across two rounds:
+与 Test 1 不同，本测试保持 TCP 连接以实现两轮之间的同步：
 
 ```c
 // Server
-int tcp = tcp_listen_accept(TCP_PORT);  // Accept, keep open
+int tcp = tcp_listen_accept(TCP_PORT);  // 接受连接，保持打开
 // ... Round 1 ...
-tcp_signal(tcp);  // Tell client: "go ahead with Round 2"
-tcp_wait(tcp);    // Wait for client: "Round 2 done"
-// ... Check buffer ...
+tcp_signal(tcp);  // 告知 client："开始 Round 2"
+tcp_wait(tcp);    // 等待 client："Round 2 完成"
+// ... 检查 buffer ...
 close(tcp);
 ```
 
-This avoids race conditions between rounds — each side waits for an explicit sync byte before proceeding.
+这避免了轮次间的竞争条件——每一端在继续之前都等待显式的同步字节。
 
-### The Critical Moment
+### 关键时刻
 
 ```c
-// Server: Round 2
-// *** Do NOT post Receive WR ***
-// (simulating: what if the receiver doesn't expect this data?)
-tcp_signal(tcp);  // Tell client to proceed
+// Server：Round 2
+// *** 故意不 post Receive WR ***
+// （模拟：如果接收端不期待这些数据会怎样？）
+tcp_signal(tcp);  // 告知 client 继续
 ```
 
-The server deliberately skips `rdma_post_recv()` before Round 2. This tests what happens when Write-with-Immediate has no Receive WR to consume.
+Server 在 Round 2 之前故意跳过 `rdma_post_recv()`。这测试当 Write-with-Immediate 没有 Receive WR 可消费时会发生什么。
 
-### Observed Result
+### 观察结果
 
-The RDMA data write **succeeded** (buffer → `0xFF`) but no CQE was generated. This is because on SoftRoCE, the RDMA Write portion and the completion notification are independent:
+RDMA 数据写入**成功**（buffer → `0xFF`），但没有生成 CQE。这是因为在 SoftRoCE 上，RDMA Write 部分和完成通知是独立的：
 
 ```
-Write-with-Immediate = RDMA Write (always executes) + CQE (requires Receive WR)
+Write-with-Immediate = RDMA Write（始终执行） + CQE（需要 Receive WR）
 ```
 
-### Design Implication
+### 设计影响
 
-In the real SemiRDMA system, the ghost gradient problem comes from **packet loss** (not missing Receive WRs). When packets are lost:
-1. PSN goes out of sync
-2. Subsequent packets are silently discarded
-3. Buffer has partial old data = true ghost gradient
+在真实的 SemiRDMA 系统中，ghost gradient 问题来自**丢包**（不是缺少 Receive WR）。当数据包丢失时：
+1. PSN 失序
+2. 后续数据包被静默丢弃
+3. Buffer 包含部分旧数据 = 真正的 ghost gradient
 
-The no-RQ-WR test still proves something crucial: **CQE is the only reliable delivery signal.** You cannot inspect buffer content to determine delivery.
+无 RQ WR 测试仍然证明了一个关键事实：**CQE 是唯一可靠的交付信号。** 你不能通过检查 buffer 内容来判断数据是否交付。
 
 ---
 
-## Test 3: test_wqe_rate.c
+## Test 3：test_wqe_rate.c
 
-### Purpose
-Measure WQE posting rate at different chunk sizes to inform the chunk size selection in RQ1.
+### 目的
+测量不同 chunk 大小下的 WQE 发射速率，为 RQ1 的 chunk 大小选择提供数据。
 
-### Benchmark Structure
+### 基准测试结构
 
-Uses plain RDMA Write (no Immediate) to measure raw WQE rate without receiver-side overhead.
+使用纯 RDMA Write（无 Immediate）测量原始 WQE 速率，避免接收端开销。
 
 ```c
-// Batched posting with periodic signaling
+// 批量 post + 周期性信号
 for (int i = 0; i < NUM_ITERS; i++) {
     bool sig = ((i + 1) % SIG_INTERVAL == 0) || (i == NUM_ITERS - 1);
     rdma_post_write(&ctx, &remote, chunk, i, sig);
     if (sig) {
-        rdma_poll_cq_spin(ctx.cq, &wc);  // Drain CQ to free SQ slots
+        rdma_poll_cq_spin(ctx.cq, &wc);  // 排空 CQ 以释放 SQ 槽位
     }
 }
 ```
 
-**Why signal every 64th WQE?**
-- Signaling every WQE adds CQ polling overhead
-- Not signaling means SQ overflows (SQ depth = 256)
-- Signal every 64th: posts 64 WQEs, drains 1 CQE (which implicitly completes all 64)
+**为什么每 64 个 WQE 信号一次？**
+- 每个 WQE 都信号：CQ 轮询开销太大
+- 完全不信号：SQ 溢出（SQ 深度 = 256）
+- 每 64 个信号一次：post 64 个 WQE，排空 1 个 CQE（隐式完成全部 64 个）
 
-**Why use `rdma_poll_cq_spin` instead of `rdma_poll_cq`?**
-- `rdma_poll_cq` has a timeout check with `clock_gettime()` calls — adds measurement noise
-- `rdma_poll_cq_spin` busy-waits without timing overhead — better for tight benchmark loops
+**为什么用 `rdma_poll_cq_spin` 而不是 `rdma_poll_cq`？**
+- `rdma_poll_cq` 有超时检查和 `clock_gettime()` 调用——增加测量噪声
+- `rdma_poll_cq_spin` 纯忙等待无计时开销——更适合紧凑的基准测试循环
 
-### Server Role
+### Server 角色
 
-The server is passive — it just provides a target buffer and waits for the client to finish:
+Server 是被动的——只提供目标 buffer 并等待 client 完成：
 
 ```c
-// Server: register 16MB buffer, go to RTR, wait for TCP signal
+// Server：注册 16MB buffer，进入 RTR，等待 TCP 信号
 rdma_init_ctx(&ctx, dev_name, LARGE_BUF, 16, 16);
-// ... exchange, RTR ...
-// Wait for client "done" signal via TCP
+// ... 交换，RTR ...
+// 等待 client 的 "done" TCP 信号
 ```
 
-No Receive WRs needed because plain RDMA Write doesn't consume them.
+不需要 Receive WR，因为纯 RDMA Write 不消费它们。
