@@ -1,0 +1,17 @@
+# Enforce LF line endings for files that must run on Linux.
+# The project is edited on Windows but built/run on remote Linux,
+# so we must prevent Git's autocrlf from breaking shell scripts and
+# Linux-only source files.
+
+*.sh        text eol=lf
+*.c         text eol=lf
+*.h         text eol=lf
+*.cpp       text eol=lf
+*.hpp       text eol=lf
+*.py        text eol=lf
+Makefile    text eol=lf
+CMakeLists.txt text eol=lf
+*.cmake     text eol=lf
+*.yaml      text eol=lf
+*.yml       text eol=lf
+*.toml      text eol=lf
