@@ -1,15 +1,29 @@
 /*
- * Test 4: Packet-Loss-Induced Ghost Gradient (tc netem)
+ * Test 4: Packet-Loss-Induced Ghost Gradient (software loss injection)
  *
  * Purpose: verify the real ghost-gradient mechanism on UC QP under
  *          packet loss — partial write + PSN out-of-order + missing CQE.
+ *
+ * Why software injection (not tc netem):
+ *   SoftRoCE (rxe) short-circuits same-host traffic inside the driver
+ *   and never hands packets to the kernel IP stack, so tc qdisc / iptables
+ *   cannot drop RDMA packets on loopback.  We instead simulate the
+ *   receiver-visible effect of per-packet loss at the client:
+ *     - draw a per-round "first lost packet" index via a geometric model
+ *       with parameter loss_rate
+ *     - if no packet would have been lost -> full Write-with-Imm (FULL)
+ *     - otherwise -> truncated RDMA_WRITE (no IMM) of length
+ *       (first_lost_index * MTU_BYTES)  (PARTIAL or NONE)
+ *   The receiver cannot tell this apart from true PSN-loss behavior:
+ *   prefix of new data, suffix of old data, no CQE (since the IMM is
+ *   carried in the last packet which never arrives).
  *
  * Protocol:
  *   - Buffer size 256 KB (= 256 x 1024B MTU packets per Write on SoftRoCE).
  *   - Each round:
  *       * server resets buf to OLD_PATTERN (0xDEADBEEF per 32-bit word)
  *       * client fills buf with NEW pattern = round_id (uint32 per word)
- *       * client posts Write-with-Immediate (imm_data = round_id)
+ *       * client draws truncated length and posts Write (+/- Imm)
  *       * server polls CQ with timeout, then scans buf word-by-word
  *   - Classification per round:
  *       FULL     : all words == round_id                (CQE expected YES)
@@ -17,13 +31,9 @@
  *       NONE     : all words == OLD_PATTERN              (CQE expected NO)
  *       CORRUPT  : any word != OLD and != round_id       (unexpected on UC)
  *
- * Loss rate is applied externally via tc netem on the netdev backing rxe0
- * (see scripts/run_netem_test.sh).  This binary is loss-agnostic and just
- * runs a fixed number of rounds; the surrounding script sweeps loss rates.
- *
  * Usage:
  *   ./test_netem_loss server [device] [rounds]
- *   ./test_netem_loss client [server_ip] [device] [rounds]
+ *   ./test_netem_loss client [server_ip] [device] [rounds] [loss_pct] [seed]
  *
  * Output (server only):
  *   Human-readable summary to stderr.
@@ -34,10 +44,12 @@
 #include "rdma_common.h"
 
 #define BUF_SIZE        (256 * 1024)     /* 256 KB — ~256 MTU packets       */
+#define MTU_BYTES       1024             /* SoftRoCE default path MTU       */
 #define OLD_PATTERN     0xDEADBEEFu
 #define TCP_PORT        18517
 #define DEFAULT_ROUNDS  500
 #define CQE_TIMEOUT_MS  200
+#define DEFAULT_SEED    42u
 
 /* ================================================================
  *  Persistent TCP helpers (mirrors test_ghost_gradient.c)
@@ -86,6 +98,41 @@ static void fill_pattern(void *buf, size_t len, uint32_t word)
     uint32_t *p = (uint32_t *)buf;
     size_t n = len / 4;
     for (size_t i = 0; i < n; i++) p[i] = word;
+}
+
+/* Software loss injection.
+ *
+ * Model: each of the N = full_len/MTU_BYTES packets is independently
+ *        dropped with probability loss_rate.  The receiver on UC QP
+ *        will deliver the contiguous prefix up to (but not including)
+ *        the first dropped packet.  Returns the number of bytes the
+ *        receiver would observe as "new" data.
+ *
+ * Outputs:
+ *   *was_truncated = 1 iff at least one packet was dropped
+ *   return value   = observed-new byte count (rounded to MTU boundary)
+ *
+ * Uses rand_r with a caller-provided seed so runs are reproducible.
+ */
+static size_t compute_truncated_len(size_t full_len,
+                                    double loss_rate,
+                                    unsigned *rng_state,
+                                    int *was_truncated)
+{
+    *was_truncated = 0;
+    if (loss_rate <= 0.0) return full_len;
+
+    size_t n_pkts = full_len / MTU_BYTES;
+    if (n_pkts == 0) n_pkts = 1;
+
+    for (size_t k = 0; k < n_pkts; k++) {
+        double u = (double)rand_r(rng_state) / (double)RAND_MAX;
+        if (u < loss_rate) {
+            *was_truncated = 1;
+            return k * MTU_BYTES;   /* deliver first k packets only */
+        }
+    }
+    return full_len;
 }
 
 /* Classify buffer and return stats.
@@ -263,7 +310,8 @@ static void run_server(const char *dev_name, int rounds)
  *  Client
  * ================================================================ */
 
-static void run_client(const char *dev_name, const char *server_ip, int rounds)
+static void run_client(const char *dev_name, const char *server_ip,
+                       int rounds, double loss_rate, unsigned seed)
 {
     struct rdma_ctx ctx;
     struct qp_info  remote;
@@ -282,7 +330,14 @@ static void run_client(const char *dev_name, const char *server_ip, int rounds)
     rdma_modify_qp_to_rtr(&ctx, &remote);
     rdma_modify_qp_to_rts(&ctx, 0);
 
-    fprintf(stderr, "[Client] Running %d rounds, %d bytes each\n", rounds, BUF_SIZE);
+    unsigned rng = seed;
+    int injected = 0;
+    size_t sum_truncated_bytes = 0;
+
+    fprintf(stderr,
+            "[Client] Running %d rounds, %d bytes each, "
+            "loss_rate=%.4f, seed=%u\n",
+            rounds, BUF_SIZE, loss_rate, seed);
 
     for (int r = 0; r < rounds; r++) {
         uint32_t round_id = (uint32_t)(r + 1);
@@ -291,13 +346,36 @@ static void run_client(const char *dev_name, const char *server_ip, int rounds)
         /* Wait for server-ready */
         tcp_wait(tcp);
 
-        /* Post Write-with-Immediate.  Signal every time so we can drain
-         * the send CQ and keep the SQ from overflowing. */
-        int ret = rdma_post_write_imm(&ctx, &remote, BUF_SIZE,
-                                      round_id, (uint64_t)round_id, true);
-        CHECK(ret == 0, "post_write_imm failed at round %d", r);
+        /* Decide whether this round simulates packet loss. */
+        int truncated = 0;
+        size_t deliver_len = compute_truncated_len(BUF_SIZE, loss_rate,
+                                                   &rng, &truncated);
 
-        /* Drain sender CQE (UC sender always SUCCESS regardless of loss) */
+        int ret;
+        if (!truncated) {
+            /* Full delivery: Write-with-Immediate, receiver gets CQE */
+            ret = rdma_post_write_imm(&ctx, &remote, BUF_SIZE,
+                                      round_id, (uint64_t)round_id, true);
+        } else {
+            /* Simulated loss: plain RDMA_WRITE of the truncated prefix,
+             * no IMM -> receiver gets NO CQE.  deliver_len may be 0
+             * (first packet lost -> nothing delivered at all). */
+            injected++;
+            sum_truncated_bytes += deliver_len;
+            if (deliver_len > 0) {
+                ret = rdma_post_write(&ctx, &remote, deliver_len,
+                                      (uint64_t)round_id, true);
+            } else {
+                /* Nothing to send on the wire; still need to drain
+                 * a sender CQE below, so post a zero-length WRITE.
+                 * SoftRoCE accepts length 0. */
+                ret = rdma_post_write(&ctx, &remote, 0,
+                                      (uint64_t)round_id, true);
+            }
+        }
+        CHECK(ret == 0, "post_write failed at round %d", r);
+
+        /* Drain sender CQE (UC sender always SUCCESS) */
         int n = rdma_poll_cq(ctx.cq, &wc, 5000);
         if (n <= 0 || wc.status != IBV_WC_SUCCESS) {
             LOG_WARN("round %d: sender CQE unexpected (n=%d status=%s)",
@@ -308,7 +386,13 @@ static void run_client(const char *dev_name, const char *server_ip, int rounds)
         tcp_signal(tcp);
     }
 
-    fprintf(stderr, "[Client] Done.\n");
+    double avg_trunc = injected > 0
+        ? (double)sum_truncated_bytes / injected : 0.0;
+    fprintf(stderr,
+            "[Client] Done. Injected loss on %d / %d rounds. "
+            "Avg delivered bytes (truncated rounds only) = %.0f\n",
+            injected, rounds, avg_trunc);
+
     close(tcp);
     rdma_cleanup(&ctx);
 }
@@ -323,8 +407,10 @@ int main(int argc, char *argv[])
         fprintf(stderr,
             "Usage:\n"
             "  %s server [device] [rounds]\n"
-            "  %s client [server_ip] [device] [rounds]\n",
-            argv[0], argv[0]);
+            "  %s client [server_ip] [device] [rounds] [loss_pct] [seed]\n"
+            "    loss_pct: per-packet loss probability in percent (e.g. 1.5)\n"
+            "    seed:     RNG seed (default %u)\n",
+            argv[0], argv[0], DEFAULT_SEED);
         return 1;
     }
 
@@ -337,7 +423,9 @@ int main(int argc, char *argv[])
         const char *ip     = (argc >= 3) ? argv[2] : "127.0.0.1";
         const char *dev    = (argc >= 4) ? argv[3] : DEFAULT_DEV_NAME;
         int         rounds = (argc >= 5) ? atoi(argv[4]) : DEFAULT_ROUNDS;
-        run_client(dev, ip, rounds);
+        double      loss   = (argc >= 6) ? atof(argv[5]) / 100.0 : 0.0;
+        unsigned    seed   = (argc >= 7) ? (unsigned)atoi(argv[6]) : DEFAULT_SEED;
+        run_client(dev, ip, rounds, loss, seed);
     } else {
         fprintf(stderr, "Unknown role '%s'\n", role);
         return 1;
