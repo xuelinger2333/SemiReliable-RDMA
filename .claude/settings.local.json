@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git -C \"D:/DevProjects/SemiReliable-RDMA\" remote -v)",
+      "Bash(git -C \"D:/DevProjects/SemiReliable-RDMA\" log --oneline -5)"
+    ]
+  }
+}
