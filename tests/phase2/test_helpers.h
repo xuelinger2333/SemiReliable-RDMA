@@ -143,20 +143,25 @@ inline int tcp_listen_accept(int port)
     return cfd;
 }
 
-inline int tcp_connect_to(const char* ip, int port)
+inline int tcp_connect_to(const char* ip, int port, int max_retries = 20)
 {
-    int fd = socket(AF_INET, SOCK_STREAM, 0);
     struct sockaddr_in addr;
     std::memset(&addr, 0, sizeof(addr));
     addr.sin_family = AF_INET;
     addr.sin_port   = htons(port);
     inet_pton(AF_INET, ip, &addr.sin_addr);
 
-    if (connect(fd, reinterpret_cast<struct sockaddr*>(&addr), sizeof(addr)) < 0) {
+    for (int attempt = 0; attempt < max_retries; attempt++) {
+        int fd = socket(AF_INET, SOCK_STREAM, 0);
+        if (connect(fd, reinterpret_cast<struct sockaddr*>(&addr), sizeof(addr)) == 0) {
+            return fd;
+        }
         close(fd);
-        throw std::runtime_error(std::string("connect: ") + strerror(errno));
+        // Retry with backoff: 50ms, 100ms, 150ms, ...
+        usleep(50000 * (attempt + 1));
     }
-    return fd;
+    throw std::runtime_error(std::string("connect to ") + ip + ":" +
+                             std::to_string(port) + " failed after retries");
 }
 
 inline void tcp_signal(int fd) { uint8_t b = 1; ssize_t r = write(fd, &b, 1); (void)r; }
