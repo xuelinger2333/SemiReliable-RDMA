@@ -57,8 +57,7 @@ static const double LOSS_RATES[] = {
 constexpr int NUM_LOSS_RATES = sizeof(LOSS_RATES) / sizeof(LOSS_RATES[0]);
 
 constexpr int    DEFAULT_ROUNDS = 500;
-constexpr int    TCP_PORT       = 18525;
-constexpr int    SYNC_PORT      = 18526;  // persistent TCP for round sync
+constexpr int    TCP_PORT       = 18525;  // persistent TCP for exchange + round sync
 constexpr double WAIT_RATIO     = 1.0;    // wait for all expected chunks
 constexpr int    WAIT_TIMEOUT   = 5000;   // 5 seconds
 
@@ -90,13 +89,11 @@ static void run_server(const char* dev_name, int rounds, unsigned /*seed*/)
             // Create engine with enough RQ depth for one round
             UCQPEngine engine(dev_name, BUF_SIZE, 16, max_rq);
 
-            // TCP: one-shot exchange for QP info
+            // Persistent TCP: exchange QP info, then reuse fd for round sync
+            int tcp_fd = tcp_listen_accept(TCP_PORT);
             ExchangeData local{engine.local_qp_info(), engine.local_mr_info()};
-            ExchangeData remote = tcp_server_exchange(TCP_PORT, local);
+            ExchangeData remote = tcp_exchange_on_fd_server(tcp_fd, local);
             engine.bring_up(remote.qp);
-
-            // Persistent TCP for round synchronization
-            int sync_fd = tcp_listen_accept(SYNC_PORT);
 
             // Per-round metrics
             std::vector<double> latencies;
@@ -115,13 +112,13 @@ static void run_server(const char* dev_name, int rounds, unsigned /*seed*/)
                 }
 
                 // Signal client: ready
-                tcp_signal(sync_fd);
+                tcp_signal(tcp_fd);
                 // Wait for client: done posting
-                tcp_wait(sync_fd);
+                tcp_wait(tcp_fd);
 
                 // Read how many chunks client actually sent this round
                 int32_t sent_count = 0;
-                ssize_t nr = read(sync_fd, &sent_count, sizeof(sent_count));
+                ssize_t nr = read(tcp_fd, &sent_count, sizeof(sent_count));
                 (void)nr;
 
                 // Wait for the chunks that were actually sent
@@ -155,7 +152,7 @@ static void run_server(const char* dev_name, int rounds, unsigned /*seed*/)
                 latencies.push_back(round_ms);
             }
 
-            close(sync_fd);
+            close(tcp_fd);
 
             // Compute aggregate metrics
             double ghost_ratio = static_cast<double>(total_ghost_chunks)
@@ -206,11 +203,11 @@ static void run_client(const char* dev_name, const char* server_ip,
 
             UCQPEngine engine(dev_name, BUF_SIZE, max_sq, 16);
 
+            // Persistent TCP: exchange QP info, then reuse fd for round sync
+            int tcp_fd = tcp_connect_to(server_ip, TCP_PORT);
             ExchangeData local{engine.local_qp_info(), engine.local_mr_info()};
-            ExchangeData remote = tcp_client_exchange(server_ip, TCP_PORT, local);
+            ExchangeData remote = tcp_exchange_on_fd_client(tcp_fd, local);
             engine.bring_up(remote.qp);
-
-            int sync_fd = tcp_connect_to(server_ip, SYNC_PORT);
 
             unsigned rng = seed;
 
@@ -225,7 +222,7 @@ static void run_client(const char* dev_name, const char* server_ip,
                 }
 
                 // Wait for server ready
-                tcp_wait(sync_fd);
+                tcp_wait(tcp_fd);
 
                 // Per-chunk loss injection: each chunk independently dropped
                 ChunkSet cs(0, BUF_SIZE, chunk_bytes);
@@ -255,14 +252,14 @@ static void run_client(const char* dev_name, const char* server_ip,
                 }
 
                 // Signal server: done posting
-                tcp_signal(sync_fd);
+                tcp_signal(tcp_fd);
                 // Tell server how many chunks we actually sent
                 int32_t sc = sent_count;
-                ssize_t nw = write(sync_fd, &sc, sizeof(sc));
+                ssize_t nw = write(tcp_fd, &sc, sizeof(sc));
                 (void)nw;
             }
 
-            close(sync_fd);
+            close(tcp_fd);
 
             fprintf(stderr, "[CLIENT] Done: chunk=%zuKB loss=%.1f%% "
                     "%d rounds\n",
