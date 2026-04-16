@@ -52,22 +52,15 @@ TEST(GhostMask, ZerosGhostChunks)
             ExchangeData remote = tcp_server_exchange(TCP_PORT, local);
             engine.bring_up(remote.qp);
 
-            // Wait for the 240 chunks that will arrive
+            // Wait for exactly the 240 chunks that will arrive.
+            // Use the precise ratio CHUNKS_TO_SEND/NUM_CHUNKS so we don't
+            // return early and miss CQEs during buffer verification.
             ChunkSet cs(0, BUF_SIZE, CHUNK_BYTES);
             RatioController rc(engine);
             WaitStats stats;
-            // 240/256 = 93.75%, wait for 90% with generous timeout
-            rc.wait_for_ratio(cs, 0.90, 5000, &stats);
-
-            // Drain any remaining CQEs with a short extra poll
-            usleep(100000);
-            auto extra = engine.poll_cq(64, 100);
-            for (const auto& c : extra) {
-                if (c.opcode == IBV_WC_RECV_RDMA_WITH_IMM &&
-                    c.status == IBV_WC_SUCCESS) {
-                    cs.mark_completed(c.imm_data);
-                }
-            }
+            double target = static_cast<double>(CHUNKS_TO_SEND)
+                          / static_cast<double>(NUM_CHUNKS);
+            rc.wait_for_ratio(cs, target, 10000, &stats);
 
             fprintf(stderr, "[SERVER] Completed %zu/%d chunks\n",
                     cs.num_completed(), NUM_CHUNKS);
@@ -159,16 +152,9 @@ TEST(GhostMask, NoopPreservesOldData)
 
             ChunkSet cs(0, BUF_SIZE, CHUNK_BYTES);
             RatioController rc(engine);
-            rc.wait_for_ratio(cs, 0.90, 5000);
-
-            usleep(100000);
-            auto extra = engine.poll_cq(64, 100);
-            for (const auto& c : extra) {
-                if (c.opcode == IBV_WC_RECV_RDMA_WITH_IMM &&
-                    c.status == IBV_WC_SUCCESS) {
-                    cs.mark_completed(c.imm_data);
-                }
-            }
+            double target = static_cast<double>(CHUNKS_TO_SEND)
+                          / static_cast<double>(NUM_CHUNKS);
+            rc.wait_for_ratio(cs, target, 10000);
 
             // Apply no-op masking (control group)
             GhostMask::apply_noop(engine.local_buf(), cs);
