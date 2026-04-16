@@ -55,14 +55,18 @@ TEST(RatioTimeout, PartialCompletionSucceeds)
                         stats.completed);
                 return 1;
             }
-            if (stats.completed < CHUNKS_TO_SEND) {
-                fprintf(stderr, "[SERVER] Too few: completed=%u, expected>=%d\n",
-                        stats.completed, CHUNKS_TO_SEND);
+
+            // wait_for_ratio returns as soon as 90% threshold is met,
+            // so completed may be < CHUNKS_TO_SEND.  Verify the ratio.
+            uint32_t min_expected = static_cast<uint32_t>(NUM_CHUNKS * 0.90);
+            if (stats.completed < min_expected) {
+                fprintf(stderr, "[SERVER] Below threshold: completed=%u, "
+                        "min_expected=%u\n", stats.completed, min_expected);
                 return 1;
             }
 
-            fprintf(stderr, "[SERVER] ratio=0.90 OK: completed=%u in %.2f ms\n",
-                    stats.completed, stats.latency_ms);
+            fprintf(stderr, "[SERVER] ratio=0.90 OK: completed=%u/%d in %.2f ms\n",
+                    stats.completed, NUM_CHUNKS, stats.latency_ms);
             return 0;
         },
 
