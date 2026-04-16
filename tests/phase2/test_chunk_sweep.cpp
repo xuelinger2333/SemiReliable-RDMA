@@ -102,14 +102,16 @@ static void run_server(const char* dev_name, int rounds, unsigned /*seed*/)
             size_t total_chunks       = 0;
             double total_goodput_bytes = 0.0;
 
+            // Pre-post Recv WRs once (one round's worth).
+            // After each round we refill only the consumed count,
+            // keeping outstanding Recv WRs constant and avoiding RQ overflow.
+            for (int i = 0; i < num_chunks; i++) {
+                engine.post_recv(static_cast<uint64_t>(i));
+            }
+
             for (int r = 0; r < rounds; r++) {
                 // Reset buffer to detect ghost data
                 std::memset(engine.local_buf(), 0, BUF_SIZE);
-
-                // Pre-post Recv WRs for this round
-                for (int i = 0; i < num_chunks; i++) {
-                    engine.post_recv(static_cast<uint64_t>(i));
-                }
 
                 // Signal client: ready
                 tcp_signal(tcp_fd);
@@ -132,7 +134,7 @@ static void run_server(const char* dev_name, int rounds, unsigned /*seed*/)
                                   / static_cast<double>(num_chunks);
                     rc.wait_for_ratio(cs, target, WAIT_TIMEOUT, &stats);
 
-                    // Extra drain
+                    // Extra drain to catch stragglers
                     usleep(5000);
                     auto extra = engine.poll_cq(64, 50);
                     for (const auto& c : extra) {
@@ -150,6 +152,12 @@ static void run_server(const char* dev_name, int rounds, unsigned /*seed*/)
                 total_chunks       += num_chunks;
                 total_goodput_bytes += completed * chunk_bytes;
                 latencies.push_back(round_ms);
+
+                // Refill RQ: re-post exactly the number consumed this round,
+                // so outstanding Recv WRs stay at num_chunks.
+                for (size_t i = 0; i < completed; i++) {
+                    engine.post_recv(0);
+                }
             }
 
             close(tcp_fd);
