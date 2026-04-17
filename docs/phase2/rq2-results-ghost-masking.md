@@ -3,8 +3,8 @@
 **实验日期：** 2026-04-17
 **实验产物：** [test_rms_error.cpp](../../tests/phase2/test_rms_error.cpp) · [rq2_rms_error_softroce_200r.csv](../../experiments/results/rq2_rms_error_softroce_200r.csv) · [rq2_rms_error_perround_softroce_200r.csv](../../experiments/results/rq2_rms_error_perround_softroce_200r.csv)
 **运行环境：** aliyun, SoftRoCE (rxe0) loopback
-**配套设计：** [core-transport.md §2.2](core-transport.md) · [implementation-log.md §1](implementation-log.md)
-**本文档定位：** Phase 2 RQ2 的独立结果文档，可直接引用于论文。RQ1（chunk size × loss 扫描）结果见 [implementation-log.md §4](implementation-log.md)。
+**配套设计：** [design-core-transport.md §2.2](design-core-transport.md) · [log-implementation.md §1](log-implementation.md)
+**本文档定位：** Phase 2 RQ2 的独立结果文档，可直接引用于论文。RQ1（chunk size × loss 扫描）结果见 [log-implementation.md §4](log-implementation.md)。
 
 ---
 
@@ -12,13 +12,13 @@
 
 ### 1.1 RQ1 遗留的关键问题
 
-[implementation-log.md §4](implementation-log.md) 里 RQ1 证明了 `ChunkManager` 能把一层梯度切成独立 WR、per-chunk loss 下 `ghost_ratio ≈ p` 且偏差 < 0.4%。但 RQ1 **完全没有碰 ghost 区域在 buffer 里的残留值**——无论收不收到 CQE，server 的 MR buffer 在轮次之间会累积上一轮的残留数据。这正是 UC QP 语义下特有的 "ghost gradient" 问题。
+[log-implementation.md §4](log-implementation.md) 里 RQ1 证明了 `ChunkManager` 能把一层梯度切成独立 WR、per-chunk loss 下 `ghost_ratio ≈ p` 且偏差 < 0.4%。但 RQ1 **完全没有碰 ghost 区域在 buffer 里的残留值**——无论收不收到 CQE，server 的 MR buffer 在轮次之间会累积上一轮的残留数据。这正是 UC QP 语义下特有的 "ghost gradient" 问题。
 
 ### 1.2 RQ2 要回答的问题
 
 > **用 `GhostMask::apply`（把未收到 CQE 的 chunk 对应的 buffer 区域置零）相比"直接聚合上一轮残留的 buffer"能减少多少梯度 RMS 误差？**
 
-这是 Phase 2 论文主张 [core-transport.md §2.2](core-transport.md) 里"ghost mitigation 层对聚合精度有量化收益"的核心证据之一。审稿人会直接质疑：你既然用 UC QP 跳过了重传，那丢掉的 chunk 到底对下游 SGD 造成多大数值扰动？
+这是 Phase 2 论文主张 [design-core-transport.md §2.2](design-core-transport.md) 里"ghost mitigation 层对聚合精度有量化收益"的核心证据之一。审稿人会直接质疑：你既然用 UC QP 跳过了重传，那丢掉的 chunk 到底对下游 SGD 造成多大数值扰动？
 
 ### 1.3 与 RQ1 的职责划分
 
@@ -42,7 +42,7 @@
 | `CHUNK_BYTES`        | 16 KiB                          | 固定，RQ1 上 16KB 已达 SoftRoCE throughput 饱和平台 |
 | `NUM_CHUNKS / round` | 256                             | `4MB / 16KB` |
 | `LOSS_RATES`         | `{0.000, 0.010, 0.050}`         | 0% 作 sanity, 1% 和 5% 作主实验 |
-| `ROUNDS / cell`      | 200                             | per [core-transport.md §2.2](core-transport.md) |
+| `ROUNDS / cell`      | 200                             | per [design-core-transport.md §2.2](design-core-transport.md) |
 | 数据类型              | `float` (N(0,1))                | 模拟神经网络梯度的归一化分布 |
 | `BASE_SEED`          | 42                              | 与 RQ1 一致 |
 | `STALE_SEED_OFFSET`  | 1000                            | stale 预填 seed = 42+1000+round |
@@ -112,7 +112,7 @@ float rms_error(const uint8_t* buf, const std::vector<float>& gt) {
 
 ### 3.1 零修改的核心库
 
-**`src/transport/` 下所有文件一行未动。** `GhostMask::apply` / `apply_noop` 早在 [core-transport.md](core-transport.md) 锁定时就预留了对照组接口（[ghost_mask.h:27-31](../../src/transport/ghost_mask.h#L27-L31)），本实验只消费，不扩展。
+**`src/transport/` 下所有文件一行未动。** `GhostMask::apply` / `apply_noop` 早在 [design-core-transport.md](design-core-transport.md) 锁定时就预留了对照组接口（[ghost_mask.h:27-31](../../src/transport/ghost_mask.h#L27-L31)），本实验只消费，不扩展。
 
 本实验用 `memcpy(raw_copy, local_buf, BUF_SIZE)` 替代 `apply_noop` 作为对照组——更直接、无副作用。
 
@@ -170,7 +170,7 @@ RMS_masked ≈ √g
 rms_ratio  = RMS_masked / RMS_raw = 1/√2 ≈ 0.7071
 ```
 
-### 4.3 对 [core-transport.md](core-transport.md) 的修正
+### 4.3 对 [design-core-transport.md](design-core-transport.md) 的修正
 
 原设计文档 §2.2 写 "expected `rms_error_ratio ≤ 0.2`"，这个预测是乐观估计——隐含了 stale 和 truth **完全同分布同尺度且相关** 的假设（例如 stale 直接等于 truth 时 raw 会趋近 0，ratio 就没意义）。
 
@@ -259,10 +259,11 @@ loss_pct,rounds,mean_ghost_ratio,mean_raw_rms,mean_masked_rms,rms_ratio,p50_raw_
 
 ## 7. 下一步
 
-1. **真机 ConnectX-5 交叉验证**（延后到 end-to-end 阶段）：主要验证 CQE 时序、ghost 分布的实机分布形状，RMS ratio 数字预期不变。
-2. **RQ4: 自适应 chunk size** — [core-transport.md §2.4](core-transport.md) 的最后一个 RQ，根据层敏感度 + loss 反馈调整 chunk。
-3. **多 worker AllReduce 下的 ratio 外推** — §6.2 的推论需要 Phase 3 实验验证。
-4. **Stale 相关性 ablation** — 在未来的真训练 benchmark 里观察 raw 与 masked 的真实 gap，检验 stale ⊥ truth 假设是否偏保守。
+1. **RQ4: CQE 驱动的 Ratio 控制** — [design-core-transport.md §2.3](design-core-transport.md) 锁定的 Phase 2 最后一个实验，扫 `(ratio, timeout)` 组合衡量 tail latency 与 achieved_ratio 的权衡。
+2. **真机 ConnectX-5 交叉验证**（延后到 Phase 4 end-to-end 阶段）：主要验证 CQE 时序、ghost 分布的实机分布形状，RMS ratio 数字预期不变。
+3. **多 worker AllReduce 下的 ratio 外推**（Phase 3）：§6.2 的反直觉推论（worker 越多 ratio 越接近 1）需要实验验证。
+4. **Stale 相关性 ablation**（Phase 4 真训练 benchmark）：观察 raw 与 masked 的真实 gap，检验 stale ⊥ truth 假设是否偏保守。
+5. **RQ3: 跨层自适应 chunk size**（Phase 3）：[design-core-transport.md §2.4](design-core-transport.md) 预留接口，根据层敏感度 + loss 反馈动态调整每层 chunk。
 
 ---
 
