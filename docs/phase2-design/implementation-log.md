@@ -245,6 +245,16 @@ for (int r = 0; r < rounds; r++) {
 2. ~~跑 `test_chunk_sweep` 完整 20 cell × 500 轮~~ — **已完成** (Apr 17)
 3. ~~分析 sweep 结果~~ — **已完成**，见上文 §4
 4. **在 ConnectX-5 真机重跑 sweep** — SoftRoCE 的 ~72 MB/s 天花板和 ~61K WQE/s 都是软件模拟极限，真机数据才能回答 "chunk size floor" 问题。需要 CloudLab 或 cs528 环境。
-5. **写 RQ2 的 point-to-point binary** — `test_rms_error.cpp`，复用 `UCQPEngine` + `GhostMask::apply` / `apply_noop`，测量 ghost 对梯度聚合精度的影响。
+5. ~~写 RQ2 的 point-to-point binary~~ — **已完成** (Apr 17)，见 §6。
 6. **补 per-packet loss 对照实验** — 当前 sweep 是 per-chunk 注入，需要一组 netem loss 实验（或等价的 per-packet 软件注入）来验证 `1-(1-p)^c` 模型在 Phase 2 框架下是否仍然成立。
 7. **回填 `core-transport.md §8`** 并在 `docs/README.md` 里把 Phase 2 状态从"进行中"改成"已完成"。
+
+---
+
+## 6. RQ2 实验完成（2026-04-17）
+
+详细结果、原理分析与讨论见独立文档 [rq2-ghost-masking-results.md](rq2-ghost-masking-results.md)。
+
+**一句话结论：** `GhostMask::apply` 相比"原样聚合上一轮残留 buffer"稳定降低 29% 的梯度 RMS 误差（实测 ratio 0.7066 / 0.7073，与理论 `1/√2 ≈ 0.7071` 误差 < 0.1%）。
+
+**工程侧：** `src/transport/` 一行未动；新增 [test_rms_error.cpp](../../tests/phase2/test_rms_error.cpp) (344 行) + CMakeLists 2 行；test harness 一次 run 通过（aliyun SoftRoCE loopback，~4 分钟）。
