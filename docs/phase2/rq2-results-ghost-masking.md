@@ -3,8 +3,47 @@
 **实验日期：** 2026-04-17
 **实验产物：** [test_rms_error.cpp](../../tests/phase2/test_rms_error.cpp) · [rq2_rms_error_softroce_200r.csv](../../experiments/results/rq2_rms_error_softroce_200r.csv) · [rq2_rms_error_perround_softroce_200r.csv](../../experiments/results/rq2_rms_error_perround_softroce_200r.csv)
 **运行环境：** aliyun, SoftRoCE (rxe0) loopback
-**配套设计：** [design-core-transport.md §2.2](design-core-transport.md) · [log-implementation.md §1](log-implementation.md)
-**本文档定位：** Phase 2 RQ2 的独立结果文档，可直接引用于论文。RQ1（chunk size × loss 扫描）结果见 [log-implementation.md §4](log-implementation.md)。
+**配套设计：** [design-core-transport.md §2.2](design-core-transport.md) · [rq1-log-implementation.md §1](rq1-log-implementation.md)
+
+---
+
+## 0. 一眼看懂（回来翻这篇文档时先读这节）
+
+### 0.1 本文档定位：**SoftRoCE 阶段 engineering 验证，不作为论文主结果**
+
+- 本实验所有数据来自 SoftRoCE loopback，**不会直接写进论文**
+- 目的：证明 `GhostMask::apply` 的**实现行为与理论模型一致**（is-implementation-correct）
+- 论文中 "ghost mitigation 有价值" 的**主张证据**需等到 **Phase 4 真机 ConnectX-5 + 真训练 benchmark**
+- 因此本文档的正确用法是：**将来真机实验出现偏差时回来对照数值参考**，而不是直接引用结论
+
+### 0.2 实验在干嘛（一段话版本）
+
+你用的 **UC QP 不会自动重传丢掉的 chunk**，但 server 的 MR buffer 里那一块内存还残留**上一轮**的数据。如果你直接把 buffer 拿去做梯度聚合，就等于**把上一轮的旧梯度当成本轮的新梯度**——这就是 ghost gradient。`GhostMask` 的做法是根据 CQE 记录把丢失 chunk 对应的 buffer **置零**。本实验定量比较"置零"与"保留残留"两条路径的梯度 RMS 误差。
+
+### 0.3 关键实验设计
+
+- 固定 chunk = 16 KB，4 MB 梯度切 256 chunk，扫 loss ∈ {0%, 1%, 5%}，每档 200 轮
+- Ground truth 两端**用相同 seed 独立生成**，不占带宽
+- 每轮开始前 server buffer 用**另一个 seed** 填 N(0,1) 模拟"上一轮残留"
+- 两条路径的 per-element 误差方差：raw = 2（旧值−真值），masked = 1（0−真值）
+- 理论 `masked_rms / raw_rms = √(1/2) ≈ 0.7071`
+
+### 0.4 结果：实现正确性通过
+
+| 丢包 | 实测 ratio | 理论 √(1/2) | 偏差 |
+|---|---|---|---|
+| 1% | 0.7066 | 0.7071 | −0.07% |
+| 5% | 0.7073 | 0.7071 | +0.03% |
+
+200 轮 per-round ratio 方差极小（std ≤ 0.005），**精确到小数点后 3 位匹配理论**。结论：GhostMask 实现无 bug，数值行为符合推导。
+
+### 0.5 这个实验**不能**声明什么
+
+- ❌ "GhostMask 对训练收敛有 X% 收益" — 没跑训练
+- ❌ "GhostMask 让最终 accuracy 提升" — 没跑模型
+- ❌ "Phase 2 论文 ghost mitigation 章节的主证据" — 这是 SoftRoCE 数值验证，不是科学证据
+- ✅ "GhostMask 的实现符合理论模型，可以作为下游训练实验的可信起点"
+- ✅ 0.707 是 "stale ⊥ truth" 假设下的**保守下界**，真训练里 stale 与 truth 有相关性，ratio 会偏离此值（§6.2, §6.3）
 
 ---
 
@@ -12,13 +51,13 @@
 
 ### 1.1 RQ1 遗留的关键问题
 
-[log-implementation.md §4](log-implementation.md) 里 RQ1 证明了 `ChunkManager` 能把一层梯度切成独立 WR、per-chunk loss 下 `ghost_ratio ≈ p` 且偏差 < 0.4%。但 RQ1 **完全没有碰 ghost 区域在 buffer 里的残留值**——无论收不收到 CQE，server 的 MR buffer 在轮次之间会累积上一轮的残留数据。这正是 UC QP 语义下特有的 "ghost gradient" 问题。
+[rq1-log-implementation.md §4](rq1-log-implementation.md) 里 RQ1 证明了 `ChunkManager` 能把一层梯度切成独立 WR、per-chunk loss 下 `ghost_ratio ≈ p` 且偏差 < 0.4%。但 RQ1 **完全没有碰 ghost 区域在 buffer 里的残留值**——无论收不收到 CQE，server 的 MR buffer 在轮次之间会累积上一轮的残留数据。这正是 UC QP 语义下特有的 "ghost gradient" 问题。
 
 ### 1.2 RQ2 要回答的问题
 
 > **用 `GhostMask::apply`（把未收到 CQE 的 chunk 对应的 buffer 区域置零）相比"直接聚合上一轮残留的 buffer"能减少多少梯度 RMS 误差？**
 
-这是 Phase 2 论文主张 [design-core-transport.md §2.2](design-core-transport.md) 里"ghost mitigation 层对聚合精度有量化收益"的核心证据之一。审稿人会直接质疑：你既然用 UC QP 跳过了重传，那丢掉的 chunk 到底对下游 SGD 造成多大数值扰动？
+注意回答的是 **RMS 误差**，不是训练收敛/精度。这是一个 **numerical proxy**：梯度数值误差是训练扰动的必要条件而非充分条件，因此本实验只能用来验证 GhostMask 实现本身的数值正确性，不能直接推断训练层收益。训练层影响在 Phase 4 真机 + 真训练 benchmark 中测量。
 
 ### 1.3 与 RQ1 的职责划分
 
@@ -233,11 +272,15 @@ loss_pct,rounds,mean_ghost_ratio,mean_raw_rms,mean_masked_rms,rms_ratio,p50_raw_
 
 ## 6. 结论
 
-### 6.1 GhostMask 的定量贡献
+### 6.1 GhostMask 实现正确性验证通过
 
-在 stale ⊥ truth 且都服从 N(0,1) 的保守 setup 下，`GhostMask::apply` 相比"原样聚合上一轮残留 buffer"能**稳定降低 29% 的梯度 RMS 误差**（实测 ratio 0.707，几乎没有方差），与理论 `1/√2` 精确匹配。
+在 stale ⊥ truth 且都服从 N(0,1) 的保守 setup 下，`GhostMask::apply` 相比"原样聚合上一轮残留 buffer"在 SoftRoCE 上**稳定降低 29% 的梯度 RMS 误差**（实测 ratio 0.707，几乎没有方差），与理论 `1/√2` 精确匹配。
 
-这是 Phase 2 论文里 "ghost mitigation 层有量化价值" 主张的第一手证据。
+**这个数字的用法**：
+- ✅ 证明 `GhostMask::apply` 的 C++ 实现与数学模型一致，无 bug，可作为下游训练实验的可信起点
+- ✅ 给出 "stale ⊥ truth" 假设下的数值地板（后续真机/真训练数据偏离此值时可定位原因）
+- ❌ **不能**作为论文中 "ghost mitigation 对训练有 X% 收益" 的证据——训练层影响需 Phase 4 端到端 benchmark
+- ❌ **不能**直接外推到 ConnectX-5 或多 worker AllReduce——stale 分布和相关性会变化（见 §6.2）
 
 ### 6.2 对 Phase 3 AllReduce 的启示
 
