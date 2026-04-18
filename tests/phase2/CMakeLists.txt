@@ -1,7 +1,7 @@
 # Phase 2 test binaries
 #
 # 3 gtest binaries (unit/integration tests)
-# 2 non-gtest binaries (RQ1 chunk sweep, RQ2 RMS error)
+# 3 non-gtest binaries (RQ1 chunk sweep, RQ2 RMS error, RQ4 ratio-timeout sweep)
 
 # GTest-based tests
 foreach(test_name test_chunk_roundtrip test_ratio_timeout test_ghost_mask)
@@ -17,3 +17,7 @@ target_link_libraries(test_chunk_sweep PRIVATE semirdma_transport)
 # RQ2 RMS error experiment (non-gtest, has its own main)
 add_executable(test_rms_error test_rms_error.cpp)
 target_link_libraries(test_rms_error PRIVATE semirdma_transport)
+
+# RQ4 ratio/timeout sweep experiment (non-gtest, has its own main)
+add_executable(test_ratio_sweep test_ratio_sweep.cpp)
+target_link_libraries(test_ratio_sweep PRIVATE semirdma_transport)
