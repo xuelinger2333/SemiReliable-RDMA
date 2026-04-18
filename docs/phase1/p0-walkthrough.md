@@ -516,7 +516,7 @@ for (auto &chunk : chunks) {
 - **`RatioController`** — 基于 CQE 计数判定 "多少 chunk 成功即可往前走"（例如 ≥95%）。P0 结论 ② 给的硬保证：**CQE 是充要条件**，所以 "数 CQE" 和 "真的送达了几个 chunk" 是同一件事，不需要额外的 ACK 机制。
 - **`GhostMask`** — 对那些没收到 CQE 的 chunk，用 `valid_len` 做 masked aggregation（把对应区域置零或跳过）。P0 结论 ③ 给的硬保证：**污染是纯前缀截断**，所以 per-chunk 一个 8 字节 `valid_len` 就够，不需要 bitmap。
 
-这三条连接就是 [docs/phase2-design/core-transport.md](../phase2-design/core-transport.md) 的出发点。
+这三条连接就是 [docs/phase2/design-core-transport.md](../phase2/design-core-transport.md) 的出发点。
 
 ---
 

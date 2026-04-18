@@ -1,8 +1,8 @@
 # Phase 2 实施日志 · Core Transport Layer
 
 **时间窗：** 2026-04-16 至今（仍在进行中）
-**配套设计文档：** [core-transport.md](core-transport.md)
-**本文档地位：** 记录 Phase 2 实施过程中**做了什么、碰到什么、怎么修的、得出什么阶段性结论**。和 `core-transport.md §8 实验结果` 是两类文档 —— 那一节等实验跑完才填；本文档是实施侧的工程日志。
+**配套设计文档：** [design-core-transport.md](design-core-transport.md)
+**本文档地位：** 记录 Phase 2 实施过程中**做了什么、碰到什么、怎么修的、得出什么阶段性结论**。和 `design-core-transport.md §8 实验结果` 是两类文档 —— 那一节等实验跑完才填；本文档是实施侧的工程日志。
 
 ---
 
@@ -26,7 +26,7 @@
 | Sweep 实验 | `tests/phase2/test_chunk_sweep.cpp` | 308 | RQ1 的 5×4 矩阵扫描（chunk size × loss rate） |
 | 构建 | `tests/phase2/CMakeLists.txt` + root `CMakeLists.txt`（Phase 1 已存在） | — | GTest 可选、`find_library(IBVERBS_LIB)` |
 
-设计决策全部沿用 `core-transport.md §3`，没有偏离。
+设计决策全部沿用 `design-core-transport.md §3`，没有偏离。
 
 ### 1.2 后续五个 fix 提交
 
@@ -110,7 +110,7 @@ for (int r = 0; r < rounds; r++) {
 
 ### 3.1 设计层面
 
-1. **接口锁定是对的。** 五个 fix 全落在 test harness，核心库没改过。`core-transport.md §3` 的 `ChunkSet / RatioController / GhostMask` 接口直接复制到代码里就能用。
+1. **接口锁定是对的。** 五个 fix 全落在 test harness，核心库没改过。`design-core-transport.md §3` 的 `ChunkSet / RatioController / GhostMask` 接口直接复制到代码里就能用。
 2. **P0 的四条核心结论被工程化兑现了：**
    - 结论 ①（`(1-p)^c` 曲线）→ `ChunkSet` 生成 N 个独立 `ChunkDescriptor`，chunk 间互不拖累 ✓
    - 结论 ②（CQE 是充要条件）→ `RatioController` 只轮询 CQE，绝不扫 buffer ✓
@@ -133,7 +133,7 @@ for (int r = 0; r < rounds; r++) {
 | `test_chunk_sweep` 跑出第一批 CSV | **已完成** ✅ — 20 cell × 500 轮，零崩溃 | Apr 17 |
 | RQ2 实验（masked vs raw RMS error） | 需要在 sweep 数据之上加一组 point-to-point | 预计 May 3 |
 | RQ4 实验（`(ratio, timeout)` 扫描） | 需要补一个独立 binary 或扩展 sweep | 预计 May 6 |
-| `core-transport.md §8` 结果回填 | 依赖以上 | 预计 May 10 |
+| `design-core-transport.md §8` 结果回填 | 依赖以上 | 预计 May 10 |
 
 ### 3.4 需要在下一次 iteration 决定的事
 
@@ -247,13 +247,13 @@ for (int r = 0; r < rounds; r++) {
 4. **在 ConnectX-5 真机重跑 sweep** — SoftRoCE 的 ~72 MB/s 天花板和 ~61K WQE/s 都是软件模拟极限，真机数据才能回答 "chunk size floor" 问题。需要 CloudLab 或 cs528 环境。
 5. ~~写 RQ2 的 point-to-point binary~~ — **已完成** (Apr 17)，见 §6。
 6. **补 per-packet loss 对照实验** — 当前 sweep 是 per-chunk 注入，需要一组 netem loss 实验（或等价的 per-packet 软件注入）来验证 `1-(1-p)^c` 模型在 Phase 2 框架下是否仍然成立。
-7. **回填 `core-transport.md §8`** 并在 `docs/README.md` 里把 Phase 2 状态从"进行中"改成"已完成"。
+7. **回填 `design-core-transport.md §8`** 并在 `docs/README.md` 里把 Phase 2 状态从"进行中"改成"已完成"。
 
 ---
 
 ## 6. RQ2 实验完成（2026-04-17）
 
-详细结果、原理分析与讨论见独立文档 [rq2-ghost-masking-results.md](rq2-ghost-masking-results.md)。
+详细结果、原理分析与讨论见独立文档 [rq2-results-ghost-masking.md](rq2-results-ghost-masking.md)。
 
 **一句话结论：** `GhostMask::apply` 相比"原样聚合上一轮残留 buffer"稳定降低 29% 的梯度 RMS 误差（实测 ratio 0.7066 / 0.7073，与理论 `1/√2 ≈ 0.7071` 误差 < 0.1%）。
 
