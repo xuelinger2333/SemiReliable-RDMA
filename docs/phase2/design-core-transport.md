@@ -557,9 +557,46 @@ Phase 2 开工前无法确定、需要等第一批实验数据或讨论的事项
 | May 8 (Fri) | RQ2 + RQ4 数据出炉 |
 | May 10 (Sun) | Phase 2 总结文档（回填到本文件 §8）|
 
-## 8. 实验结果（Phase 2 结束时回填）
+## 8. 实验结果（Phase 2 收尾汇总）
 
-*待 Phase 2 实验结束填入。预计内容：RQ1 的三维权衡图、RQ2 的 masking 对比表、RQ4 的参数扫描热力图、和 Phase 1 基线的对比表。*
+**回填时间：** 2026-04-19
+**实验环境：** aliyun, SoftRoCE (rxe0) loopback
+
+### 8.1 推荐参数（Phase 3 直接继承的默认值）
+
+| 参数 | 推荐值 | 来源 RQ | 置信度 |
+|------|-------:|:------:|-------|
+| `chunk_bytes` | **16 KiB** | RQ1 §4.3/§4.5 | SoftRoCE 饱和平台；ConnectX-5 真机需重测 |
+| `ratio`       | **0.95**   | RQ4 §6.1 | Bernoulli-loss 下 achievable 上界 ≈ (1-p)，0.95 给 0.5% 余量 |
+| `timeout_ms`  | **20 ms**  | RQ4 §6.1/§6.3 | 刚好覆盖 SoftRoCE CQE 到齐 P99；真机预计 ~1 ms |
+| `ghost_mask`  | **on** (`GhostMask::apply`) | RQ2 §6.1 | 数值实现已验证，RMS 误差 ratio = 0.707 |
+| `rq_depth`    | `num_chunks + 64` | rq1-log §2.4 | "预投递 + 按消费量补充"，不随轮次累积 |
+
+### 8.2 三个 RQ 的一句话结论
+
+- **RQ1 — Write 粒度最优**：4KB 起 throughput 饱和；16KB 是 ghost 减少 / WQE 开销 / tail latency 的综合甜点，P99-P50 gap < 0.1 ms。详见 [rq1-log-implementation.md §4](rq1-log-implementation.md).
+- **RQ2 — Ghost 缓解数值正确**：在 stale ⊥ truth 假设下 `GhostMask::apply` 把 per-element 误差方差从 2 降到 1，`masked/raw RMS ratio = 0.7066 (1% loss) / 0.7073 (5% loss)`，与理论 √(1/2) = 0.7071 吻合到小数点后 3 位。详见 [rq2-results-ghost-masking.md §5.3](rq2-results-ghost-masking.md).
+- **RQ4 — Ratio/Timeout 参数空间**：找到 operating point `(0.95, 20ms)` 同时满足 `achieved_ratio ≥ 0.95` 和 `wait_p99 < 0.5 × ratio=1.0 baseline`（实测 15.9 ms vs 100 ms，6.3× 降低）。详见 [rq4-results-ratio-timeout.md §6.1](rq4-results-ratio-timeout.md).
+
+### 8.3 Phase 1 → Phase 2 的理论 ghost 降幅
+
+| 配置 | chunk 大小 | loss | 理论 `1-(1-p)^c`（per-packet 模型） | 实测 ghost_ratio |
+|------|-----------|------|------------------------------------|-----------------|
+| Phase 1 `test_netem_loss` (单 256KB Write，MTU=1024，c=256) | 256 KB / WR | 1% netem | **92.4%** | ~90% (P0 数据) |
+| Phase 2 `test_chunk_sweep` (16KB chunk，per-chunk Bernoulli) | 16 KB × 256 chunks | 1% per-chunk | 1.0%（per-chunk 模型） | 1.02% |
+
+**注意**：Phase 2 的实验用的是 **per-chunk Bernoulli 注入**（client 对每个 chunk 独立以概率 p 跳过 `post_write`），而非 Phase 1 的 **per-packet netem 丢包**。两者不是同一个模型：
+- per-packet 下 ghost ratio 随 chunk 内包数 c 指数放大
+- per-chunk 下 ghost ratio = p（与 chunk 大小解耦）
+
+**Phase 2 的 "6× ghost 降幅" 主张**（设计 §5.2）在**per-packet 模型下成立**——16KB chunk 在 MTU=1024 网络下 c=16，`1-(1-0.01)^16 ≈ 14.9%`，相比 256KB 的 92.4% 降低 6.2×。但该主张尚未在 SoftRoCE 上用 netem 重跑验证；Phase 3 CloudLab ConnectX-5 真机会是第一次 per-packet 环境下的端到端对照。
+
+### 8.4 未解决问题（carry-over 到 Phase 3）
+
+1. `wait_for_ratio` 的"to-threshold vs to-drain"语义应当落到 `RatioController` 的 header 注释里（rq1-log §2.1）
+2. `UCQPEngine` 应提供 `post_recv_batch(n)` / `outstanding_recv()` 避免调用方手工记账（rq1-log §2.4）
+3. Per-packet netem 丢包下的真实 ghost ratio 需要真机 ConnectX-5 验证（§8.3）
+4. 本阶段所有数据来自 SoftRoCE loopback（<100 MB/s），真机 25-100 Gbps 环境下 timeout 绝对值、poll 开销、CQE 时序分布都会改变，Phase 3 需按 [rq4-results-ratio-timeout.md §6.3](rq4-results-ratio-timeout.md#63-timeout-应该贴近-cqe-真实到达-p99) 的公式 `timeout = 1.5 × CQE_p99` 重新标定
 
 ---
 
