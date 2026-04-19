@@ -1,0 +1,69 @@
+# Stage A · RQ5-A1 / A2 · ResNet-18 / CIFAR-10 / 2 workers
+#
+# Hydra base config.  Override from CLI, e.g.:
+#   python experiments/stage_a/train_cifar10.py \
+#       transport=semirdma loss_rate=0.01 seed=42
+#
+# Output layout (hydra.run.dir):
+#   experiments/results/stage_a/${now:%Y-%m-%d}/${now:%H-%M-%S}_${transport}_loss${loss_rate}_seed${seed}/
+#       .hydra/
+#       main.log
+#       loss_per_step.csv
+#       iter_time.csv
+#       grad_norm.csv
+#       completion.csv    (semirdma only)
+
+defaults:
+  - _self_
+
+# --- run identity ------------------------------------------------------
+transport: semirdma      # {semirdma, gloo}
+loss_rate: 0.0           # per-chunk Bernoulli drop (semirdma only)
+seed: 42
+steps: 500
+warmup_steps: 50         # iter_time / grad_norm ignore these
+
+# --- data --------------------------------------------------------------
+data:
+  root: /root/data/cifar10
+  download: true
+  batch_size: 128        # per worker
+  num_workers: 2
+  pin_memory: false
+
+# --- model -------------------------------------------------------------
+model:
+  name: resnet18
+  num_classes: 10
+
+# --- optimizer ---------------------------------------------------------
+optim:
+  name: sgd
+  lr: 0.1
+  momentum: 0.9
+  weight_decay: 5.0e-4
+
+# --- distributed -------------------------------------------------------
+dist:
+  world_size: 2
+  master_addr: 127.0.0.1
+  master_port: 29500
+  # SemiRDMA TCP bootstrap (ignored when transport=gloo)
+  semirdma_port: 29700
+
+# --- SemiRDMA transport (unused when transport=gloo) -------------------
+transport_cfg:
+  dev_name: rxe0
+  buffer_bytes: 67108864        # 64 MiB — covers ResNet-18's ~47 MiB flat bucket
+  chunk_bytes: 16384            # RQ1 saturation point
+  sq_depth: 16
+  rq_depth: 320
+  ratio: 0.95                   # RQ4 sweet spot
+  timeout_ms: 20                # RQ4 sweet spot
+
+# --- Hydra output layout -----------------------------------------------
+hydra:
+  run:
+    dir: experiments/results/stage_a/${now:%Y-%m-%d}/${now:%H-%M-%S}_${transport}_loss${loss_rate}_seed${seed}
+  job:
+    chdir: true
