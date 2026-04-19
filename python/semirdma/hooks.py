@@ -25,8 +25,6 @@ keeps Stage A simple; Stage B can add a background dispatcher for
 bucket-overlap if profiling demands it.
 """
 
-from __future__ import annotations
-
 import logging
 import threading
 from dataclasses import dataclass
@@ -128,8 +126,8 @@ _HOOK_LOCK = threading.Lock()
 
 def semirdma_allreduce_hook(
     state: SemiRDMAHookState,
-    bucket: "dist.GradBucket",
-) -> "futures.Future[torch.Tensor]":
+    bucket: dist.GradBucket,
+) -> futures.Future[torch.Tensor]:
     """DDP communication hook: SemiRDMA-backed 2-worker all-reduce.
 
     Semantics: produces (local + remote) / world_size, matching what
