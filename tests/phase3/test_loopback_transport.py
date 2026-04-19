@@ -57,8 +57,9 @@ def test_loopback_64k_no_loss(rxe_device) -> None:
     rx = SemiRDMATransport(cfg)
     _pair_up(tx, rx, port=20001)
 
-    N = 64 * 1024
-    payload = (np.arange(N, dtype=np.uint32) ^ 0xDEADBEEF).tobytes()
+    N = 64 * 1024  # bytes
+    payload = (np.arange(N // 4, dtype=np.uint32) ^ 0xDEADBEEF).tobytes()
+    assert len(payload) == N
     tx.post_gradient(payload)
 
     cs_recv = ChunkSet(0, N, cfg.chunk_bytes)
