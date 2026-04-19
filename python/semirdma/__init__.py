@@ -7,10 +7,12 @@ later commits of this stage.
 """
 
 from semirdma.config import TransportConfig
+from semirdma.transport import SemiRDMATransport
 
 __version__ = "0.3.0a0"
 
 __all__ = [
+    "SemiRDMATransport",
     "TransportConfig",
     "__version__",
 ]
