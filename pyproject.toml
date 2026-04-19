@@ -1,9 +1,13 @@
 [build-system]
+# cmake is intentionally NOT listed here: on development / deployment
+# machines (aliyun, CloudLab) the system cmake >= 3.16 is always present
+# and pulling the cmake PyPI wheel on slow networks causes uv build
+# isolation to time out.  pybind11 stays because setup.py (arriving in a
+# later Phase 3 commit) will import pybind11.setup_helpers at build time.
 requires = [
     "setuptools>=61",
     "wheel",
     "pybind11>=2.11",
-    "cmake>=3.16",
 ]
 build-backend = "setuptools.build_meta"
 
