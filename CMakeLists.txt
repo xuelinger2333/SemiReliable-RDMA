@@ -29,3 +29,26 @@ else()
                    "Install: sudo apt install libgtest-dev && "
                    "cd /usr/src/googletest && sudo cmake . && sudo make install")
 endif()
+
+# Phase 3 Stage A: optional Python bindings (pybind11)
+# Default OFF — Phase 2 build path is unaffected when the option is not passed.
+option(SEMIRDMA_BUILD_BINDINGS "Build pybind11 Python bindings (requires pybind11)" OFF)
+if(SEMIRDMA_BUILD_BINDINGS)
+    # Produce position-independent code so the static transport lib can be
+    # linked into the _semirdma_ext shared module.
+    set_property(TARGET semirdma_transport PROPERTY POSITION_INDEPENDENT_CODE ON)
+    find_package(pybind11 CONFIG QUIET)
+    if(NOT pybind11_FOUND)
+        message(FATAL_ERROR
+            "SEMIRDMA_BUILD_BINDINGS=ON but pybind11 not found. "
+            "Install: pip install pybind11>=2.11")
+    endif()
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/bindings/CMakeLists.txt")
+        add_subdirectory(src/bindings)
+    else()
+        message(STATUS "src/bindings/CMakeLists.txt not present yet — "
+                       "bindings target will appear in a later Phase 3 commit.")
+    endif()
+else()
+    message(STATUS "Python bindings disabled (pass -DSEMIRDMA_BUILD_BINDINGS=ON to enable).")
+endif()

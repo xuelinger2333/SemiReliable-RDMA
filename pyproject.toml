@@ -1,0 +1,59 @@
+[build-system]
+requires = [
+    "setuptools>=61",
+    "wheel",
+    "pybind11>=2.11",
+    "cmake>=3.16",
+]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "semirdma"
+version = "0.3.0a0"
+description = "Semi-reliable RDMA transport for AI training gradient communication (Phase 3 Stage A scaffolding)."
+requires-python = ">=3.9"
+authors = [{ name = "SemiRDMA authors" }]
+license = { text = "See repository" }
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: C++",
+    "Programming Language :: Python :: 3",
+    "Topic :: System :: Networking",
+]
+dependencies = [
+    "numpy>=1.24",
+    "hydra-core>=1.3",
+    "omegaconf>=2.3",
+    "torch>=2.0",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=7",
+    "pytest-timeout>=2.1",
+]
+experiments = [
+    "torchvision>=0.15",
+    "matplotlib>=3.7",
+    "pandas>=2.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/xuelinger2333/SemiReliable-RDMA"
+Issues = "https://github.com/xuelinger2333/SemiReliable-RDMA/issues"
+
+# Python package layout — sources live under python/ (not yet populated;
+# Phase 3 Stage A will add python/semirdma/ in a later commit).
+[tool.setuptools]
+package-dir = { "" = "python" }
+
+[tool.setuptools.packages.find]
+where = ["python"]
+include = ["semirdma*"]
+
+# NOTE: the pybind11 extension (_semirdma_ext) is not yet wired up.  It will
+# arrive together with src/bindings/py_semirdma.cpp in a later Phase 3 commit
+# (setup.py will invoke CMake with -DSEMIRDMA_BUILD_BINDINGS=ON).  Until then,
+# `pip install -e .` succeeds but exposes no compiled extension.
