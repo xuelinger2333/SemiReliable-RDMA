@@ -18,6 +18,7 @@
 
 #include <infiniband/verbs.h>
 
+#include <atomic>
 #include <cstdint>
 #include <cstddef>
 #include <string>
@@ -79,6 +80,18 @@ public:
     // Throws on ibv_post_recv failure.
     void post_recv(uint64_t wr_id);
 
+    // Post n zero-length Receive WRs with sequential wr_ids
+    // [base_wr_id, base_wr_id + n), chained via ibv_recv_wr::next so that
+    // a single ibv_post_recv syscall drains them all.  No-op when n <= 0.
+    // Throws on ibv_post_recv failure.
+    void post_recv_batch(int n, uint64_t base_wr_id = 0);
+
+    // Number of Receive WRs posted minus receive CQEs consumed so far
+    // (IBV_WC_RECV and IBV_WC_RECV_RDMA_WITH_IMM).  Lets Python / higher
+    // layers re-fill the RQ before it drains.  Approximate — non-atomic
+    // read of an atomic counter; good enough for throttling decisions.
+    int outstanding_recv() const { return outstanding_recv_.load(std::memory_order_relaxed); }
+
     // Poll CQ for up to max_n completions.
     // timeout_ms == 0: single non-blocking ibv_poll_cq call.
     // timeout_ms  > 0: loop until at least one result or timeout.
@@ -104,6 +117,11 @@ private:
     int           ib_port_   = 1;
     int           gid_index_ = -1;
     union ibv_gid gid_;
+
+    // Tracks outstanding Receive WRs for post_recv_batch / outstanding_recv.
+    // Incremented by post_recv / post_recv_batch, decremented in poll_cq
+    // whenever a receive-side CQE (IBV_WC_RECV* family) is drained.
+    std::atomic<int> outstanding_recv_{0};
 
     void cleanup();
 };

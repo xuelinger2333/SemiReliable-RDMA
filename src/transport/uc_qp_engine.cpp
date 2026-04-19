@@ -268,6 +268,44 @@ void UCQPEngine::post_recv(uint64_t wr_id)
         throw std::runtime_error(std::string("ibv_post_recv failed: ") +
                                  strerror(ret));
     }
+    outstanding_recv_.fetch_add(1, std::memory_order_relaxed);
+}
+
+// ---------------------------------------------------------------------------
+// post_recv_batch — chain n zero-length Recv WRs into a single ibv_post_recv
+// ---------------------------------------------------------------------------
+void UCQPEngine::post_recv_batch(int n, uint64_t base_wr_id)
+{
+    if (n <= 0) return;
+
+    std::vector<struct ibv_recv_wr> wrs(static_cast<size_t>(n));
+    std::memset(wrs.data(), 0, wrs.size() * sizeof(struct ibv_recv_wr));
+
+    for (int i = 0; i < n; i++) {
+        wrs[i].wr_id   = base_wr_id + static_cast<uint64_t>(i);
+        wrs[i].sg_list = nullptr;
+        wrs[i].num_sge = 0;
+        wrs[i].next    = (i + 1 < n) ? &wrs[i + 1] : nullptr;
+    }
+
+    struct ibv_recv_wr* bad_wr = nullptr;
+    int ret = ibv_post_recv(qp_, &wrs[0], &bad_wr);
+    if (ret) {
+        // bad_wr points to the first WR that was not posted.  Partial posts
+        // on ibv_post_recv are allowed by the verbs API; count only the WRs
+        // that landed before the failure.
+        int posted = 0;
+        for (int i = 0; i < n; i++) {
+            if (&wrs[i] == bad_wr) break;
+            posted++;
+        }
+        if (posted > 0) {
+            outstanding_recv_.fetch_add(posted, std::memory_order_relaxed);
+        }
+        throw std::runtime_error(std::string("ibv_post_recv (batch) failed: ") +
+                                 strerror(ret));
+    }
+    outstanding_recv_.fetch_add(n, std::memory_order_relaxed);
 }
 
 // ---------------------------------------------------------------------------
@@ -285,6 +323,7 @@ std::vector<Completion> UCQPEngine::poll_cq(int max_n, int timeout_ms)
         if (n < 0) {
             throw std::runtime_error("ibv_poll_cq returned error");
         }
+        int recv_cqe = 0;
         for (int i = 0; i < n; i++) {
             Completion c;
             c.wr_id    = wcs[i].wr_id;
@@ -294,6 +333,13 @@ std::vector<Completion> UCQPEngine::poll_cq(int max_n, int timeout_ms)
                              ? ntohl(wcs[i].imm_data)
                              : 0;
             results.push_back(c);
+            if (wcs[i].opcode == IBV_WC_RECV_RDMA_WITH_IMM ||
+                wcs[i].opcode == IBV_WC_RECV) {
+                recv_cqe++;
+            }
+        }
+        if (recv_cqe > 0) {
+            outstanding_recv_.fetch_sub(recv_cqe, std::memory_order_relaxed);
         }
 
         // Non-blocking mode (timeout_ms == 0): single poll, return immediately
