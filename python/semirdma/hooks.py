@@ -58,6 +58,14 @@ class SemiRDMAHookState:
     tx: SemiRDMATransport
     rx: SemiRDMATransport
     bucket_idx: int = 0
+    # DDP typically fires 2–3 buckets per step for ResNet-18 (~47 MiB of
+    # gradient bytes at bucket_cap_mb=25).  If two buckets shared the same
+    # MR offset range [0, nbytes), the peer's second-bucket Writes would
+    # overwrite the first bucket's still-in-flight data.  Partition the MR
+    # into ``n_slots`` disjoint chunks so bucket_idx%n_slots owns a unique
+    # slot.  Stage A's default buffer_bytes=64 MiB with n_slots=2 gives
+    # 32 MiB/slot, enough for any ResNet-18 bucket.
+    n_slots: int = 2
 
     @classmethod
     def for_rank(
@@ -173,17 +181,32 @@ def semirdma_allreduce_hook(
         bucket_id = state.bucket_idx
         state.bucket_idx += 1
 
+        # Partition MR into disjoint slots so back-to-back buckets in the
+        # same step don't overwrite each other's still-in-flight data.
+        slot_bytes = state.cfg.buffer_bytes // state.n_slots
+        slot = bucket_id % state.n_slots
+        base = slot * slot_bytes
+        if nbytes > slot_bytes:
+            raise RuntimeError(
+                f"semirdma_allreduce_hook: bucket {nbytes} B exceeds "
+                f"slot_bytes={slot_bytes} (buffer_bytes={state.cfg.buffer_bytes}, "
+                f"n_slots={state.n_slots}).  Shrink bucket_cap_mb or bump "
+                f"TransportConfig.buffer_bytes."
+            )
+
         # ------------------ send local, receive remote ----------------
-        cs_send = state.tx.post_gradient(byte_view)
-        cs_recv = ChunkSet(0, nbytes, state.cfg.chunk_bytes)
+        cs_send = state.tx.post_gradient(
+            byte_view, base_offset=base, remote_base_offset=base
+        )
+        cs_recv = ChunkSet(base, nbytes, state.cfg.chunk_bytes)
         stats = state.rx.await_gradient(cs_recv)
 
-        # Peer's bytes are now in state.rx.buffer_view()[0:nbytes].  Build a
-        # torch view that shares memory with the MR so averaging is a single
-        # vectorized add.
+        # Peer's bytes are now in state.rx.buffer_view()[base:base+nbytes].
+        # Build a torch view that shares memory with the MR so averaging is
+        # a single vectorized add.
         import numpy as np
 
-        remote_np = np.frombuffer(state.rx.buffer_view(), dtype=np.uint8)[:nbytes]
+        remote_np = np.frombuffer(state.rx.buffer_view(), dtype=np.uint8)[base : base + nbytes]
         # View as the same dtype/shape as the bucket tensor.  np.frombuffer
         # gives us read-only semantics; .view() reinterprets, .reshape(-1)
         # matches flat's shape.
