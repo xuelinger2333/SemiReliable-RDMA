@@ -84,32 +84,40 @@ class SemiRDMAHookState:
         tx = SemiRDMATransport(cfg)
         rx = SemiRDMATransport(cfg)
 
-        # TX direction: rank 0 server, rank 1 client.  We advertise tx's
-        # local info and expect the peer's rx info back (because from the
-        # peer's perspective its rx is what our tx writes into).
-        tx_is_server = (rank == 0)
-        tx_port = port
-        tx_remote_qp, tx_remote_mr = exchange_qp_info(
-            is_server=tx_is_server,
-            host=peer_host if not tx_is_server else "0.0.0.0",
-            port=tx_port,
-            local_qp=tx.local_qp_info,
-            local_mr=tx.local_mr_info,
-        )
-        tx.bring_up(tx_remote_qp, tx_remote_mr)
+        # Port P is the rank0-writes-to-rank1 direction.  On this channel
+        # rank 0 is the writer (advertises its *tx* QP) and rank 1 is the
+        # target (advertises its *rx* QP).  After the exchange rank 0.tx
+        # has rank1.rx as its remote, and rank 1.rx knows which peer QPN
+        # is permitted to Write into it.  The earlier version had both
+        # sides advertise their tx info, which made rank 0.tx point at
+        # rank1.tx — so Writes landed on the peer's *tx* QP and were
+        # invisible to rank 1.rx's CQ (observed as grad_l2 ~= local/√2).
+        if rank == 0:
+            remote_qp, remote_mr = exchange_qp_info(
+                is_server=True, host="0.0.0.0", port=port,
+                local_qp=tx.local_qp_info, local_mr=tx.local_mr_info,
+            )
+            tx.bring_up(remote_qp, remote_mr)
+        else:
+            remote_qp, remote_mr = exchange_qp_info(
+                is_server=False, host=peer_host, port=port,
+                local_qp=rx.local_qp_info, local_mr=rx.local_mr_info,
+            )
+            rx.bring_up(remote_qp, remote_mr)
 
-        # RX direction: flip server/client so both directions bring up
-        # concurrently without nested sockets.  rank 1 now listens.
-        rx_is_server = (rank == 1)
-        rx_port = port + 1
-        rx_remote_qp, rx_remote_mr = exchange_qp_info(
-            is_server=rx_is_server,
-            host=peer_host if not rx_is_server else "0.0.0.0",
-            port=rx_port,
-            local_qp=rx.local_qp_info,
-            local_mr=rx.local_mr_info,
-        )
-        rx.bring_up(rx_remote_qp, rx_remote_mr)
+        # Port P+1 is the reverse: rank 1 writes, rank 0 receives.
+        if rank == 0:
+            remote_qp, remote_mr = exchange_qp_info(
+                is_server=False, host=peer_host, port=port + 1,
+                local_qp=rx.local_qp_info, local_mr=rx.local_mr_info,
+            )
+            rx.bring_up(remote_qp, remote_mr)
+        else:
+            remote_qp, remote_mr = exchange_qp_info(
+                is_server=True, host="0.0.0.0", port=port + 1,
+                local_qp=tx.local_qp_info, local_mr=tx.local_mr_info,
+            )
+            tx.bring_up(remote_qp, remote_mr)
 
         logger.info(
             "SemiRDMAHookState up: rank=%d, tx qpn=%d, rx qpn=%d",
