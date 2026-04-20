@@ -56,8 +56,8 @@ transport_cfg:
   dev_name: rxe0
   buffer_bytes: 67108864        # 64 MiB — covers ResNet-18's ~47 MiB flat bucket
   chunk_bytes: 16384            # RQ1 saturation point
-  sq_depth: 16
-  rq_depth: 320
+  sq_depth: 128
+  rq_depth: 4096
   ratio: 0.95                   # RQ4 sweet spot
   timeout_ms: 20                # RQ4 sweet spot
 

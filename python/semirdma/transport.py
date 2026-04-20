@@ -170,6 +170,13 @@ class SemiRDMATransport:
 
         cs = ChunkSet(base_offset, total, self._cfg.chunk_bytes)
         n_chunks = cs.size()
+        # SQ flow control: a bucket may need thousands of chunks (ResNet-18's
+        # ~44 MB / 16 KB ≈ 2700) while sq_depth is O(16).  Post in waves,
+        # draining Write CQEs each time the SQ approaches full.  We leave one
+        # slot of slack so a transient spurious inflight count won't trip
+        # ibv_post_send.
+        capacity = max(1, self._cfg.sq_depth - 1)
+        inflight = 0
         n_posted = 0
         for i in range(n_chunks):
             chunk = cs.chunk(i)
@@ -177,8 +184,10 @@ class SemiRDMATransport:
             # GhostMask::apply zeroes the corresponding buffer region.
             if self._cfg.loss_rate > 0.0 and self._loss_rng.random() < self._cfg.loss_rate:
                 continue
+            while inflight >= capacity:
+                cqes = self._engine.poll_cq(capacity, 1)
+                inflight = max(0, inflight - len(cqes))
             self._wr_seq += 1
-            # remote_offset = remote_base + (chunk.local_offset - base_offset)
             remote_off = remote_base_offset + (chunk["local_offset"] - base_offset)
             self._engine.post_write(
                 wr_id=self._wr_seq,
@@ -189,7 +198,19 @@ class SemiRDMATransport:
                 with_imm=True,
                 imm_data=chunk["chunk_id"],
             )
+            inflight += 1
             n_posted += 1
+
+        # Drain the tail so the next bucket starts clean.  Bound the wait so a
+        # lost Write (software loss on the peer's rx path — not possible with
+        # our current model, but defensive) can't hang the sender.
+        drain_deadline_ms = max(50, self._cfg.timeout_ms)
+        while inflight > 0:
+            cqes = self._engine.poll_cq(capacity, drain_deadline_ms)
+            if not cqes:
+                break
+            inflight = max(0, inflight - len(cqes))
+
         logger.debug(
             "post_gradient: %d/%d chunks posted (loss_rate=%.3f, total=%d B)",
             n_posted, n_chunks, self._cfg.loss_rate, total,

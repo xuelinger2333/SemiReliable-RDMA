@@ -49,11 +49,12 @@ class TransportConfig:
 
     # SQ / RQ depths.  sq_depth bounds how many outstanding Writes the sender
     # can have; rq_depth bounds how many Write-with-Imm the receiver can accept
-    # before the RQ drains.  Stage A's single-bucket-per-step schedule rarely
-    # exceeds ~ceil(buffer_bytes / chunk_bytes) outstanding; 320 gives headroom
-    # for a 5 MiB bucket at 16 KiB chunks with a 4-deep pipeline.
-    sq_depth: int = 16
-    rq_depth: int = 320
+    # before the RQ drains.  A 64 MiB / 16 KiB bucket is 4096 chunks, so the
+    # RQ must pre-post at least that many or the tail chunks hit an empty RQ
+    # and are silently dropped by UC.  4096 stays well below SoftRoCE's
+    # max_qp_wr=16384 and Mellanox CX-5's 32768.
+    sq_depth: int = 128
+    rq_depth: int = 4096
 
     # Write granularity.  post_gradient splits the bucket into
     # ceil(bucket_bytes / chunk_bytes) Writes, one WR per chunk, imm = chunk_id.
