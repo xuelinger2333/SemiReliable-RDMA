@@ -25,6 +25,10 @@ dist/
 experiments/results/
 outputs/
 
+# Dataset tarballs / unpacked dirs (pre-staged manually; never commit)
+cifar-10-python.tar.gz
+cifar-10-batches-py/
+
 # OS
 .DS_Store
 Thumbs.db
