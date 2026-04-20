@@ -8,7 +8,7 @@
 #   bash scripts/aliyun/run_stage_a.sh semirdma 0.01 42    # RQ5-A2 test cell
 
 set -euo pipefail
-TRANSPORT="${1:?transport={gloo|semirdma}}"
+TRANSPORT="${1:?transport must be gloo or semirdma}"
 LOSS_RATE="${2:-0.0}"
 SEED="${3:-42}"
 STEPS="${STEPS:-500}"
