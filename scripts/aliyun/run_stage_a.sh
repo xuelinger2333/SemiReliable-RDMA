@@ -30,12 +30,15 @@ source .venv/bin/activate
 MASTER_PORT="${MASTER_PORT:-29500}"
 SEMIRDMA_PORT="${SEMIRDMA_PORT:-29700}"
 
-# A1 wants bit-for-bit equivalence to Gloo, so wait for every chunk.
-# A2 deliberately tolerates drop, so the 0.95/20ms Phase-2 sweet spot
-# applies.  Callers can force a specific ratio via RATIO=... env.
+# A1 wants bit-for-bit equivalence to Gloo, so wait for every chunk.  A
+# 47 MiB ResNet-18 bucket is ~2900 chunks and can take seconds to fully
+# land on SoftRoCE; 60 s is a generous headroom so GhostMask never kicks
+# in for the loss=0 reference run.  A2 deliberately tolerates drop, so
+# the 0.95 / 20 ms Phase-2 sweet spot applies.  Callers can override via
+# RATIO=... / TIMEOUT_MS=... env.
 if [ "${TRANSPORT}" = "semirdma" ] && [ "${LOSS_RATE_NORM}" = "0" ]; then
     RATIO_DEFAULT="1.0"
-    TIMEOUT_MS_DEFAULT="500"
+    TIMEOUT_MS_DEFAULT="60000"
 else
     RATIO_DEFAULT="0.95"
     TIMEOUT_MS_DEFAULT="20"
