@@ -54,7 +54,7 @@ dist:
 # --- SemiRDMA transport (unused when transport=gloo) -------------------
 transport_cfg:
   dev_name: rxe0
-  buffer_bytes: 67108864        # 64 MiB — covers ResNet-18's ~47 MiB flat bucket
+  buffer_bytes: 134217728       # 128 MiB — 64 MiB/slot after n_slots=2 split, covers ResNet-18's ~47 MiB first-iter single bucket
   chunk_bytes: 16384            # RQ1 saturation point
   sq_depth: 128
   rq_depth: 4096

@@ -16,10 +16,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 
-# 64 MiB — large enough for any single ResNet-18 gradient bucket in fp32
-# (ResNet-18 has ~11.7M params → ~47 MiB).  Stage B can shrink this for GPT-2
-# per-layer chunking.
-_DEFAULT_BUFFER_BYTES = 64 * 1024 * 1024
+# 128 MiB — covers ResNet-18's ~47 MiB fp32 parameter set with room for
+# slot partitioning.  The DDP hook splits this MR into n_slots disjoint
+# windows (default 2) so back-to-back buckets in one step don't collide;
+# 128 MiB / 2 = 64 MiB per slot, enough for the single-bucket first
+# iteration where DDP hasn't rebucketed yet.  Stage B can shrink this for
+# GPT-2 per-layer chunking.
+_DEFAULT_BUFFER_BYTES = 128 * 1024 * 1024
 
 # 16384 bytes — the chunk size that RQ1 identified as the SoftRoCE throughput
 # saturation point (see docs/phase2/rq1-results-chunk-sweep.md).  Phase 3

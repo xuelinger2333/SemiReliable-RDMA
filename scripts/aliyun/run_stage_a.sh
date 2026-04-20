@@ -13,6 +13,12 @@ LOSS_RATE="${2:-0.0}"
 SEED="${3:-42}"
 STEPS="${STEPS:-500}"
 
+# Normalize LOSS_RATE numerically so "0.00" vs "0.0" both take the A1 path.
+# Without this, the string comparison below misses "0.00" and Stage A's
+# loss=0 semirdma run would silently pick ratio=0.95 / timeout=20 — which
+# zeroes the last ~5% of chunks every step and breaks Gloo equivalence.
+LOSS_RATE_NORM="$(awk -v x="${LOSS_RATE}" 'BEGIN{printf "%g", x}')"
+
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "${REPO_ROOT}"
 
@@ -27,7 +33,7 @@ SEMIRDMA_PORT="${SEMIRDMA_PORT:-29700}"
 # A1 wants bit-for-bit equivalence to Gloo, so wait for every chunk.
 # A2 deliberately tolerates drop, so the 0.95/20ms Phase-2 sweet spot
 # applies.  Callers can force a specific ratio via RATIO=... env.
-if [ "${TRANSPORT}" = "semirdma" ] && [ "${LOSS_RATE}" = "0.0" ]; then
+if [ "${TRANSPORT}" = "semirdma" ] && [ "${LOSS_RATE_NORM}" = "0" ]; then
     RATIO_DEFAULT="1.0"
     TIMEOUT_MS_DEFAULT="500"
 else
