@@ -23,7 +23,7 @@ import logging
 import os
 import time
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Tuple, IO
 
 import hydra
 import numpy as np
@@ -119,19 +119,12 @@ def _install_hook(ddp_model: DDP, cfg: DictConfig, rank: int) -> object:
     raise ValueError(f"transport={cfg.transport!r}")
 
 
-def _open_csv(path: Path, header: List[str]) -> csv.writer:
+def _open_csv(path: Path, header: List[str]) -> Tuple["csv._writer", IO]:
     path.parent.mkdir(parents=True, exist_ok=True)
-    # Return (writer, file_handle) via attribute on the writer so callers
-    # can close.  csv.writer itself doesn't own the fh.
     fh = open(path, "w", newline="")
     w = csv.writer(fh)
     w.writerow(header)
-    w._fh = fh                       # type: ignore[attr-defined]
-    return w
-
-
-def _close_csv(w: csv.writer) -> None:
-    w._fh.close()                    # type: ignore[attr-defined]
+    return w, fh
 
 
 def _train(cfg: DictConfig, rank: int, world_size: int) -> None:
@@ -151,9 +144,13 @@ def _train(cfg: DictConfig, rank: int, world_size: int) -> None:
     loss_fn = nn.CrossEntropyLoss()
 
     out_dir = Path.cwd()   # hydra.job.chdir=true places us in the run dir
-    loss_w  = _open_csv(out_dir / "loss_per_step.csv", ["step", "loss"]) if rank == 0 else None
-    iter_w  = _open_csv(out_dir / "iter_time.csv",     ["step", "fwd_ms", "bwd_ms", "opt_ms", "total_ms"]) if rank == 0 else None
-    grad_w  = _open_csv(out_dir / "grad_norm.csv",     ["step", "grad_l2"]) if rank == 0 else None
+    if rank == 0:
+        loss_w, loss_fh = _open_csv(out_dir / "loss_per_step.csv", ["step", "loss"])
+        iter_w, iter_fh = _open_csv(out_dir / "iter_time.csv",     ["step", "fwd_ms", "bwd_ms", "opt_ms", "total_ms"])
+        grad_w, grad_fh = _open_csv(out_dir / "grad_norm.csv",     ["step", "grad_l2"])
+    else:
+        loss_w = iter_w = grad_w = None
+        loss_fh = iter_fh = grad_fh = None
 
     step = 0
     ddp_model.train()
@@ -205,9 +202,9 @@ def _train(cfg: DictConfig, rank: int, world_size: int) -> None:
     elapsed = time.perf_counter() - t_run_start
     if rank == 0:
         logger.info("training done: %d steps in %.1fs", cfg.steps, elapsed)
-        _close_csv(loss_w)    # type: ignore[arg-type]
-        _close_csv(iter_w)    # type: ignore[arg-type]
-        _close_csv(grad_w)    # type: ignore[arg-type]
+        loss_fh.close()
+        iter_fh.close()
+        grad_fh.close()
 
 
 @hydra.main(version_base=None, config_path="../configs", config_name="stage_a_baseline")
