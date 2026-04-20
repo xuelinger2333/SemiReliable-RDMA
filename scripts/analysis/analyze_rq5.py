@@ -9,10 +9,16 @@ Reads the 9 cells of experiments/results/stage_a/sweep_2026-04-20/ and emits:
 from __future__ import annotations
 
 import csv
+import os
 from pathlib import Path
 from statistics import mean, stdev
 
-ROOT = Path("experiments/results/stage_a/sweep_2026-04-20")
+# Local pull lives at sweep_2026-04-20/; aliyun hydra dir is 2026-04-20/.
+# Set RQ5_RESULTS=<dir> to override.
+ROOT = Path(os.environ.get(
+    "RQ5_RESULTS",
+    "experiments/results/stage_a/sweep_2026-04-20",
+))
 
 SEEDS = [42, 123, 7]
 
