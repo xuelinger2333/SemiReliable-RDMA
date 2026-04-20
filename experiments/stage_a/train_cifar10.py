@@ -132,7 +132,15 @@ def _train(cfg: DictConfig, rank: int, world_size: int) -> None:
 
     loader = _build_loaders(cfg, rank, world_size)
     model = _build_model(cfg)
-    ddp_model = DDP(model)
+    # Force a single DDP bucket per step.  SemiRDMA uses Write-with-Imm's
+    # imm_data (just the chunk index within a ChunkSet) as the only chunk
+    # identifier.  Two concurrent buckets would share imm=0..min(N0,N1),
+    # causing bucket 1's CQEs to be consumed by bucket 0's await (and
+    # vice-versa) and bucket 1 then times out to all-zero gradient.
+    # ResNet-18 fp32 is ~47 MiB, so 512 MB cap comfortably fits the whole
+    # model in one bucket.  Gloo sees the same setting so A1 comparison is
+    # apples-to-apples.
+    ddp_model = DDP(model, bucket_cap_mb=512)
     _hook_state = _install_hook(ddp_model, cfg, rank)  # keep-alive
 
     opt = torch.optim.SGD(
