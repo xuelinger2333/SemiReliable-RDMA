@@ -127,11 +127,30 @@ PYTHONPATH=python python -c "from semirdma.hooks import semirdma_allreduce_hook;
 
 不报错 → Python 层的入口没有硬编码 `rxe0`，Stage A 代码在真机 namespace 下可直接 import。
 
+### 2.5 CX-6 软件栈 micro-benchmark（M1–M5）
+
+**详细报告：** [stage-b-microbench-cx6.md](./stage-b-microbench-cx6.md)
+
+在单节点 port-DOWN 下，Phase 2 代码路径里有一半常数不依赖 packet 流动，这批数据现在就能测，而且**只有这一个窗口能独立测**（2 节点跑端到端时这些被 dominant NIC 延迟盖住）。脚本 [experiments/stage_b/microbench_cx6_local.py](../../experiments/stage_b/microbench_cx6_local.py)，一次跑完约 30 秒，输出 CSV + summary JSON。
+
+**关键常数（用于 Stage B 论文 §实现开销）：**
+
+| 项目 | 值 | Stage B 含义 |
+|------|-----|-------------|
+| `poll_cq(max_n=16, timeout=0)` 空轮询 | **441 ns** median / 491 ns p99 | RatioController 有 ~2.27 M polls/sec 的 CPU 预算，真机上比 aliyun SoftRoCE (约 1.6 M) 宽松，可降 tail |
+| `post_recv_batch(100)` 平摊 | **10.5 ns/WR** | 大 bucket warm-up 便宜；GPT-2 级 8192 WR 仅 ~80 µs |
+| `post_recv(1)` 单次 p99 | 30 µs | 禁止零散 post；必须走 batch |
+| `ibv_reg_mr` 吞吐 | **1.96 GiB/s** + 2.77 ms 固定开销 | 256 MiB MR 要 130 ms → **RQ3 动态重配置周期下限 O(每 100 step)** |
+| Python → pybind11 → C++ | **230 ns / call** | hook 路径非 hot，Stage B 不需 batch API |
+| `apply_ghost_mask` 单核 (256 MiB @ 10% loss) | **12 GiB/s** | ResNet-18 bucket 47 MiB 下约 400 µs/step，<2% step 时间；GPT-2 级需考虑多线程 |
+
+以上都是**未端口 UP、未发过 packet**下拿到的软件栈上限；2 节点到位后跑 end-to-end，这些数就成了 "软件开销 vs NIC 延迟" 的分母。
+
 ---
 
 ## 3. 单节点**不能**做的（pending 2nd node）
 
-1. **QP RTR/RTS 状态迁移** — `modify_qp(RTR)` 要求 remote QPN + remote GID 是真值；自回环（同节点 2 个 QP）理论可以，但 Stage B 的 bootstrap 代码假定 peer 是不同 IP，自回环测试需要另写路径，投入产出比不对，跳过。
+1. **QP RTR/RTS 状态迁移 + 真机 loopback** — 实测尝试过自回环（同 HCA 两 QP 互连）：`modify_qp(RTR)` 直接返回 **`ENETUNREACH`**。原因是三条硬件层限制叠加：(a) `phys_state: DISABLED`（无 peer，port 永远无 carrier）；(b) CX-6 的 `ethtool -k loopback: off [fixed]`，NIC 硬件 loopback flag 被固件锁死；(c) `phys_port_cnt=1` 单口，无 port-to-port internal switch。内核 verbs 的 reachability check 发生在 hardware 之前，**没法绕**。这直接排除了 Phase 2 RQ1/RQ2/RQ4 参数在 CX-6 上的单节点重扫。
 2. **`ib_write_bw` / `ib_write_lat` 基线** — perftest 需要 server + client 两端。[`scripts/cloudlab/run_perftest.sh`](../../scripts/cloudlab/run_perftest.sh) 已写好，等第二节点。
 3. **Phase 2 RQ1 在 CX-6 上的重扫** — 这是 Stage B **week 1 的核心交付物**；[`experiments/configs/stage_b_cloudlab.yaml`](../../experiments/configs/stage_b_cloudlab.yaml) 的 `chunk_bytes: 16384` 是占位，需要真机 2-node 扫 {4, 8, 16, 32, 64, 128} KiB 后重设。
 4. **RC-Lossy / OptiReduce 5-baseline 对比** — design §2.2 定义的 RQ6 主实验。
