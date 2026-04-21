@@ -11,7 +11,7 @@ SemiRDMA is a **pure-software semi-reliable transport layer** built on RDMA UC Q
 
 ## Key Contributions
 
-1. First pure-software semi-reliable RDMA transport for AI training (UC QP + gradient-aware loss tolerance on ConnectX-5)
+1. First pure-software semi-reliable RDMA transport for AI training (UC QP + gradient-aware loss tolerance on ConnectX-5 / ConnectX-6)
 2. Write granularity formalization (chunk size / WQE rate / loss impact tradeoff)
 3. Ghost gradient identification and mitigation (UC-specific stale buffer problem + masked aggregation)
 4. Cross-layer adaptive Write granularity (gradient importance-driven per-layer chunk sizing)
@@ -30,7 +30,7 @@ PyTorch DDP  -->  gradient hooks  -->  SemiRDMA Python API (pybind11)
                     | UC QP Engine      | Write-with-Imm + ghost   |
                     +----------------------------------------------+
                                             |
-                               RDMA NIC (ConnectX-5 / SoftRoCE)
+                               RDMA NIC (ConnectX-5 / ConnectX-6 / SoftRoCE)
                                UC QP, no retransmission
 ```
 
@@ -101,8 +101,10 @@ All code is written for Linux. The development workflow is:
 - pybind11
 
 **RDMA environment:**
-- SoftRoCE (rxe) for prototyping (Phase 1)
-- Mellanox ConnectX-5 for real evaluation (Phase 2-3, CloudLab)
+- SoftRoCE (rxe) for prototyping (Phase 1, Phase 2, Phase 3 Stage A on aliyun)
+- Mellanox ConnectX-5 / ConnectX-6 for real evaluation (Phase 3 Stage B, CloudLab)
+  - d7525 nodes actually ship ConnectX-6 (MT28908, fw 20.38.1002, RoCEv2 GID idx 1)
+  - see `docs/phase3/stage-b-hardware-notes.md`
 
 ### Build Commands (Linux remote)
 
@@ -219,9 +221,10 @@ Use Write-with-Immediate receiver-side CQE as precise delivery signal for ratio-
 |------|----------|------------|
 | SoftRoCE UC QP support incomplete | High | Validate early; fall back to CloudLab |
 | UC Write-with-Imm no receiver CQE on SoftRoCE | High | Test immediately; critical path |
-| ConnectX-5 WQE rate too low for fine-grained chunks | Medium | Micro-benchmark first; determine chunk size floor |
+| ConnectX-5/6 WQE rate too low for fine-grained chunks | Medium | Micro-benchmark first; determine chunk size floor |
 | CQE polling overhead at high rates | Medium | Batch polling; event-driven fallback |
-| CloudLab ConnectX-5 node availability | Medium | Reserve early; SoftRoCE as functional backup |
+| CloudLab ConnectX-5/6 node availability | Medium | Reserve early; SoftRoCE as functional backup |
+| Phase 2 RQ1 chunk-size tuned on SoftRoCE doesn't transfer to CX-6 100 GbE | Medium | Stage B week-1 recalibration sweep on real NIC |
 
 ## Git Workflow
 

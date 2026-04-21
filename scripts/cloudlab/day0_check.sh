@@ -3,7 +3,10 @@
 #
 # Run on EACH node right after the experiment reaches Ready state.
 # Verifies hardware, RDMA stack, and link speed match Stage B's
-# assumptions (2 x d7615, 100 Gbps, ConnectX-5, Ubuntu 22.04).
+# assumptions.  Empirically observed on CloudLab (2026-04-21):
+#   - d7525 Wisc: ConnectX-6 (MT28908, fw 20.38.1002), 100 GbE, RoCEv2 GID 1
+#   - d7615 Utah: ConnectX-5 (typ. fw 16.x), 100 GbE, RoCEv2 GID 1
+# This script accepts either NIC family; both use the mlx5_core driver.
 #
 # Does NOT modify system state.  Safe to rerun.
 #
@@ -43,7 +46,7 @@ else
     if [ "$N_DEV" -ge 1 ]; then
         pass "$N_DEV RDMA device(s) present"
     else
-        fail "no RDMA device — CX-5 driver not loaded?"
+        fail "no RDMA device — Mellanox mlx5_core driver not loaded?"
     fi
 fi
 
