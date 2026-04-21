@@ -1,0 +1,80 @@
+# Stage B · CloudLab real-NIC · ResNet-18 / CIFAR-10 / 2 nodes × 1 worker
+#
+# Derived from stage_a_baseline.yaml.  Diffs vs Stage A:
+#   - dev_name: mlx5_0        (CloudLab ConnectX-6, not SoftRoCE rxe0)
+#   - dist.master_addr:       node1 experiment-LAN IP (set per-run)
+#   - dist.world_size:  2     but one process per node (not same-host MP)
+#   - chunk_bytes:      TBD   — Stage B week-1 recalibration deliverable;
+#                               Phase 2 RQ1 was SoftRoCE, CX-6 100 GbE has
+#                               ~60-100× the WQE rate so the saturation
+#                               point may shift.  Start from 16 KiB and
+#                               re-sweep {4,8,16,32,64,128} KiB on first
+#                               real-NIC run.
+#   - buffer_bytes:     256 MiB — real 100 GbE has no MR-size bottleneck;
+#                                 bump from 128 MiB so single-bucket fits
+#                                 ResNet-50 head-room for upcoming Stage B2
+#   - sq_depth / rq_depth:    bumped 4× for CX-6 higher inflight
+#   - data.root:              ~/data/cifar10 (pre-staged on CloudLab node)
+#
+# Usage (on CloudLab, node0):
+#   export MASTER_ADDR=$(getent hosts node1-expnet | awk '{print $1}')
+#   torchrun --nnodes=2 --node_rank=0 --master_addr=$MASTER_ADDR \
+#       experiments/stage_a/train_cifar10.py \
+#       --config-name stage_b_cloudlab \
+#       transport=semirdma loss_rate=0.0 seed=42
+
+defaults:
+  - _self_
+
+# --- run identity ------------------------------------------------------
+transport: semirdma
+loss_rate: 0.0
+seed: 42
+steps: 500
+warmup_steps: 50
+
+# --- data --------------------------------------------------------------
+data:
+  root: ~/data/cifar10          # pre-staged on CloudLab, see scripts/cloudlab/setup_env.sh
+  download: false               # CloudLab nodes may not have outbound HTTP
+  batch_size: 128
+  num_workers: 2
+  pin_memory: false
+
+# --- model -------------------------------------------------------------
+model:
+  name: resnet18
+  num_classes: 10
+
+# --- optimizer ---------------------------------------------------------
+optim:
+  name: sgd
+  lr: 0.1
+  momentum: 0.9
+  weight_decay: 5.0e-4
+
+# --- distributed -------------------------------------------------------
+dist:
+  world_size: 2
+  # Override per-run on CLI: dist.master_addr=10.10.1.1 (node0 exp-LAN IP)
+  master_addr: 10.10.1.1
+  master_port: 29500
+  semirdma_port: 29700
+
+# --- SemiRDMA transport (real NIC) ------------------------------------
+transport_cfg:
+  dev_name: mlx5_0              # CloudLab d7525 CX-6 (MT28908)
+  gid_index: 1                  # RoCEv2 GID, verified via day0_check.sh
+  buffer_bytes: 268435456       # 256 MiB per slot × n_slots=2 → 512 MiB MR
+  chunk_bytes: 16384            # placeholder — re-sweep in Stage B week 1
+  sq_depth: 512
+  rq_depth: 16384
+  ratio: 0.95                   # Phase 2 RQ4 sweet spot (may re-tune on lossy real NIC)
+  timeout_ms: 20
+
+# --- Hydra output layout -----------------------------------------------
+hydra:
+  run:
+    dir: experiments/results/stage_b/${now:%Y-%m-%d}/${now:%H-%M-%S}_${transport}_loss${loss_rate}_seed${seed}
+  job:
+    chdir: true
