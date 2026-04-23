@@ -296,5 +296,18 @@ torchrun --nnodes=2 --node_rank=0 --master_addr=<node0-IP> \
 | 1. RTR/RTS + 真机 loopback | ✅ 双节点完成（24.39 Gbps + 2.29 µs lat） |
 | 2. ib_write_bw / ib_write_lat baseline | ✅ §8.2 |
 | 3. Phase 2 RQ1 真机重扫 | ✅ §8.3，结论：16 KiB 拐点不变 |
-| 4. RC-Lossy / OptiReduce 5-baseline (RQ6) | 📋 推迟到 GPU/CUDA 装好之后 |
-| 5. Stage A 等价性真机复现 | 📋 同上（需 PyTorch GPU build + NCCL）
+| 4. RC-Lossy / 5-baseline (RQ6 主实验) | 📋 P1-P2，OptiReduce 推迟 |
+| 5. Stage A 等价性真机复现 | ✅ [rq6-prep-real-nic-equivalence.md](./rq6-prep-real-nic-equivalence.md) — 3 seed × 100 step 全 0 偏差 |
+
+### 8.7 GPU + CUDA 栈（2026-04-23 加装）
+
+| 组件 | 版本 | 备注 |
+|------|------|------|
+| NVIDIA driver | 535.288.01 (apt nvidia-driver-535) | 双节点 reboot 后加载，nouveau 自动 blacklist |
+| CUDA runtime | 12.2 (driver 自带) / 12.1 (PyTorch wheel 自带 cudatoolkit) | 不需要单独装 cuda-toolkit |
+| PyTorch | 2.5.1+cu121 (pip wheel from `https://download.pytorch.org/whl/cu121`) | 替换原 setup_env.sh 装的 CPU-only torch |
+| GPU | 2× Tesla P100-PCIE-12GB（每节点 1×） | bus 86:00.0 |
+
+reboot 后副作用 + 应对：
+- RDMA 设备改名 mlx5_X → rocepXsYfZ → 走 [`detect_rdma_dev.sh`](../../scripts/cloudlab/detect_rdma_dev.sh) 自动检测
+- MTU 回退 1500 / PFC 回 on → [`link_setup.sh`](../../scripts/cloudlab/link_setup.sh) 一键恢复 jumbo + PFC off
