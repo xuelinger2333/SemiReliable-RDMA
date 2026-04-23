@@ -1,0 +1,38 @@
+[2026-04-23 06:01:20,700][__main__][INFO] - Stage A config:
+transport: gloo
+loss_rate: 0.0
+seed: 7
+steps: 100
+warmup_steps: 10
+data:
+  root: ~/data/cifar10
+  download: false
+  batch_size: 128
+  num_workers: 2
+  pin_memory: false
+model:
+  name: resnet18
+  num_classes: 10
+optim:
+  name: sgd
+  lr: 0.1
+  momentum: 0.9
+  weight_decay: 0.0005
+dist:
+  world_size: 2
+  master_addr: 10.10.1.1
+  master_port: 29500
+  semirdma_port: 30025
+transport_cfg:
+  dev_name: mlx5_2
+  gid_index: 1
+  buffer_bytes: 268435456
+  chunk_bytes: 16384
+  sq_depth: 512
+  rq_depth: 16384
+  ratio: 1.0
+  timeout_ms: 60000
+
+[2026-04-23 06:01:22,509][__main__][INFO] - step=0 loss=2.3294 iter_ms=993.3
+[2026-04-23 06:01:59,899][__main__][INFO] - step=50 loss=1.9992 iter_ms=720.4
+[2026-04-23 06:02:36,024][__main__][INFO] - training done: 100 steps in 74.6s

@@ -311,3 +311,117 @@ torchrun --nnodes=2 --node_rank=0 --master_addr=<node0-IP> \
 reboot 后副作用 + 应对：
 - RDMA 设备改名 mlx5_X → rocepXsYfZ → 走 [`detect_rdma_dev.sh`](../../scripts/cloudlab/detect_rdma_dev.sh) 自动检测
 - MTU 回退 1500 / PFC 回 on → [`link_setup.sh`](../../scripts/cloudlab/link_setup.sh) 一键恢复 jumbo + PFC off
+
+---
+
+## 9. 2026-04-23 · amd203/amd196 CX-5 平台启用（当前运行节点）
+
+### 9.1 起因
+
+三事同时触发：
+1. c240g5 节点到期释放，无法继续长时间占用
+2. 发现 [ratio-controller bug](./rq6-semirdma-effective-loss-analysis.md) (`python/semirdma/transport.py:257-271` pre-fix 硬编码 `cfg.ratio=0.95`)，A2 矩阵数据需要全部 post-fix 重跑
+3. 用户明确表示本轮数据用于"打磨 + 证明方法有效"，不是最终论文数据（最终数据会在一个长驻固定节点上重跑），所以可以换平台
+
+申请到两台 **Utah d6515-class**（AMD EPYC）：`chen123@amd203.utah.cloudlab.us` (node0) + `chen123@amd196.utah.cloudlab.us` (node1)，实验名 `chen123-302000.rdma-nic-perf-pg0`。
+
+### 9.2 硬件 / 软件清单
+
+| 维度 | amd203 (node0) | amd196 (node1) |
+|------|----|----|
+| Hostname (internal) | `node0.chen123-302000.rdma-nic-perf-pg0.utah.cloudlab.us` | `node1.chen123-302000.rdma-nic-perf-pg0.utah.cloudlab.us` |
+| CPU | AMD EPYC 7302P (1S × 16C / 32T) | AMD EPYC 7302P (1S × 16C / 32T) |
+| RAM | 125 GiB | 125 GiB |
+| 系统盘 | `/dev/sda3` 63 GiB (free 57 GiB) | 63 GiB (free 57 GiB) |
+| GPU | **无**（torch-cpu 跑 Stage A/B 训练） | **无** |
+| OS / Kernel | Ubuntu 22.04.2 LTS / Linux 5.15.0-168 | 同 |
+| NIC (4 × mlx5) | `mlx5_0..3` — 只 **mlx5_0** (管理 LAN, 128.110.219.114/21) 和 **mlx5_2** (实验 LAN, 10.10.1.1/24) ACTIVE | 同（实验 LAN 10.10.1.2/24） |
+| NIC 固件 | **16.28.4512**（CX-5 世代） | **16.28.4512** |
+| 链路速率 | 25 GbE（同 c240g5 CX-6 Lx） | 25 GbE |
+| RoCEv2 GID idx | 1 | 1 |
+| Path MTU | 4096（`link_setup.sh` 设 9000 但交换机协商下降；perftest 自动协商 4096） | 4096 |
+| Driver | mlx5_core | mlx5_core |
+| PFC 默认 | RX=on TX=on（boot default） | 同 |
+
+### 9.3 关键差异 vs c240g5 CX-6 Lx
+
+| 维度 | c240g5 CX-6 Lx | amd203 CX-5 | 影响 |
+|------|---|---|---|
+| 节点类型 | Intel Xeon Silver 4114 + P100 GPU | **AMD EPYC 7302P + CPU-only** | iter_time 从 ~800 ms 涨到 ~1 s/step（无 GPU + CPU-fp32 resnet18） |
+| NIC 代数 | CX-6 Lx (MT2894, fw 20.38.1002) | **CX-5 (fw 16.28.4512)** | 固件老 4 年，但 UC QP 支持完整；perftest 24.39 Gbps = 97% 线速 |
+| mlx5 设备数量 | 1 ACTIVE (mlx5_2 or mlx5_1 视电缆接) | **2 ACTIVE（mlx5_0 管理 + mlx5_2 实验）** | `detect_rdma_dev.sh` 需要偏好 `enp*s*f*np*`（已修复 commit TBD） |
+
+### 9.4 Day-0 验证结果（2026-04-23）
+
+```
+=== day0_check.sh on both nodes ===
+  [PASS] libibverbs-dev / librdmacm-dev / rdma-core
+  [PASS] mlx5_core driver loaded
+  [PASS] ib_write_bw / ib_write_lat
+  [PASS] link speed 25 Gbps
+  [PASS] peer 10.10.1.{1,2} ping OK
+  [WARN] jumbo 9000 B blocked on switch (PMTUD fails)
+
+=== link_setup.sh on both nodes ===
+  iface=enp65s0f0np0  mtu=9000  pfc=RX:=off TX:=off
+  （end-to-end path mtu 在 perftest 里协商到 4096）
+
+=== run_perftest.sh (node1 server, node0 client) ===
+  ib_write_bw -d mlx5_2 -x 1 -s 65536 -q 1 -D 10
+  → 24.39 Gbps average / MsgRate 0.0465 Mpps
+  → 97.6% 线速，与 c240g5 CX-6 Lx baseline 一致
+
+=== pybind smoke (both nodes) ===
+  UCQPEngine("mlx5_2", 4 MiB, 16, 320) → qpn=262, GID idx 1
+
+=== Stage A 50-step smoke ===
+  50 steps in 39.6s, loss 2.4233 → 2.303 (正常)
+  SemiRDMA UC QP bootstrap + hook working
+
+=== P1 sanity (3 cell × 100 step × seed=42) ===
+  semirdma L=0.0  final loss 2.055  (expected best — effective 0.5% loss)
+  semirdma L=0.01 final loss 2.179  (更差，方向正确)
+  semirdma L=0.05 final loss 2.122  (同档噪声内，100 step 太短看不清 0.01 vs 0.05 差异)
+  → L=0 显著优于 L>0，方向对，符合 post-fix 预期；
+    3-seed × 500-step 矩阵将给出清晰的 monotone 序列
+```
+
+### 9.5 辅助工具修复
+
+本 session 同步修复两个 helper，因为 amd203/amd196 是首个 **多-ACTIVE-port** 节点，暴露了旧逻辑"取第一个 ACTIVE"的偏差：
+
+| 文件 | 修复内容 |
+|------|---------|
+| [scripts/cloudlab/detect_rdma_dev.sh](../../scripts/cloudlab/detect_rdma_dev.sh) | `rdma link show` 输出里 **优先匹配 `enp<bus>s<slot>f<func>np<port>`** 命名（实验 LAN），否则 fall back 到第一个 ACTIVE（单 ACTIVE 节点行为不变） |
+| [scripts/cloudlab/day0_check.sh](../../scripts/cloudlab/day0_check.sh) | `ip -br link show` 的 IFACE auto-detect 同样先 `enp*s*f*np*`，否则 fall back；避免把管理 LAN (`eno33np0` 128.110.x) 当作实验链接汇报 |
+
+修复前：`detect_rdma_dev.sh` 返回 `mlx5_0`（管理 LAN），训练脚本会把 RDMA 流量打到公网管理口 → 失败。
+修复后：返回 `mlx5_2`（实验 LAN on 10.10.1.x）→ perftest 24.39 Gbps 正常。
+
+### 9.6 节点间 SSH 设置（matrix 脚本依赖）
+
+CloudLab 默认只接受用户原始 pubkey（user → node），但 `run_*_real_nic.sh` 里 node0 需要 ssh 到 node1。手动生成每节点 ed25519 keypair + 互相加入 authorized_keys：
+
+```bash
+# 每节点：
+ssh-keygen -t ed25519 -N "" -f ~/.ssh/id_ed25519 -q
+# 互贴 pubkey：
+scp chen123@amd203:~/.ssh/id_ed25519.pub - | ssh chen123@amd196 'cat >> ~/.ssh/authorized_keys'
+scp chen123@amd196:~/.ssh/id_ed25519.pub - | ssh chen123@amd203 'cat >> ~/.ssh/authorized_keys'
+# 互收 host key：
+ssh chen123@amd203 'ssh-keyscan -H 10.10.1.2 >> ~/.ssh/known_hosts'
+ssh chen123@amd196 'ssh-keyscan -H 10.10.1.1 >> ~/.ssh/known_hosts'
+```
+
+### 9.7 CX-5 上的 Stage B 矩阵目录（填充中）
+
+所有新 CSV 落盘 `~/SemiRDMA/experiments/results/stage_b/<date>/...`；分析完成后归档到 [`results-cx5-amd203-amd196/`](./results-cx5-amd203-amd196/) 的对应子目录。
+
+| 矩阵 | 驱动脚本 | 预期 wall-clock | 目标目录 |
+|---|---|---|---|
+| C.4 A2 SemiRDMA 12 cell (post-fix) | `run_a2_real_nic.sh` | ~90 min | `results-cx5-amd203-amd196/rq6-prep-a2-real-nic/` |
+| C.5 B.5 RC-Baseline + RC-Lossy 12 cell | `run_b5_real_nic.sh` | ~60 min | `results-cx5-amd203-amd196/rq6-b5-rc-baselines/` |
+| C.3 A1 bit-for-bit 6 cell (ratio=1.0) | `run_a1_real_nic.sh` | ~45 min | `results-cx5-amd203-amd196/rq6-prep-stage-a-real-nic/` |
+| C.2 Phase 2 RQ1/RQ2/RQ4 resweep | C++ tests | ~30 min | `results-cx5-amd203-amd196/stage-b-phase2-resweep/` |
+| C.1 M1-M5 microbench | benchmarks/* | ~15 min | `results-cx5-amd203-amd196/stage-b-microbench/` |
+

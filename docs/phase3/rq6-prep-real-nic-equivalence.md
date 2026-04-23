@@ -1,11 +1,23 @@
 # Phase 3 · Stage B · RQ6-Prep · Stage A 等价性在真 NIC 上复现
 
+> ## 🟢 PRIOR-PLATFORM REFERENCE — data valid, platform deprecated
+>
+> **归档时间：** 2026-04-23
+>
+> A1 bit-for-bit 跑时显式设置 `transport_cfg.ratio=1.0 timeout_ms=60000`，**跳过了** ratio-controller bug 分支（[transport.py:267-271](../../python/semirdma/transport.py#L267-L271)），所以本页数据 **不受 bug 影响**。
+>
+> 然而采集平台 c240g5 (Wisconsin) CX-6 Lx + P100 已被 **amd203/amd196 (Utah) CX-5 + CPU-only** 替代。本页结果作为 **CX-6 Lx 25 GbE + GPU 平台参考基线** 保留；同矩阵在 CX-5 上重跑，结果 → [`results-cx5-amd203-amd196/rq6-prep-stage-a-real-nic/`](./results-cx5-amd203-amd196/rq6-prep-stage-a-real-nic/)。
+>
+> CSV 原件已挪到 [`results-cx6lx25g-c240g5_archive/rq6-prep-stage-a-real-nic/`](./results-cx6lx25g-c240g5_archive/rq6-prep-stage-a-real-nic/)。
+
+---
+
 > **时间：** 2026-04-23
 > **节点：** CloudLab Wisconsin `c240g5-110231` (node0) + `c240g5-110225` (node1)
 > **硬件：** 2× Intel Xeon Silver 4114, 187 GiB RAM, **Tesla P100 PCIe 12 GB**, **CX-6 Lx 25 GbE** (RoCEv2 GID 1, MTU 9000, PFC off)
 > **目的：** 在跑 RQ6 五 baseline（design §2.2）之前，先把 Stage A 的 A1 bit-for-bit 等价性结论在真硬件 + GPU 上验证一遍，确保 DDP comm hook 在 CX-6 Lx + Tesla P100 上没有数值偏差。
 
-CSV 落盘 [`docs/phase3/results-cx6lx25g-c240g5/rq6-prep-stage-a-real-nic/`](./results-cx6lx25g-c240g5/rq6-prep-stage-a-real-nic/)。硬件背景 + Phase 2 重跑见 [stage-b-hardware-notes.md §8](./stage-b-hardware-notes.md#8-2026-04-23--c240g5-双节点替代记录--phase-2-真机重跑) + [stage-b-phase2-resweep.md](./stage-b-phase2-resweep.md)。
+CSV 落盘 [`docs/phase3/results-cx6lx25g-c240g5_archive/rq6-prep-stage-a-real-nic/`](./results-cx6lx25g-c240g5_archive/rq6-prep-stage-a-real-nic/)。硬件背景 + Phase 2 重跑见 [stage-b-hardware-notes.md §8](./stage-b-hardware-notes.md#8-2026-04-23--c240g5-双节点替代记录--phase-2-真机重跑) + [stage-b-phase2-resweep.md](./stage-b-phase2-resweep.md)。
 
 ---
 
@@ -146,4 +158,4 @@ A2（loss=0.01 收敛验证）和真训练 TTA 不在本文件范围，留给 RQ
 - [`experiments/stage_a/train_cifar10.py`](../../experiments/stage_a/train_cifar10.py) — DDP 训练入口（接 `SEMIRDMA_PEER_HOST` env）
 - [`experiments/configs/stage_b_cloudlab.yaml`](../../experiments/configs/stage_b_cloudlab.yaml) — Hydra config（chunk_bytes=16384, ratio=0.95, timeout=5）
 - [`docs/phase3/rq5-results-ddp-baseline.md`](./rq5-results-ddp-baseline.md) — Stage A on aliyun SoftRoCE（对照基准）
-- [`docs/phase3/results-cx6lx25g-c240g5/rq6-prep-stage-a-real-nic/`](./results-cx6lx25g-c240g5/rq6-prep-stage-a-real-nic/) — 6 个 loss_per_step.csv 原始数据
+- [`docs/phase3/results-cx6lx25g-c240g5_archive/rq6-prep-stage-a-real-nic/`](./results-cx6lx25g-c240g5_archive/rq6-prep-stage-a-real-nic/) — 6 个 loss_per_step.csv 原始数据

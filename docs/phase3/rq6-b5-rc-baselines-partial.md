@@ -1,8 +1,22 @@
 # Phase 3 · Stage B · B.5 · RC-Baseline + RC-Lossy 部分数据 + Resume Handoff
 
+> ## 🟡 PARTIALLY SUPERSEDED — RC data valid, A2 cross-reference invalid
+>
+> **归档时间：** 2026-04-23
+>
+> 本文档记录的 4/12 B.5 cell（RC-Baseline 3 seed + RC-Lossy 1% seed=42）**数据本身仍然有效** — RC 路径走的是 `dist.all_reduce` + 软件 mask，**不经过** 有 ratio bug 的 SemiRDMA transport。
+>
+> 然而 [§1.2 头对头对比](#12-rc-lossy-1-loss-seed-42-vs-rc-baseline-seed-42) 中 "RC-Lossy 1% vs A2 SemiRDMA 1%" 的比较 **失真**：A2 那侧在 pre-fix 下 effective loss ≈ 5%，不是名义 1%。详见 [rq6-semirdma-effective-loss-analysis.md](./rq6-semirdma-effective-loss-analysis.md)。
+>
+> 采集平台 c240g5 (Wisconsin) CX-6 Lx + P100 已被 **amd203/amd196 (Utah) CX-5 + CPU-only** 替代。完整 12-cell B.5 正在 CX-5 上重跑，结果 → [`results-cx5-amd203-amd196/rq6-b5-rc-baselines/`](./results-cx5-amd203-amd196/rq6-b5-rc-baselines/)。
+>
+> CSV 原件已挪到 [`results-cx6lx25g-c240g5_archive/rq6-b5-rc-baselines/`](./results-cx6lx25g-c240g5_archive/rq6-b5-rc-baselines/)。本文档的 resume 指令（§2）已过时 — 新矩阵直接用 [`run_b5_real_nic.sh`](../../scripts/cloudlab/run_b5_real_nic.sh) 在 CX-5 上重跑。
+
+---
+
 > **时间：** 2026-04-23 03:00 (cluster time)
 > **节点：** CloudLab Wisconsin `c240g5-110231` (node0) + `c240g5-110225` (node1)
-> **状态：** 跑了 4 / 12 cell 后集群时间窗口结束，主动 kill 矩阵 + 保存数据。剩 8 cell 待下次 session 续跑。
+> **状态（归档快照）：** 跑了 4 / 12 cell 后集群时间窗口结束，主动 kill 矩阵 + 保存数据。剩 8 cell **不会** 在 c240g5 上续跑（硬件已退役）；CX-5 上从 0 开始跑完整 12 cell。
 
 ---
 
@@ -15,7 +29,7 @@
 | 2 | rc_baseline | 0.0 | 7 | 501 | ✅ 完整 |
 | 3 | rc_lossy | 0.01 | 42 | 501 | ✅ 完整 |
 
-CSV 落盘：[`docs/phase3/results-cx6lx25g-c240g5/rq6-b5-rc-baselines/`](./results-cx6lx25g-c240g5/rq6-b5-rc-baselines/)。每 cell 含 `loss_per_step.csv` / `iter_time.csv` / `grad_norm.csv`。
+CSV 落盘：[`docs/phase3/results-cx6lx25g-c240g5_archive/rq6-b5-rc-baselines/`](./results-cx6lx25g-c240g5_archive/rq6-b5-rc-baselines/)。每 cell 含 `loss_per_step.csv` / `iter_time.csv` / `grad_norm.csv`。
 
 ## 0.bis 待跑的 8 cell
 
@@ -122,8 +136,8 @@ bash ~/SemiRDMA/scripts/cloudlab/day0_check.sh
 for d in $(ssh chen123@c240g5-110231.wisc.cloudlab.us 'find ~/SemiRDMA/experiments/results/stage_b/2026-04-23 -mindepth 1 -maxdepth 1 -type d -name "*rc_lossy*" -newer ~/SemiRDMA/experiments/results/stage_b/2026-04-23/02-46-12_rc_lossy_loss0.01_seed42'); do
     ts_name=$(basename $d)
     name=$(echo $ts_name | sed -E 's/^[0-9-]+_(.*)_loss([0-9.]+)_seed([0-9]+)/\1_L\2_S\3/')
-    mkdir -p docs/phase3/results-cx6lx25g-c240g5/rq6-b5-rc-baselines/$name
-    scp -q chen123@c240g5-110231.wisc.cloudlab.us:$d/{loss_per_step,iter_time,grad_norm}.csv docs/phase3/results-cx6lx25g-c240g5/rq6-b5-rc-baselines/$name/
+    mkdir -p docs/phase3/results-cx6lx25g-c240g5_archive/rq6-b5-rc-baselines/$name
+    scp -q chen123@c240g5-110231.wisc.cloudlab.us:$d/{loss_per_step,iter_time,grad_norm}.csv docs/phase3/results-cx6lx25g-c240g5_archive/rq6-b5-rc-baselines/$name/
 done
 ```
 

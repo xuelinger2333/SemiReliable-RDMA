@@ -1,5 +1,15 @@
 # Phase 3 · Stage B · Phase 2 真机重跑（CX-6 Lx 25 GbE）
 
+> ## 🟢 PRIOR-PLATFORM REFERENCE — C++ path, data valid
+>
+> **归档时间：** 2026-04-23
+>
+> Phase 2 的 RQ1 (`test_chunk_sweep`) / RQ2 (`test_rms_error`) / RQ4 (`test_ratio_sweep`) 跑在 C++ 独立测试里，**不走 Python transport.py 的 DDP hook**，因此 **不受 ratio-controller bug 影响**。RQ4 自己动态算 `target = sent_count / num_chunks`（见 [rq6-semirdma-effective-loss-analysis.md §2.4](./rq6-semirdma-effective-loss-analysis.md#24-为什么-phase-2-rq4-没暴露这个)）。
+>
+> 但采集硬件 c240g5 CX-6 Lx 25 GbE 已换成 **amd203/amd196 CX-5 25 GbE**。本页结果作为 CX-6 Lx 平台参考；同矩阵在 CX-5 上重跑，结果 → [`results-cx5-amd203-amd196/stage-b-phase2-resweep/`](./results-cx5-amd203-amd196/stage-b-phase2-resweep/)（由 C.2 矩阵填充）。
+
+---
+
 > **时间：** 2026-04-23
 > **机器：** CloudLab Wisconsin `c240g5-110231` (node0) + `c240g5-110225` (node1)
 > **硬件：** Mellanox ConnectX-6 Lx 25 GbE × 2，DAC 直连，RoCEv2 GID idx 1，MTU 9000，PFC 关

@@ -1,0 +1,46 @@
+[2026-04-23 05:17:58,471][__main__][INFO] - Stage A config:
+transport: rc_lossy
+loss_rate: 0.03
+seed: 7
+steps: 500
+warmup_steps: 10
+data:
+  root: ~/data/cifar10
+  download: false
+  batch_size: 128
+  num_workers: 2
+  pin_memory: false
+model:
+  name: resnet18
+  num_classes: 10
+optim:
+  name: sgd
+  lr: 0.1
+  momentum: 0.9
+  weight_decay: 0.0005
+dist:
+  world_size: 2
+  master_addr: 10.10.1.1
+  master_port: 29500
+  semirdma_port: 29700
+transport_cfg:
+  dev_name: mlx5_2
+  gid_index: 1
+  buffer_bytes: 268435456
+  chunk_bytes: 16384
+  sq_depth: 512
+  rq_depth: 16384
+  ratio: 0.95
+  timeout_ms: 5
+
+[2026-04-23 05:18:00,258][__main__][INFO] - step=0 loss=2.3294 iter_ms=978.3
+[2026-04-23 05:18:40,487][__main__][INFO] - step=50 loss=2.0133 iter_ms=878.8
+[2026-04-23 05:19:19,220][__main__][INFO] - step=100 loss=1.5884 iter_ms=730.1
+[2026-04-23 05:19:56,989][__main__][INFO] - step=150 loss=1.6436 iter_ms=743.7
+[2026-04-23 05:20:35,616][__main__][INFO] - step=200 loss=1.3401 iter_ms=723.5
+[2026-04-23 05:21:13,040][__main__][INFO] - step=250 loss=1.2782 iter_ms=795.7
+[2026-04-23 05:21:52,666][__main__][INFO] - step=300 loss=1.2530 iter_ms=840.5
+[2026-04-23 05:22:33,784][__main__][INFO] - step=350 loss=1.1683 iter_ms=779.5
+[2026-04-23 05:23:14,726][__main__][INFO] - step=400 loss=0.8219 iter_ms=751.1
+[2026-04-23 05:23:53,733][__main__][INFO] - step=450 loss=1.1038 iter_ms=736.1
+[2026-04-23 05:24:32,352][__main__][INFO] - training done: 500 steps in 393.1s

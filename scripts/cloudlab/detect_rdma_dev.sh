@@ -29,13 +29,36 @@ fi
 
 # rdma link show output:
 #   link <dev>/<port> state ACTIVE physical_state LINK_UP netdev <iface>
-# Pick the first ACTIVE row, optionally filtered by netdev.
+#
+# Selection policy when ``want_netdev`` is unset:
+#   1. prefer ACTIVE devices whose netdev matches the CloudLab experiment-LAN
+#      Mellanox kernel naming ``enp<bus>s<slot>f<func>np<port>`` (same filter
+#      link_setup.sh uses). This avoids picking the management-LAN port
+#      (``eno*``) on multi-port hosts like amd203/amd196 (Utah d7525/d6515
+#      class) where both the public and experiment NICs report ACTIVE.
+#   2. otherwise, fall back to the first ACTIVE row (legacy single-port path,
+#      kept so single-NIC nodes like c240g5/d7525-wisc still work).
+# When ``want_netdev`` is set, match it exactly (no preference logic).
 line=$(rdma link show 2>/dev/null \
     | awk -v want="$want_netdev" '
+        function iface_of(    i, v) {
+            for (i=1; i<=NF; i++) if ($i=="netdev") { v=$(i+1); return v }
+            return ""
+        }
         $3=="state" && $4=="ACTIVE" {
-            for (i=1; i<=NF; i++) if ($i=="netdev") { iface=$(i+1); break }
-            if (want=="" || iface==want) { print $0; exit }
-        }')
+            iface=iface_of()
+            if (want != "") {
+                if (iface == want) { print $0; found=1; exit }
+                next
+            }
+            # No explicit want: capture first preferred (enp*s*f*np*) ASAP,
+            # and remember first ACTIVE as a legacy fallback.
+            if (iface ~ /^enp[0-9]+s[0-9]+f[0-9]+np[0-9]+$/) {
+                print $0; found=1; exit
+            }
+            if (fallback == "") fallback = $0
+        }
+        END { if (!found && fallback != "") print fallback }')
 
 if [ -z "$line" ]; then
     echo "ERR: no ACTIVE RDMA device${want_netdev:+ on netdev $want_netdev}" >&2

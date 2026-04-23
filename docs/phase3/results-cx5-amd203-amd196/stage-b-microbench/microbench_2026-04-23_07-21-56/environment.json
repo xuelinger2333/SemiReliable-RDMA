@@ -1,0 +1,19 @@
+{
+  "timestamp_utc": "2026-04-23T13:21:56Z",
+  "hostname": "node0.chen123-302000.rdma-nic-perf-pg0.utah.cloudlab.us",
+  "uname": {
+    "system": "Linux",
+    "node": "node0.chen123-302000.rdma-nic-perf-pg0.utah.cloudlab.us",
+    "release": "5.15.0-168-generic",
+    "version": "#178-Ubuntu SMP Fri Jan 9 19:05:03 UTC 2026",
+    "machine": "x86_64",
+    "processor": "x86_64"
+  },
+  "python": "3.10.12",
+  "cpu_model": "AMD EPYC 7302P 16-Core Processor",
+  "cpu_cores": 32,
+  "mem_kb": "131488976",
+  "ibv_devinfo": "fw_ver:\t\t\t\t16.28.4512\n\tvendor_part_id:\t\t\t4119\n\t\t\tstate:\t\t\tPORT_ACTIVE (4)\n\t\t\tactive_mtu:\t\t4096 (5)\n\t\t\tlink_layer:\t\tEthernet",
+  "driver": "mlx5_ib: 393216 deps=0\nmlx5_core: 1597440 deps=1",
+  "torch": "2.11.0+cpu"
+}

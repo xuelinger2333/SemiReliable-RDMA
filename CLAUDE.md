@@ -103,8 +103,10 @@ All code is written for Linux. The development workflow is:
 **RDMA environment:**
 - SoftRoCE (rxe) for prototyping (Phase 1, Phase 2, Phase 3 Stage A on aliyun)
 - Mellanox ConnectX-5 / ConnectX-6 for real evaluation (Phase 3 Stage B, CloudLab)
-  - d7525 nodes actually ship ConnectX-6 (MT28908, fw 20.38.1002, RoCEv2 GID idx 1)
-  - see `docs/phase3/stage-b-hardware-notes.md`
+  - d7525 nodes ship ConnectX-6 (MT28908, fw 20.38.1002, RoCEv2 GID idx 1, 100 GbE)
+  - c240g5 Wisconsin nodes (deprecated 2026-04-23) shipped ConnectX-6 Lx (MT2894, fw 20.38.1002, 25 GbE) — data archived to `docs/phase3/results-cx6lx25g-c240g5_archive/`
+  - **Current polishing platform (2026-04-23+)**: `amd203.utah.cloudlab.us` + `amd196.utah.cloudlab.us` with ConnectX-5 (fw 16.28.4512, 25 GbE, RoCEv2 GID idx 1). Multi-ACTIVE-port nodes (mlx5_0 on 128.110.x management + mlx5_2 on 10.10.1.x experiment LAN); `scripts/cloudlab/detect_rdma_dev.sh` + `day0_check.sh` prefer `enp<bus>s<slot>f<func>np<port>` naming to pick the experiment port. CPU-only torch (no GPU). Post-fix Stage B matrices land under `docs/phase3/results-cx5-amd203-amd196/`.
+  - see `docs/phase3/stage-b-hardware-notes.md` §8 (c240g5 archive) / §9 (amd203/amd196 CX-5)
 
 ### Build Commands (Linux remote)
 

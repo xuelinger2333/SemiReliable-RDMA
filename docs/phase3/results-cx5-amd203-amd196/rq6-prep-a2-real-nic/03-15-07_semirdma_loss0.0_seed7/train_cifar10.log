@@ -1,0 +1,52 @@
+[2026-04-23 03:15:07,205][__main__][INFO] - Stage A config:
+transport: semirdma
+loss_rate: 0.0
+seed: 7
+steps: 500
+warmup_steps: 10
+data:
+  root: ~/data/cifar10
+  download: false
+  batch_size: 128
+  num_workers: 2
+  pin_memory: false
+model:
+  name: resnet18
+  num_classes: 10
+optim:
+  name: sgd
+  lr: 0.1
+  momentum: 0.9
+  weight_decay: 0.0005
+dist:
+  world_size: 2
+  master_addr: 10.10.1.1
+  master_port: 29500
+  semirdma_port: 31025
+transport_cfg:
+  dev_name: mlx5_2
+  gid_index: 1
+  buffer_bytes: 268435456
+  chunk_bytes: 16384
+  sq_depth: 512
+  rq_depth: 16384
+  ratio: 0.95
+  timeout_ms: 5
+
+[2026-04-23 03:15:08,285][semirdma._bootstrap][INFO] - bootstrap: listening on 0.0.0.0:31025
+[2026-04-23 03:15:08,473][semirdma._bootstrap][INFO] - bootstrap: peer ('10.10.1.2', 38294) connected
+[2026-04-23 03:15:08,475][semirdma.transport][INFO] - SemiRDMATransport up: local qpn=276 -> remote qpn=277, remote rkey=0x21fff
+[2026-04-23 03:15:08,476][semirdma._bootstrap][INFO] - bootstrap: connected to 10.10.1.2:31026
+[2026-04-23 03:15:08,477][semirdma.transport][INFO] - SemiRDMATransport up: local qpn=277 -> remote qpn=276, remote rkey=0x204e8
+[2026-04-23 03:15:08,477][semirdma.hooks][INFO] - SemiRDMAHookState up: rank=0, tx qpn=276, rx qpn=277
+[2026-04-23 03:15:09,896][__main__][INFO] - step=0 loss=2.3294 iter_ms=936.5
+[2026-04-23 03:15:48,620][__main__][INFO] - step=50 loss=2.2706 iter_ms=805.9
+[2026-04-23 03:16:28,192][__main__][INFO] - step=100 loss=2.1777 iter_ms=799.2
+[2026-04-23 03:17:07,119][__main__][INFO] - step=150 loss=2.1625 iter_ms=787.3
+[2026-04-23 03:17:46,515][__main__][INFO] - step=200 loss=1.9948 iter_ms=736.5
+[2026-04-23 03:18:25,441][__main__][INFO] - step=250 loss=1.8620 iter_ms=784.2
+[2026-04-23 03:19:04,243][__main__][INFO] - step=300 loss=1.9198 iter_ms=628.2
+[2026-04-23 03:19:38,969][__main__][INFO] - step=350 loss=1.7050 iter_ms=701.4
+[2026-04-23 03:20:15,244][__main__][INFO] - step=400 loss=1.6561 iter_ms=672.4
+[2026-04-23 03:20:50,923][__main__][INFO] - step=450 loss=1.7004 iter_ms=704.5
+[2026-04-23 03:21:25,070][__main__][INFO] - training done: 500 steps in 376.6s

@@ -1,5 +1,17 @@
 # Phase 3 Stage A RQ5 · DDP Integration Baseline
 
+> ## 🟡 FOOTNOTE — Stage A 1% loss cell was also pre-fix
+>
+> **补注时间：** 2026-04-23
+>
+> Stage A 的 A2 1% loss × 500 步 cell（§0.4）**也有 ratio-controller bug**（硬编码 `cfg.ratio = 0.95` → effective loss = max(0.01, 0.05) = 5%）。详见 [rq6-semirdma-effective-loss-analysis.md](./rq6-semirdma-effective-loss-analysis.md)。
+>
+> 本文档的 Stage A 定性结论保留：**"hook 数值正确 + 在有 loss 环境下训练仍能收敛"** 仍然成立（只不过那个 "1% loss" 实际上是 5% effective loss 下的收敛）。A1 bit-for-bit 等价性（§0.3）不受影响，因为 A1 显式 `ratio=1.0`。
+>
+> 本文档保留作为 Stage A 集成阶段的 engineering validation 记录，不需要重跑。后续矩阵 (A2/B.5) 在 CX-5 post-fix 平台上重建。
+
+---
+
 **实验日期：** 2026-04-20
 **实验产物：** [experiments/stage_a/train_cifar10.py](../../experiments/stage_a/train_cifar10.py) · [experiments/configs/stage_a_baseline.yaml](../../experiments/configs/stage_a_baseline.yaml) · [scripts/aliyun/run_stage_a.sh](../../scripts/aliyun/run_stage_a.sh) · [scripts/analysis/analyze_rq5.py](../../scripts/analysis/analyze_rq5.py) · [experiments/results/stage_a/sweep_2026-04-20/](../../experiments/results/stage_a/sweep_2026-04-20/)
 **运行环境：** aliyun, 8 vCPU / 16 GiB, SoftRoCE (rxe0) loopback, 2 worker

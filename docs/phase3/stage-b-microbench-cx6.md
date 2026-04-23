@@ -1,5 +1,17 @@
 # Phase 3 · Stage B · CloudLab CX-6 单节点 micro-benchmark 归档
 
+> ## 🟢 PRIOR-PLATFORM REFERENCE
+>
+> **归档时间：** 2026-04-23
+>
+> M1-M5 微基准测的是 HCA-local verbs 软件栈常数（`poll_cq / post_recv_batch / ChunkSet::construct / reg_mr / apply_ghost_mask`），**不经过 DDP hook**，因此 **不受 ratio-controller bug 影响，数据本身有效**。
+>
+> 但采集硬件 d7525 CX-6 + Xeon 已换成 **amd203/amd196 CX-5 + EPYC**。**M3/M5 的 CPU/cache-bound 部分会变**（EPYC 7302P vs Xeon Silver 4114），需要在 CX-5 上重跑一遍（见 [`results-cx5-amd203-amd196/stage-b-microbench/`](./results-cx5-amd203-amd196/stage-b-microbench/)，由 C.1 矩阵填充）；**M1 (poll_cq) / M2 (post_recv) / M4 (reg_mr) 的 NIC-local 开销**理论上在 CX-5 vs CX-6 类似（都是 doorbell + PCIe roundtrip），可作为跨平台回归参考。
+>
+> CSV 原件在 [`results-cx6lx25g-c240g5_archive/microbench_c240g5/`](./results-cx6lx25g-c240g5_archive/microbench_c240g5/)。
+
+---
+
 > **时间：** 2026-04-21
 > **节点：** CloudLab Wisconsin `node0.chen123-301515.rdma-nic-perf-pg0.wisc.cloudlab.us`（d7525）
 > **目的：** 在第二个节点申请到之前，把 CX-6 HCA-local 软件栈的 5 类 micro 常数钉死，作为 Stage B 开工前的真机基线。

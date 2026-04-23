@@ -1,0 +1,209 @@
+[
+  {
+    "bench": "poll_cq_empty",
+    "cell": "max_n=1",
+    "n_samples": 200000,
+    "median_ns": 431.0,
+    "p99_ns": 551,
+    "mean_ns": 443.589645,
+    "min_ns": 401
+  },
+  {
+    "bench": "poll_cq_empty",
+    "cell": "max_n=4",
+    "n_samples": 200000,
+    "median_ns": 421.0,
+    "p99_ns": 521,
+    "mean_ns": 429.611025,
+    "min_ns": 400
+  },
+  {
+    "bench": "poll_cq_empty",
+    "cell": "max_n=16",
+    "n_samples": 200000,
+    "median_ns": 440.0,
+    "p99_ns": 501,
+    "mean_ns": 439.773805,
+    "min_ns": 411
+  },
+  {
+    "bench": "poll_cq_empty",
+    "cell": "max_n=64",
+    "n_samples": 200000,
+    "median_ns": 531.0,
+    "p99_ns": 601,
+    "mean_ns": 532.650075,
+    "min_ns": 510
+  },
+  {
+    "bench": "post_recv_batch",
+    "cell": "batch_n=1",
+    "n_samples": 100,
+    "median_ns": 451.0,
+    "p99_ns": 7534.0,
+    "mean_ns": 521.54,
+    "min_ns": 420.0
+  },
+  {
+    "bench": "post_recv_batch",
+    "cell": "batch_n=10",
+    "n_samples": 100,
+    "median_ns": 51.1,
+    "p99_ns": 509.0,
+    "mean_ns": 59.304,
+    "min_ns": 47.1
+  },
+  {
+    "bench": "post_recv_batch",
+    "cell": "batch_n=100",
+    "n_samples": 100,
+    "median_ns": 13.524999999999999,
+    "p99_ns": 52.7,
+    "mean_ns": 16.7367,
+    "min_ns": 10.52
+  },
+  {
+    "bench": "post_recv_batch",
+    "cell": "batch_n=1000",
+    "n_samples": 5,
+    "median_ns": 12.494,
+    "p99_ns": 13.084,
+    "mean_ns": 11.7502,
+    "min_ns": 9.969
+  },
+  {
+    "bench": "pybind_trampoline",
+    "cell": "outstanding_recv",
+    "n_samples": 1000000,
+    "median_ns": 231.0,
+    "p99_ns": 241,
+    "mean_ns": 235.759836,
+    "min_ns": 220
+  },
+  {
+    "bench": "construct",
+    "cell": "buf_mib=1",
+    "n_samples": 10,
+    "median_ns": 3537121.0,
+    "p99_ns": 20282785.0,
+    "mean_ns": 5210503.800000001,
+    "min_ns": 3478837.0
+  },
+  {
+    "bench": "construct",
+    "cell": "buf_mib=4",
+    "n_samples": 10,
+    "median_ns": 3997824.4999999995,
+    "p99_ns": 4341492.0,
+    "mean_ns": 4025686.3,
+    "min_ns": 3886932.0
+  },
+  {
+    "bench": "construct",
+    "cell": "buf_mib=16",
+    "n_samples": 10,
+    "median_ns": 12626813.0,
+    "p99_ns": 12880818.0,
+    "mean_ns": 12652050.1,
+    "min_ns": 12471632.0
+  },
+  {
+    "bench": "construct",
+    "cell": "buf_mib=64",
+    "n_samples": 10,
+    "median_ns": 40188136.5,
+    "p99_ns": 40362288.0,
+    "mean_ns": 40182253.599999994,
+    "min_ns": 40049001.0
+  },
+  {
+    "bench": "construct",
+    "cell": "buf_mib=256",
+    "n_samples": 10,
+    "median_ns": 145812711.5,
+    "p99_ns": 164039665.0,
+    "mean_ns": 147665552.1,
+    "min_ns": 145244246.0
+  },
+  {
+    "bench": "ghost_mask",
+    "cell": "buf_mib=1 loss_pct=0",
+    "n_samples": 20,
+    "median_ns": 441.0,
+    "p99_ns": 3697.0,
+    "mean_ns": 610.7,
+    "min_ns": 430.0
+  },
+  {
+    "bench": "ghost_mask",
+    "cell": "buf_mib=1 loss_pct=1",
+    "n_samples": 20,
+    "median_ns": 481.0,
+    "p99_ns": 1283.0,
+    "mean_ns": 655.85,
+    "min_ns": 441.0
+  },
+  {
+    "bench": "ghost_mask",
+    "cell": "buf_mib=1 loss_pct=10",
+    "n_samples": 20,
+    "median_ns": 2033.0,
+    "p99_ns": 3817.0,
+    "mean_ns": 2102.75,
+    "min_ns": 962.0
+  },
+  {
+    "bench": "ghost_mask",
+    "cell": "buf_mib=16 loss_pct=0",
+    "n_samples": 20,
+    "median_ns": 1032.0,
+    "p99_ns": 2485.0,
+    "mean_ns": 1109.6,
+    "min_ns": 1022.0
+  },
+  {
+    "bench": "ghost_mask",
+    "cell": "buf_mib=16 loss_pct=1",
+    "n_samples": 20,
+    "median_ns": 7734.500000000001,
+    "p99_ns": 12023.0,
+    "mean_ns": 8130.900000000001,
+    "min_ns": 4038.0000000000005
+  },
+  {
+    "bench": "ghost_mask",
+    "cell": "buf_mib=16 loss_pct=10",
+    "n_samples": 20,
+    "median_ns": 67055.5,
+    "p99_ns": 83016.0,
+    "mean_ns": 67878.25,
+    "min_ns": 56576.0
+  },
+  {
+    "bench": "ghost_mask",
+    "cell": "buf_mib=256 loss_pct=0",
+    "n_samples": 20,
+    "median_ns": 10559.5,
+    "p99_ns": 13496.0,
+    "mean_ns": 10720.25,
+    "min_ns": 10490.0
+  },
+  {
+    "bench": "ghost_mask",
+    "cell": "buf_mib=256 loss_pct=1",
+    "n_samples": 20,
+    "median_ns": 313858.0,
+    "p99_ns": 349274.0,
+    "mean_ns": 309177.7,
+    "min_ns": 249728.0
+  },
+  {
+    "bench": "ghost_mask",
+    "cell": "buf_mib=256 loss_pct=10",
+    "n_samples": 20,
+    "median_ns": 3092774.0,
+    "p99_ns": 3206366.0,
+    "mean_ns": 3076175.45,
+    "min_ns": 2956147.0
+  }
+]

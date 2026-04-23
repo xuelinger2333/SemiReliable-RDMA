@@ -1,11 +1,25 @@
 # Phase 3 · Stage B · RQ6-Prep · A2 真机收敛 + tail latency 矩阵
 
+> ## 🔴 SUPERSEDED — pre-fix data on deprecated hardware
+>
+> **归档时间：** 2026-04-23
+>
+> 本文档记录的 12-cell 收敛数据是在 **transport ratio-controller bug (commit `9386f2e` 之前)** 采集的。由于 [`await_gradient` 硬编码 `cfg.ratio = 0.95`](./rq6-semirdma-effective-loss-analysis.md)，所有 12 cell 的 **effective receive-side loss 恒为 ~5%**，与名义 `cfg.loss_rate ∈ {0, 1, 3, 5}%` 无关。原 §0.1 "1-5% 丢包下单调收敛" 的结论 **不能成立** — 那是一个单点 (5% effective) 数据。
+>
+> 同时，采集平台 **c240g5 (Wisconsin) CX-6 Lx + P100** 已被 **amd203/amd196 (Utah) CX-5 + CPU-only** 替代。打磨阶段的新数据见 [`results-cx5-amd203-amd196/rq6-prep-a2-real-nic/`](./results-cx5-amd203-amd196/rq6-prep-a2-real-nic/)（待 C.4 矩阵落盘后生成同名 .md 文档）。
+>
+> CSV 原件已挪到 [`results-cx6lx25g-c240g5_archive/rq6-prep-a2-real-nic/`](./results-cx6lx25g-c240g5_archive/rq6-prep-a2-real-nic/)，**只做 bug 复现参考，不可作为方法有效性证据**。
+>
+> 本文档保留作为 bug 证据链：它展示了 A2 矩阵在 pre-fix 下 4 档 loss 最终收敛值几乎无差别（[§1.2 表格](#12-头对头seed42)的 1.27-1.68 区间），这本身就是 ratio bug 的诊断特征。
+
+---
+
 > **时间：** 2026-04-23
 > **节点：** CloudLab Wisconsin `c240g5-110231` (node0) + `c240g5-110225` (node1)
 > **硬件：** 2× Intel Xeon Silver 4114, 187 GiB RAM, **Tesla P100 PCIe 12 GB**, **CX-6 Lx 25 GbE** (RoCEv2 GID 1, MTU 9000, PFC off)
-> **目的：** Stage A 的 A2 在 aliyun SoftRoCE+CPU 上 1% loss × 500 步收敛验证（[rq5-results-ddp-baseline.md §0.4](./rq5-results-ddp-baseline.md)）只跑了一档丢包率。本节在真硬件 + GPU 上把矩阵扩到 **loss ∈ {0, 1%, 3%, 5%} × 3 seed × 500 step**，回答"SemiRDMA 在 1-5% 真机丢包下是否仍单调收敛 + tail latency 是否被 RatioController (0.95, 5ms) 控制住"。
+> **目的（pre-fix 视角）：** Stage A 的 A2 在 aliyun SoftRoCE+CPU 上 1% loss × 500 步收敛验证（[rq5-results-ddp-baseline.md §0.4](./rq5-results-ddp-baseline.md)）只跑了一档丢包率。本节在真硬件 + GPU 上把矩阵扩到 **loss ∈ {0, 1%, 3%, 5%} × 3 seed × 500 step**，回答"SemiRDMA 在 1-5% 真机丢包下是否仍单调收敛 + tail latency 是否被 RatioController (0.95, 5ms) 控制住"。
 
-矩阵执行脚本：[`scripts/cloudlab/run_a2_real_nic.sh`](../../scripts/cloudlab/run_a2_real_nic.sh)，12 cell × ~7.5 min ≈ 87 min wall-clock。CSV 落盘 [`docs/phase3/results-cx6lx25g-c240g5/rq6-prep-a2-real-nic/`](./results-cx6lx25g-c240g5/rq6-prep-a2-real-nic/)。硬件背景 + 链路状态见 [stage-b-hardware-notes.md §8](./stage-b-hardware-notes.md#8-2026-04-23--c240g5-双节点替代记录--phase-2-真机重跑)。
+矩阵执行脚本：[`scripts/cloudlab/run_a2_real_nic.sh`](../../scripts/cloudlab/run_a2_real_nic.sh)，12 cell × ~7.5 min ≈ 87 min wall-clock。CSV 落盘 [`docs/phase3/results-cx6lx25g-c240g5_archive/rq6-prep-a2-real-nic/`](./results-cx6lx25g-c240g5_archive/rq6-prep-a2-real-nic/)。硬件背景 + 链路状态见 [stage-b-hardware-notes.md §8](./stage-b-hardware-notes.md#8-2026-04-23--c240g5-双节点替代记录--phase-2-真机重跑)。
 
 ---
 
@@ -125,7 +139,7 @@ iter_time CSV 列：fwd_ms / bwd_ms / opt_ms / total_ms。本节没单独 attrib
 
 ### 1.5 grad_norm 演化（健康度 sanity）
 
-3 seed × 4 loss 的 grad L2 norm 在前 100 步从 ~5-15 跌到 1-3 范围，无 NaN、无发散、无 grad explosion。详细 CSV 见 [results 子目录](./results-cx6lx25g-c240g5/rq6-prep-a2-real-nic/)。
+3 seed × 4 loss 的 grad L2 norm 在前 100 步从 ~5-15 跌到 1-3 范围，无 NaN、无发散、无 grad explosion。详细 CSV 见 [results 子目录](./results-cx6lx25g-c240g5_archive/rq6-prep-a2-real-nic/)。
 
 ---
 
@@ -168,5 +182,5 @@ A2 矩阵脚本 [`run_a2_real_nic.sh`](../../scripts/cloudlab/run_a2_real_nic.sh
 - [`docs/phase3/rq6-prep-real-nic-equivalence.md`](./rq6-prep-real-nic-equivalence.md) — A1 bit-for-bit 真机复现（前置）
 - [`docs/phase3/stage-b-phase2-resweep.md`](./stage-b-phase2-resweep.md) — Phase 2 RQ1/RQ2/RQ4 真机重扫（参数校准）
 - [`docs/phase3/rq6-loss-injection-strategy.md`](./rq6-loss-injection-strategy.md) — 应用层丢包注入决策（tc netem 在 RoCE 上无效）
-- [`docs/phase3/results-cx6lx25g-c240g5/rq6-prep-a2-real-nic/`](./results-cx6lx25g-c240g5/rq6-prep-a2-real-nic/) — 12 cell × 3 CSV 原始数据（loss_per_step / iter_time / grad_norm）
+- [`docs/phase3/results-cx6lx25g-c240g5_archive/rq6-prep-a2-real-nic/`](./results-cx6lx25g-c240g5_archive/rq6-prep-a2-real-nic/) — 12 cell × 3 CSV 原始数据（loss_per_step / iter_time / grad_norm）
 - [`docs/phase3/rq5-results-ddp-baseline.md`](./rq5-results-ddp-baseline.md) — Stage A on aliyun SoftRoCE A1+A2（对照基准）

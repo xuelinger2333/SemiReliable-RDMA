@@ -74,8 +74,17 @@ hdr "Network interfaces"
 ip -br link show | awk '$1 !~ /^(lo|docker|virbr)/ {print "  " $0}'
 
 # Auto-detect experiment link iface if not given.
+# Policy matches link_setup.sh + detect_rdma_dev.sh: prefer the Mellanox
+# PCI-stable naming ``enp<bus>s<slot>f<func>np<port>`` (the experiment-LAN
+# NIC on multi-port hosts like amd203/amd196), then fall back to any UP
+# non-control iface. This avoids reporting the public management NIC
+# (``eno*`` on CloudLab d7525/d6515 class) as the experiment link, which
+# would otherwise mis-populate downstream MTU/speed/PFC readouts.
 if [ -z "${IFACE:-}" ]; then
-    # CloudLab usually labels eth1/ens1f1/etc for the experiment lan.
+    IFACE=$(ip -br link show \
+        | awk '$1 ~ /^enp[0-9]+s[0-9]+f[0-9]+np[0-9]+$/ && $2=="UP" {print $1; exit}')
+fi
+if [ -z "${IFACE:-}" ]; then
     IFACE=$(ip -br link show \
         | awk '$1 !~ /^(lo|eth0|docker|virbr|eno1)/ && $2 == "UP" {print $1; exit}')
 fi
