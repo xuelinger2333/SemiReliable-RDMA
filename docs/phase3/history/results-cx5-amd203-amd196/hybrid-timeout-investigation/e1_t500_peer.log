@@ -1,0 +1,68 @@
+[INFO]  Opened device: mlx5_2
+[INFO]  Using GID index 1
+[INFO]  Created UC QP, qpn=365
+[INFO]  Opened device: mlx5_2
+[INFO]  Using GID index 1
+[INFO]  Created UC QP, qpn=366
+[2026-04-23 10:54:44,842][semirdma._bootstrap][INFO] - bootstrap: connected to 10.10.1.1:36105
+[INFO]  QP -> INIT
+[INFO]  QP -> RTR (dest_qpn=415)
+[INFO]  QP -> RTS (sq_psn=0)
+[2026-04-23 10:54:44,844][semirdma.transport][INFO] - SemiRDMATransport up: local qpn=366 -> remote qpn=415, remote rkey=0x17b5f
+[2026-04-23 10:54:44,844][semirdma._bootstrap][INFO] - bootstrap: listening on 0.0.0.0:36106
+[2026-04-23 10:54:44,846][semirdma._bootstrap][INFO] - bootstrap: peer ('10.10.1.1', 57084) connected
+[INFO]  QP -> INIT
+[INFO]  QP -> RTR (dest_qpn=416)
+[INFO]  QP -> RTS (sq_psn=0)
+[2026-04-23 10:54:44,846][semirdma.transport][INFO] - SemiRDMATransport up: local qpn=365 -> remote qpn=416, remote rkey=0x19d80
+[2026-04-23 10:54:44,846][semirdma.hooks][INFO] - SemiRDMAHookState up: rank=1, tx qpn=365, rx qpn=366
+[2026-04-23 10:54:46,297][semirdma.hooks][INFO] - hybrid_assert_ok rank=1 bucket=0 n_missing=5
+[2026-04-23 10:54:47,226][semirdma.hooks][INFO] - hybrid_assert_ok rank=1 bucket=1 n_missing=6
+[2026-04-23 10:54:48,096][semirdma.hooks][INFO] - hybrid_assert_ok rank=1 bucket=2 n_missing=5
+[2026-04-23 10:54:48,975][semirdma.hooks][INFO] - hybrid_assert_ok rank=1 bucket=3 n_missing=5
+[2026-04-23 10:54:49,812][semirdma.hooks][INFO] - hybrid_assert_ok rank=1 bucket=4 n_missing=6
+[2026-04-23 10:54:50,718][semirdma.hooks][INFO] - hybrid_assert_ok rank=1 bucket=5 n_missing=5
+[2026-04-23 10:54:51,607][semirdma.hooks][INFO] - hybrid_assert_ok rank=1 bucket=6 n_missing=5
+[2026-04-23 10:54:53,000][semirdma.hooks][INFO] - hybrid_assert_ok rank=1 bucket=7 n_missing=6
+[2026-04-23 10:54:53,921][semirdma.hooks][INFO] - hybrid_assert_ok rank=1 bucket=8 n_missing=5
+[2026-04-23 10:54:54,809][semirdma.hooks][INFO] - hybrid_assert_ok rank=1 bucket=9 n_missing=6
+[2026-04-23 10:54:55,741][semirdma.hooks][INFO] - hybrid_assert_ok rank=1 bucket=10 n_missing=6
+[2026-04-23 10:54:56,655][semirdma.hooks][INFO] - hybrid_assert_ok rank=1 bucket=11 n_missing=5
+[2026-04-23 10:54:57,590][semirdma.hooks][INFO] - hybrid_assert_ok rank=1 bucket=12 n_missing=6
+[2026-04-23 10:54:58,501][semirdma.hooks][INFO] - hybrid_assert_ok rank=1 bucket=13 n_missing=6
+[2026-04-23 10:54:59,386][semirdma.hooks][INFO] - hybrid_assert_ok rank=1 bucket=14 n_missing=6
+[2026-04-23 10:55:00,284][semirdma.hooks][INFO] - hybrid_assert_ok rank=1 bucket=15 n_missing=6
+[2026-04-23 10:55:01,189][semirdma.hooks][INFO] - hybrid_assert_ok rank=1 bucket=16 n_missing=6
+[2026-04-23 10:55:02,041][semirdma.hooks][INFO] - hybrid_assert_ok rank=1 bucket=17 n_missing=6
+[2026-04-23 10:55:02,896][semirdma.hooks][INFO] - hybrid_assert_ok rank=1 bucket=18 n_missing=6
+[2026-04-23 10:55:03,784][semirdma.hooks][INFO] - hybrid_assert_ok rank=1 bucket=19 n_missing=6
+[2026-04-23 10:55:04,713][semirdma.hooks][INFO] - hybrid_assert_ok rank=1 bucket=20 n_missing=5
+[2026-04-23 10:55:05,690][semirdma.hooks][INFO] - hybrid_assert_ok rank=1 bucket=21 n_missing=6
+[2026-04-23 10:55:06,593][semirdma.hooks][INFO] - hybrid_assert_ok rank=1 bucket=22 n_missing=6
+[2026-04-23 10:55:07,480][semirdma.hooks][INFO] - hybrid_assert_ok rank=1 bucket=23 n_missing=5
+[2026-04-23 10:55:08,855][semirdma.hooks][INFO] - hybrid_assert_ok rank=1 bucket=24 n_missing=53
+[2026-04-23 10:55:09,697][semirdma.hooks][INFO] - hybrid_assert_ok rank=1 bucket=25 n_missing=5
+[2026-04-23 10:55:10,533][semirdma.hooks][INFO] - hybrid_assert_ok rank=1 bucket=26 n_missing=6
+[2026-04-23 10:55:11,419][semirdma.hooks][INFO] - hybrid_assert_ok rank=1 bucket=27 n_missing=6
+[2026-04-23 10:55:12,314][semirdma.hooks][INFO] - hybrid_assert_ok rank=1 bucket=28 n_missing=6
+[2026-04-23 10:55:13,213][semirdma.hooks][INFO] - hybrid_assert_ok rank=1 bucket=29 n_missing=6
+[2026-04-23 10:55:14,206][semirdma.hooks][INFO] - hybrid_assert_ok rank=1 bucket=30 n_missing=6
+[2026-04-23 10:55:15,123][semirdma.hooks][INFO] - hybrid_assert_ok rank=1 bucket=31 n_missing=5
+[2026-04-23 10:55:16,036][semirdma.hooks][INFO] - hybrid_assert_ok rank=1 bucket=32 n_missing=6
+[2026-04-23 10:55:16,899][semirdma.hooks][INFO] - hybrid_assert_ok rank=1 bucket=33 n_missing=6
+[2026-04-23 10:55:17,800][semirdma.hooks][INFO] - hybrid_assert_ok rank=1 bucket=34 n_missing=6
+[2026-04-23 10:55:18,700][semirdma.hooks][INFO] - hybrid_assert_ok rank=1 bucket=35 n_missing=6
+[2026-04-23 10:55:19,567][semirdma.hooks][INFO] - hybrid_assert_ok rank=1 bucket=36 n_missing=6
+[2026-04-23 10:55:20,533][semirdma.hooks][INFO] - hybrid_assert_ok rank=1 bucket=37 n_missing=6
+[2026-04-23 10:55:21,501][semirdma.hooks][INFO] - hybrid_assert_ok rank=1 bucket=38 n_missing=6
+[2026-04-23 10:55:22,398][semirdma.hooks][INFO] - hybrid_assert_ok rank=1 bucket=39 n_missing=6
+[2026-04-23 10:55:23,296][semirdma.hooks][INFO] - hybrid_assert_ok rank=1 bucket=40 n_missing=5
+[2026-04-23 10:55:24,190][semirdma.hooks][INFO] - hybrid_assert_ok rank=1 bucket=41 n_missing=6
+[2026-04-23 10:55:25,088][semirdma.hooks][INFO] - hybrid_assert_ok rank=1 bucket=42 n_missing=6
+[2026-04-23 10:55:25,950][semirdma.hooks][INFO] - hybrid_assert_ok rank=1 bucket=43 n_missing=6
+[2026-04-23 10:55:26,839][semirdma.hooks][INFO] - hybrid_assert_ok rank=1 bucket=44 n_missing=5
+[2026-04-23 10:55:27,744][semirdma.hooks][INFO] - hybrid_assert_ok rank=1 bucket=45 n_missing=5
+[2026-04-23 10:55:28,651][semirdma.hooks][INFO] - hybrid_assert_ok rank=1 bucket=46 n_missing=5
+[2026-04-23 10:55:29,544][semirdma.hooks][INFO] - hybrid_assert_ok rank=1 bucket=47 n_missing=6
+[2026-04-23 10:55:30,399][semirdma.hooks][INFO] - hybrid_assert_ok rank=1 bucket=48 n_missing=5
+[2026-04-23 10:55:31,315][semirdma.hooks][INFO] - hybrid_assert_ok rank=1 bucket=49 n_missing=6
