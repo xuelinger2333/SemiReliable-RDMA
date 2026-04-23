@@ -1,0 +1,19 @@
+{
+  "timestamp_utc": "2026-04-23T03:17:23Z",
+  "hostname": "node0.c240g5.rdma-nic-perf-pg0.wisc.cloudlab.us",
+  "uname": {
+    "system": "Linux",
+    "node": "node0.c240g5.rdma-nic-perf-pg0.wisc.cloudlab.us",
+    "release": "5.15.0-168-generic",
+    "version": "#178-Ubuntu SMP Fri Jan 9 19:05:03 UTC 2026",
+    "machine": "x86_64",
+    "processor": "x86_64"
+  },
+  "python": "3.10.12",
+  "cpu_model": "Intel(R) Xeon(R) Silver 4114 CPU @ 2.20GHz",
+  "cpu_cores": 40,
+  "mem_kb": "196670064",
+  "ibv_devinfo": "fw_ver:\t\t\t\t26.32.2004\n\tvendor_part_id:\t\t\t4127\n\t\t\tstate:\t\t\tPORT_ACTIVE (4)\n\t\t\tactive_mtu:\t\t4096 (5)\n\t\t\tlink_layer:\t\tEthernet",
+  "driver": "mlx5_ib: 393216 deps=0\nmlx5_core: 1597440 deps=1",
+  "torch": "2.11.0+cpu"
+}
