@@ -7,7 +7,11 @@ later commits of this stage.
 """
 
 from semirdma.config import TransportConfig
-from semirdma.hooks import SemiRDMAHookState, semirdma_allreduce_hook
+from semirdma.hooks import (
+    SemiRDMAHookState,
+    semirdma_allreduce_hook,
+    semirdma_hybrid_allreduce_hook,
+)
 from semirdma.transport import SemiRDMATransport
 
 __version__ = "0.3.0a0"
@@ -18,4 +22,5 @@ __all__ = [
     "TransportConfig",
     "__version__",
     "semirdma_allreduce_hook",
+    "semirdma_hybrid_allreduce_hook",
 ]

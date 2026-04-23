@@ -91,9 +91,12 @@ def _install_hook(ddp_model: DDP, cfg: DictConfig, rank: int) -> object:
         ddp_model.register_comm_hook(None, ddp_default_hooks.allreduce_hook)
         return None
 
-    if cfg.transport == "semirdma":
+    if cfg.transport in ("semirdma", "semirdma_hybrid"):
         from semirdma import (
-            SemiRDMAHookState, TransportConfig, semirdma_allreduce_hook,
+            SemiRDMAHookState,
+            TransportConfig,
+            semirdma_allreduce_hook,
+            semirdma_hybrid_allreduce_hook,
         )
         tcfg = TransportConfig(
             dev_name=cfg.transport_cfg.dev_name,
@@ -118,7 +121,12 @@ def _install_hook(ddp_model: DDP, cfg: DictConfig, rank: int) -> object:
             port=cfg.dist.semirdma_port,
             cfg=tcfg,
         )
-        ddp_model.register_comm_hook(state, semirdma_allreduce_hook)
+        hook = (
+            semirdma_hybrid_allreduce_hook
+            if cfg.transport == "semirdma_hybrid"
+            else semirdma_allreduce_hook
+        )
+        ddp_model.register_comm_hook(state, hook)
         return state
 
     if cfg.transport == "rc_baseline":

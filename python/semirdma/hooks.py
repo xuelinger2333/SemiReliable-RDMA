@@ -23,6 +23,15 @@ without deadlocking.  Per-bucket work happens on the DDP thread — torch
 futures resolve immediately here; there is no worker thread pool.  This
 keeps Stage A simple; Stage B can add a background dispatcher for
 bucket-overlap if profiling demands it.
+
+H3 fix variant (``semirdma_hybrid_allreduce_hook``): splits the bucket into
+owned halves and runs a 2-phase Ring AllReduce:
+
+  Phase 1 (UC reduce-scatter): each rank UC-writes the peer-owned half to
+    the peer; ghost-masks missed chunks on its own-owned half.
+  Phase 2 (gloo all-gather): reliable TCP AllGather of each rank's partial
+    sum for its owned half.  Both ranks end with a byte-identical averaged
+    gradient — no rank-asymmetric ghost drift (H3 root cause).
 """
 
 import logging
@@ -228,7 +237,138 @@ def semirdma_allreduce_hook(
     return fut
 
 
+def semirdma_hybrid_allreduce_hook(
+    state: SemiRDMAHookState,
+    bucket: dist.GradBucket,
+) -> futures.Future[torch.Tensor]:
+    """Hybrid Ring AllReduce: UC reduce-scatter + gloo all-gather.
+
+    Stage 1 de-risk of the hybrid design (2-rank only).  Compared to
+    ``semirdma_allreduce_hook``, the two ranks do not symmetrically swap
+    the full bucket via UC; instead each rank *owns* half of the bucket
+    and only the peer-owned half is shipped over UC.  Phase 2 then uses
+    reliable gloo AllGather to broadcast each half's partial sum back to
+    both ranks, producing a byte-identical averaged tensor.
+
+    Semantics per bucket index i:
+
+        own_slice  = flat[rank*K : (rank+1)*K]      # K = numel // 2
+        peer_slice = flat[(1-rank)*K : (2-rank)*K]
+
+      Phase 1 (UC reduce-scatter):
+          - post_gradient(peer_slice_bytes)  # UC Write to peer
+          - await_gradient for peer's own_slice bytes (ghost-masked)
+          - own_partial = own_slice + ghost(peer_bytes_for_own_slice)
+
+      Phase 2 (gloo all-gather):
+          - all_gather_into_tensor(gathered, own_partial)    # TCP, reliable
+          - flat.copy_(gathered / world_size)
+
+    Why this fixes H3: the original ``semirdma_allreduce_hook`` has each
+    rank compute  ``(own + ghost(peer)) / 2`` on the *full* bucket, with
+    the ghost mask applied only to the peer-received half — so rank 0
+    keeps g_0[i]/2 while rank 1 keeps g_1[i]/2 at chunks that dropped
+    asymmetrically on the two rx paths, producing model drift.  In the
+    hybrid path both ranks learn the *same* masked averaged value for
+    each element (courtesy of gloo AllGather's reliability), so the two
+    model replicas stay bit-identical.
+
+    Limitations: 2-rank only.  N>2 needs a ring-topology version with
+    rank-dependent owned chunks — Stage 2 of the plan.  Bucket must have
+    even element count (we split the element dimension, not bytes).
+    """
+    if state.world_size != 2:
+        raise NotImplementedError(
+            "semirdma_hybrid_allreduce_hook Stage 1 supports world_size=2 "
+            "only; Stage 2 will add ring topology for N>2"
+        )
+
+    flat = bucket.buffer()
+    if flat.device.type != "cpu":
+        raise RuntimeError(
+            f"semirdma_hybrid_allreduce_hook: bucket must be on CPU, got {flat.device}"
+        )
+    if not flat.is_contiguous():
+        flat = flat.contiguous()
+
+    numel = flat.numel()
+    if numel % 2 != 0:
+        raise RuntimeError(
+            f"semirdma_hybrid_allreduce_hook: bucket numel={numel} is odd; "
+            "hybrid hook requires even element count for 2-rank half-split"
+        )
+    elem_size = flat.element_size()
+    half_numel = numel // 2
+    half_nbytes = half_numel * elem_size
+
+    if half_nbytes > state.cfg.buffer_bytes // state.n_slots:
+        raise RuntimeError(
+            f"semirdma_hybrid_allreduce_hook: half bucket {half_nbytes} B "
+            f"exceeds slot_bytes={state.cfg.buffer_bytes // state.n_slots}."
+        )
+
+    own_start = state.rank * half_numel
+    own_end = own_start + half_numel
+    peer_start = (1 - state.rank) * half_numel
+    peer_end = peer_start + half_numel
+
+    own_slice = flat[own_start:own_end]
+    peer_slice = flat[peer_start:peer_end]
+
+    fut: "futures.Future[torch.Tensor]" = futures.Future()
+
+    import numpy as np
+
+    with _HOOK_LOCK:
+        bucket_id = state.bucket_idx
+        state.bucket_idx += 1
+
+        slot_bytes = state.cfg.buffer_bytes // state.n_slots
+        slot = bucket_id % state.n_slots
+        base = slot * slot_bytes
+
+        # ---------- Phase 1: UC reduce-scatter ----------
+        peer_byte_view = memoryview(peer_slice.numpy()).cast("B")
+        assert len(peer_byte_view) == half_nbytes
+        cs_send = state.tx.post_gradient(
+            peer_byte_view, base_offset=base, remote_base_offset=base
+        )
+        cs_recv = ChunkSet(base, half_nbytes, state.cfg.chunk_bytes)
+        stats = state.rx.await_gradient(cs_recv)
+
+        # Peer's bytes for our owned half (ghost-masked where chunks missed).
+        remote_np = np.frombuffer(state.rx.buffer_view(), dtype=np.uint8)[
+            base : base + half_nbytes
+        ]
+        remote_typed = remote_np.view(flat.numpy().dtype).reshape(own_slice.shape)
+        remote_t = torch.from_numpy(remote_typed)
+
+        # Partial sum for own-owned region: own + ghost(peer).  Materialize
+        # as new tensor so gloo AllGather doesn't alias rx MR or flat.
+        own_partial = own_slice + remote_t
+
+        state.tx.drain_send_completions()
+
+    # ---------- Phase 2: gloo all-gather (reliable) ----------
+    # Default process group is gloo (train_cifar10 initializes dist with
+    # backend=gloo even when transport=semirdma_hybrid).  all_gather_into_tensor
+    # concatenates rank 0's input at [0:K] and rank 1's at [K:2K].
+    gathered = torch.empty_like(flat)
+    dist.all_gather_into_tensor(gathered, own_partial.contiguous())
+
+    gathered.div_(state.world_size)
+    flat.copy_(gathered)
+
+    logger.debug(
+        "semirdma_hybrid_allreduce_hook: bucket=%d numel=%d half_nbytes=%d stats=%s",
+        bucket_id, numel, half_nbytes, stats,
+    )
+    fut.set_result(flat)
+    return fut
+
+
 __all__ = [
     "SemiRDMAHookState",
     "semirdma_allreduce_hook",
+    "semirdma_hybrid_allreduce_hook",
 ]
