@@ -121,6 +121,25 @@ def _install_hook(ddp_model: DDP, cfg: DictConfig, rank: int) -> object:
         ddp_model.register_comm_hook(state, semirdma_allreduce_hook)
         return state
 
+    if cfg.transport == "rc_baseline":
+        from semirdma.baselines import RCBaselineState, rc_baseline_hook
+        rc_state = RCBaselineState()
+        ddp_model.register_comm_hook(rc_state, rc_baseline_hook)
+        return rc_state
+
+    if cfg.transport == "rc_lossy":
+        from semirdma.baselines import (
+            RCLossyConfig, RCLossyState, rc_lossy_hook,
+        )
+        rc_cfg = RCLossyConfig(
+            chunk_bytes=cfg.transport_cfg.chunk_bytes,
+            loss_rate=cfg.loss_rate,
+            loss_seed=cfg.seed * 31 + 7,   # match semirdma seed derivation
+        )
+        rc_state = RCLossyState.for_rank(rank=rank, cfg=rc_cfg)
+        ddp_model.register_comm_hook(rc_state, rc_lossy_hook)
+        return rc_state
+
     raise ValueError(f"transport={cfg.transport!r}")
 
 
