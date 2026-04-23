@@ -22,6 +22,9 @@
 
 set -uo pipefail
 
+# shellcheck source=_matrix_lib.sh
+source "$(dirname "$0")/_matrix_lib.sh"
+
 STEPS="${STEPS:-500}"
 WARMUP="${WARMUP:-10}"
 SEEDS="${SEEDS:-42 123 7}"
@@ -64,6 +67,13 @@ for loss in $LOSS_RATES; do
         elapsed=$(( $(date +%s) - t0 ))
         echo
         echo "=== cell #$cell_idx/$total_cells: semirdma loss=$loss seed=$seed (mport=$master_port, sport=$semi_port, elapsed=${elapsed}s) ==="
+
+        # Cell-level skip: don't redo a fully-completed cell on relaunch.
+        if cell_already_done "semirdma" "$loss" "$seed" "$STEPS"; then
+            echo "  SKIP: prior complete result exists"
+            cell_idx=$((cell_idx + 1))
+            continue
+        fi
 
         ssh "$NODE_PEER_HOST" "
 cd $REPO

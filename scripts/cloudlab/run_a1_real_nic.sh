@@ -30,6 +30,9 @@
 
 set -uo pipefail
 
+# shellcheck source=_matrix_lib.sh
+source "$(dirname "$0")/_matrix_lib.sh"
+
 STEPS="${STEPS:-100}"
 WARMUP="${WARMUP:-10}"
 SEEDS="${SEEDS:-42 123 7}"
@@ -68,6 +71,13 @@ for transport in $TRANSPORTS; do
         semi_port=$((PORT_BASE + cell_idx * 10 + 5))
         echo
         echo "=== cell #$cell_idx: transport=$transport seed=$seed (mport=$master_port, sport=$semi_port) ==="
+
+        # Cell-level skip: don't redo a fully-completed cell on relaunch.
+        if cell_already_done "$transport" "0.0" "$seed" "$STEPS"; then
+            echo "  SKIP: prior complete result exists"
+            cell_idx=$((cell_idx + 1))
+            continue
+        fi
 
         # SSH-launch peer rank on the other node, in background
         ssh "$NODE_PEER_HOST" "
