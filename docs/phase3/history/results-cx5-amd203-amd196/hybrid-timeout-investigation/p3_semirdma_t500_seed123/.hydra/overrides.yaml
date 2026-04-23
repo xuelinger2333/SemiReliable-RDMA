@@ -1,0 +1,9 @@
+- transport=semirdma
+- loss_rate=0.0
+- seed=123
+- steps=500
+- warmup_steps=10
+- transport_cfg.dev_name=mlx5_2
+- transport_cfg.ratio=0.95
+- transport_cfg.timeout_ms=500
+- dist.semirdma_port=37005

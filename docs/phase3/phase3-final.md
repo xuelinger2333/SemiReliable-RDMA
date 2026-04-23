@@ -104,17 +104,24 @@ else:
 
 ---
 
-## 5. CX-5 Benign Wire 上的最终数据（seed 42, 500 step, L=0）
+## 5. CX-5 Benign Wire 上的最终数据（500 step, L=0）
 
-| Transport | timeout | seed 42 final loss | 说明 |
-|---|---:|---:|---|
-| rc_baseline (gloo TCP) | — | 0.860 | Gold reference |
-| **semirdma + timeout=500** | 500 ms | **0.875** | +0.015，在 3-seed noise 内 |
-| **hybrid + timeout=500** | 500 ms | **0.731** | 甚至略好（seed 噪声） |
-| semirdma + timeout=5 | 5 ms | 1.300 | timeout 过紧 → ghost masking 误杀 |
-| hybrid + timeout=5 | 5 ms | 1.237 | 同上；hybrid 微弱 mitigation |
+**时间窗限制**：CloudLab 节点在 2026-04-23 下午释放，P3 3-seed confirmation 矩阵（4 cells）只跑完 1/4（semirdma+seed 123），seed 7 在 step 400 被截断。以下是**可用的** seed 42 + seed 123 数据点。
 
-**读数：** 在 CX-5 benign wire 上，修对 timeout 后，semirdma 和 RC-Baseline **不可区分**（seed 42 差 1.7%）。Hybrid 在当前 wire 不带来显著增益。
+| Transport | timeout | seed 42 | seed 123 | mean (n=2) | vs RC-Baseline (mean 0.991) |
+|---|---:|---:|---:|---:|---:|
+| rc_baseline (gloo TCP) | — | 0.860 | 1.121 | **0.991** | Gold reference |
+| **semirdma + timeout=500** | 500 ms | 0.875 | **1.284** | **1.080** | +0.089 |
+| hybrid + timeout=500 | 500 ms | 0.731 | — (node released) | — | 仅 seed 42 单点 |
+| semirdma + timeout=5 | 5 ms | 1.300 | 1.559 | 1.430 | +0.439 |
+| hybrid + timeout=5 | 5 ms | 1.237 | 1.199 | 1.218 | +0.227 |
+
+**读数（修正后）：**
+
+- **Timeout=500 消除了 timeout=5 下 ~0.4 的 gap** — semirdma 从 +0.44 降到 +0.09，claim 稳
+- **semirdma + t=500 仍有 ~0.09 的 residual gap vs RC-Baseline**（2-seed mean） — seed 42 单点 0.015 是 seed-lucky，seed 123 实际差 +0.16
+- **Hybrid + t=500 的 3-seed 确认未完成** — phase3-final §3.4 的 "hybrid 在 benign wire 没 visible benefit" 结论**仅基于 seed 42 单点**，2-seed 以上的判定需要 Phase 4 第三节点平台补跑
+- **Hybrid + t=5 在 2-seed 下平均 1.218，比 semirdma + t=5 的 1.430 低 0.21** — 在 tight-timeout regime hybrid 确实有 measurable advantage（这印证了 hybrid 的"lossy wire + tight timeout"条件性价值）
 
 ### 5.1 iter_ms 代价
 
@@ -139,13 +146,15 @@ timeout=5 → 720ms/step；timeout=500 → 1100ms/step（+50%）。hybrid 比 se
 - Phase 2 transport 通过 pybind11 成功接入 PyTorch DDP，5 种 transport 可切换
 - Ratio controller bug 修复后，SemiRDMA 各档 loss_rate 产生名义对应的 effective loss
 - Hybrid 架构两 rank 位等价（bit-identity assert 100% 通过）
-- **timeout=500ms 下** CX-5 benign wire 上 SemiRDMA ≈ Hybrid ≈ RC-Baseline 收敛（seed 42）
+- **timeout 5→500ms 修复了 CX-5 ~0.4 的 spurious gap**（2-seed mean: semirdma+t=5 平均 1.430 → semirdma+t=500 平均 1.080）
+- **Tight-timeout regime 下 hybrid 确实比 semirdma 好**（2-seed mean: hybrid+t=5 = 1.218 vs semirdma+t=5 = 1.430，差 0.21）
 
 ### 7.2 未验证（下一阶段工作，见 [PLAN.md](../PLAN.md)）
 
+- **Hybrid + t=500 benign wire 的 3-seed 确认**：P3 矩阵只跑完 1/4 cell（节点释放截断），hybrid+t=500 只有 seed 42 单点 0.731。"benign wire 上 hybrid vs semirdma 无显著差异"这个结论**严格说还没成立**
+- **Semirdma + t=500 在 benign wire 的 residual ~0.09 gap**：2-seed mean 0.080 vs RC-Baseline 0.991；是 seed 噪声还是 systematic 未定
 - **Lossy wire 下 hybrid vs semirdma 的真正差距**：需要第三台机器制造交换机拥塞丢包
 - **Tight timeout + lossy wire 下 SemiRDMA 的 tail-hiding benefit**：需要 iperf 背景流 + tail latency 实测
-- **3-seed 重复性**：目前只验证了 seed 42 单点；需要 seed 123 / 7 × (hybrid+t500, semirdma+t500) 确认不是 seed-lucky
 - **N > 2 ring AllReduce**：Hybrid 当前仅支持 world_size=2
 - **大模型 + GPU**：全部数据都是 CPU-only ResNet-18 / CIFAR-10；ResNet-50 / GPT-2 不可外推
 

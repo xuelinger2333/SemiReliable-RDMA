@@ -76,11 +76,18 @@
 
 **预期输出：** 一张 4×5 的 tail-latency Pareto 表，能画成 paper 的核心 figure
 
-### P3 — 3-seed convergence 确认（~25 min，任何时候可跑）
+### P3 — 3-seed convergence 确认（**部分完成，节点释放截断**）
 
-当前 benign wire 的 seed 42 单点数据需要 seed 123 / 7 × (semirdma, hybrid) × timeout=500 × 500 step 补全。让 Phase 3 §5 的 head-to-head 表从 "seed 42 only" 升级到 "3-seed mean"。
+2026-04-23 节点释放前在 amd203/amd196 上启动了 4-cell 3-seed 矩阵，只跑完 1/4：
 
-4 cells × ~8 min = 32 min。可以跟 P0 平行等待 CloudLab 申请时见缝插针跑。
+- ✅ `semirdma + t=500 + seed 123` → final loss **1.284**（vs RC 1.121，gap +0.16）
+- ⚠️ `semirdma + t=500 + seed 7` → step 400/500 处中断（last loss 1.10）
+- ❌ `hybrid + t=500 + seed 123` → 未启动
+- ❌ `hybrid + t=500 + seed 7` → 未启动
+
+**关键发现**：seed 42 的 0.015 gap 是 seed-lucky，seed 123 的真实 gap 是 0.16。phase3-final §5 已更新为 2-seed mean（semirdma+t=500 = 1.080 vs RC-Baseline = 0.991，+0.089 gap）。
+
+**剩余工作**：新节点到手后把 hybrid+t=500 × seed 123/7 + semirdma+t=500 seed 7 补齐（~25 min）。
 
 ---
 
