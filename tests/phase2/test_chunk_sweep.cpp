@@ -61,6 +61,19 @@ constexpr int    TCP_PORT       = 18525;  // persistent TCP for exchange + round
 constexpr double WAIT_RATIO     = 1.0;    // wait for all expected chunks
 constexpr int    WAIT_TIMEOUT   = 5000;   // 5 seconds
 
+// Post-wait straggler-drain timeout (ms).  Historically 50ms to let SoftRoCE
+// stragglers land; on real NICs this becomes the dominant per-round cost
+// (CX-6 Lx chunks arrive in <1ms, so 50ms blocks for a full 50ms).
+// Override via SEMIRDMA_DRAIN_MS env var.  Recommended: 0 on real HCA.
+inline int drain_ms() {
+    const char* e = std::getenv("SEMIRDMA_DRAIN_MS");
+    return e ? atoi(e) : 50;
+}
+inline int drain_settle_us() {
+    const char* e = std::getenv("SEMIRDMA_SETTLE_US");
+    return e ? atoi(e) : 5000;  // 5 ms pre-drain sleep (SoftRoCE default)
+}
+
 // ================================================================
 //  Server
 // ================================================================
@@ -134,9 +147,11 @@ static void run_server(const char* dev_name, int rounds, unsigned /*seed*/)
                                   / static_cast<double>(num_chunks);
                     rc.wait_for_ratio(cs, target, WAIT_TIMEOUT, &stats);
 
-                    // Extra drain to catch stragglers
-                    usleep(5000);
-                    auto extra = engine.poll_cq(64, 50);
+                    // Extra drain to catch stragglers.  Cost dominates round
+                    // time on fast HCAs (CX-6+); set SEMIRDMA_DRAIN_MS=0 and
+                    // SEMIRDMA_SETTLE_US=0 when real-hardware re-calibrating.
+                    if (drain_settle_us() > 0) usleep(drain_settle_us());
+                    auto extra = engine.poll_cq(64, drain_ms());
                     for (const auto& c : extra) {
                         if (c.opcode == IBV_WC_RECV_RDMA_WITH_IMM &&
                             c.status == IBV_WC_SUCCESS) {

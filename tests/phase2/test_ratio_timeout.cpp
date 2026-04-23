@@ -23,7 +23,11 @@ constexpr size_t CHUNK_BYTES     = 16 * 1024;
 constexpr int    NUM_CHUNKS      = BUF_SIZE / CHUNK_BYTES;  // 256
 constexpr int    CHUNKS_TO_SEND  = 240;
 constexpr int    TCP_PORT        = 18521;
-constexpr const char* DEV        = "rxe0";
+// Override via SEMIRDMA_DEV env var (e.g. mlx5_2 on CloudLab CX-6 Lx).
+inline const char* const DEV = [](){
+    const char* d = std::getenv("SEMIRDMA_DEV");
+    return (d && *d) ? d : "rxe0";
+}();
 constexpr uint8_t FILL_BYTE      = 0x55;
 
 TEST(RatioTimeout, PartialCompletionSucceeds)
