@@ -273,6 +273,18 @@ def semirdma_hybrid_allreduce_hook(
     each element (courtesy of gloo AllGather's reliability), so the two
     model replicas stay bit-identical.
 
+    Magnitude compensation: when a chunk c in our owned half gets
+    ghost-masked (peer's bytes for c didn't arrive), the naive partial
+    sum is ``g_own[c] + 0`` and after ``/world_size`` we'd apply
+    ``g_own[c]/2`` — a systematic gradient magnitude shrinkage.  To
+    preserve the expected gradient magnitude we scale the partial sum at
+    missed chunks by ``world_size`` so the final post-divide update is
+    ``g_own[c]`` (unbiased estimator under the assumption that
+    E[g_own[c]] == E[g_peer[c]] — i.i.d. mini-batches).  Variance at
+    missed chunks rises (fewer samples averaged), but the first moment
+    matches.  Both ranks apply the same scaling through ``all_gather``,
+    so no drift is reintroduced.
+
     Limitations: 2-rank only.  N>2 needs a ring-topology version with
     rank-dependent owned chunks — Stage 2 of the plan.  Bucket must have
     even element count (we split the element dimension, not bytes).
@@ -347,6 +359,30 @@ def semirdma_hybrid_allreduce_hook(
         # as new tensor so gloo AllGather doesn't alias rx MR or flat.
         own_partial = own_slice + remote_t
 
+        # Magnitude compensation at ghost-masked chunks.  If every chunk
+        # received a CQE, skip the loop entirely (the common fast path).
+        n_chunks = cs_recv.size()
+        n_missing = n_chunks - cs_recv.num_completed()
+        if n_missing > 0 and elem_size > 0:
+            # chunk_bytes divides evenly into elements under
+            # post_gradient's layout (same invariant as ghost_mask).
+            chunk_bytes = state.cfg.chunk_bytes
+            elem_per_chunk = chunk_bytes // elem_size
+            if elem_per_chunk * elem_size != chunk_bytes:
+                raise RuntimeError(
+                    f"chunk_bytes={chunk_bytes} not a multiple of "
+                    f"elem_size={elem_size}; hybrid magnitude compensation "
+                    "requires elem-aligned chunks"
+                )
+            for i in range(n_chunks):
+                if not cs_recv.state(i)["has_cqe"]:
+                    el_start = i * elem_per_chunk
+                    el_end = min(el_start + elem_per_chunk, half_numel)
+                    # own_partial[el] = g_own (peer was zeroed); scale by
+                    # world_size so gathered/world_size = g_own keeps the
+                    # gradient magnitude instead of shrinking to g_own/2.
+                    own_partial[el_start:el_end].mul_(state.world_size)
+
         state.tx.drain_send_completions()
 
     # ---------- Phase 2: gloo all-gather (reliable) ----------
@@ -356,12 +392,10 @@ def semirdma_hybrid_allreduce_hook(
     gathered = torch.empty_like(flat)
     dist.all_gather_into_tensor(gathered, own_partial.contiguous())
 
-    gathered.div_(state.world_size)
-    flat.copy_(gathered)
-
     logger.debug(
-        "semirdma_hybrid_allreduce_hook: bucket=%d numel=%d half_nbytes=%d stats=%s",
-        bucket_id, numel, half_nbytes, stats,
+        "semirdma_hybrid_allreduce_hook: bucket=%d numel=%d half_nbytes=%d "
+        "n_missing=%d stats=%s",
+        bucket_id, numel, half_nbytes, n_missing, stats,
     )
     fut.set_result(flat)
     return fut

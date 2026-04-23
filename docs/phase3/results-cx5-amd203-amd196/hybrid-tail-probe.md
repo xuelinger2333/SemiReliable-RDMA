@@ -1,5 +1,8 @@
 # Hybrid AllReduce Tail Probe · CX-5 empirical measurement
 
+> ⚠️ **本文 §2.3 "H3 root cause = ratio cutoff timing 非对称" 的解读已被修正。**
+> 后续实验（见 [`./hybrid-timeout-investigation.md`](./hybrid-timeout-investigation.md)）通过 hybrid hook 的 bit-identity assert 证明 drift 不存在；A2 矩阵 "+0.5 gap" 的主因是 **`timeout_ms=5` 过紧** 造成的 CQE 延迟 → ghost-mask 误杀，不是 drift。本文的 RC vs UC wire 实测（§1-§2.2）结论仍然成立（wire 基本 benign），但 §2.3/§2.4/§2.5 关于 H3 机制的推测应以后文为准。
+
 > **时间：** 2026-04-23
 > **节点：** amd203 (node0) + amd196 (node1)，ConnectX-5 fw 16.28.4512, 25 GbE DAC
 > **脚本：** [`scripts/cloudlab/rq_hybrid_tail_probe.sh`](../../../scripts/cloudlab/rq_hybrid_tail_probe.sh)

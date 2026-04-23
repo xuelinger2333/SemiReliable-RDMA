@@ -1,5 +1,12 @@
 # Phase 3 · Stage B · RQ6-Prep · A2 真机收敛矩阵（CX-5 post-fix）
 
+> ⚠️ **重要：本矩阵的 "+0.51 gap vs RC-Baseline" 解读后来被推翻。**
+> 最初假设该 gap 来自 H3 rank-asymmetric ghost drift，但 2026-04-23 后续实验（hybrid hook + bit-identity assert + timeout sensitivity）证明：
+> **~99% 的 gap 实际来自 `timeout_ms=5` 在 CX-5 上过紧**（CQE burst latency），不是 H3 drift。
+> 修 timeout 到 500ms 后，原 `semirdma` hook 在 seed 42 上 final loss = 0.875（vs RC-Baseline 0.860），已入 3-seed noise floor。
+> 详见 [`./hybrid-timeout-investigation.md`](./hybrid-timeout-investigation.md)。
+> 本矩阵数据（timeout=5）保留为 "tight-timeout on benign wire" 的 case study，**不应再引用为 SemiRDMA 对 RC 的性能差距证据**。
+
 > **时间：** 2026-04-23
 > **节点：** CloudLab Utah `amd203.utah.cloudlab.us` (node0) + `amd196.utah.cloudlab.us` (node1)
 > **硬件：** AMD EPYC 7302P (1S × 16C) × 125 GiB × **CPU-only** × Mellanox **ConnectX-5** (fw 16.28.4512, 25 GbE, RoCEv2 GID 1, Path MTU 4096, PFC off)
