@@ -254,7 +254,21 @@ class SemiRDMATransport:
         if not self._brought_up:
             raise RuntimeError("await_gradient called before bring_up")
 
-        r = self._cfg.ratio if ratio is None else ratio
+        # Receive target is dynamic: the sender skipped ``loss_rate`` of the
+        # chunks, so we should wait for ``1 - loss_rate - jitter_slack`` of
+        # them before falling through to GhostMask.  The cfg.ratio value
+        # acts as a safety floor (e.g. cap at 0.95 so we never wait forever
+        # when loss_rate is tiny but the wire is genuinely flaky).
+        #
+        # Prior to this fix, r was hard-pinned at cfg.ratio (0.95), which
+        # meant the effective receive-side drop rate was always
+        # max(cfg.loss_rate, 5%) regardless of what the sender actually
+        # did — see docs/phase3/rq6-semirdma-effective-loss-analysis.md.
+        if ratio is None:
+            dyn_target = 1.0 - self._cfg.loss_rate - 0.005   # 0.5% jitter slack
+            r = max(self._cfg.ratio, dyn_target)
+        else:
+            r = ratio
         t = self._cfg.timeout_ms if timeout_ms is None else timeout_ms
         stats = self._ratio.wait_for_ratio(cs, r, t)
         stats["chunks_total"] = cs.size()
