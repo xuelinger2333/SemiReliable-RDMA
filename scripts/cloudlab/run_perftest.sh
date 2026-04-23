@@ -1,27 +1,28 @@
 #!/usr/bin/env bash
 # CloudLab 2-node RDMA bandwidth / latency sanity check via ib_write_bw.
 #
-# Establishes a Stage B day-0 baseline on the real ConnectX-6 100 GbE link
-# BEFORE we touch any SemiRDMA code.  If perftest does not reach ~90 Gbps
+# Establishes a Stage B day-0 baseline on the real Mellanox link BEFORE
+# touching any SemiRDMA code.  If perftest does not reach near line rate
 # here, no point running our RQ1 chunk sweep on this pair of nodes.
 #
 # Usage (from the repo root on EITHER node):
-#   # Server side:
-#   bash scripts/cloudlab/run_perftest.sh server
+#   # Server side (default DEV=mlx5_0; override for asymmetric NIC slots):
+#   DEV=mlx5_2 bash scripts/cloudlab/run_perftest.sh server
 #
 #   # Client side (run second, gives remote exp-LAN IP):
-#   bash scripts/cloudlab/run_perftest.sh client 10.10.1.1
+#   DEV=mlx5_1 bash scripts/cloudlab/run_perftest.sh client 10.10.1.1
 #
 #   # Latency variant (message size 8 B, 1-thread):
-#   MODE=lat bash scripts/cloudlab/run_perftest.sh server
-#   MODE=lat bash scripts/cloudlab/run_perftest.sh client 10.10.1.1
+#   DEV=mlx5_2 MODE=lat SIZE=8 bash scripts/cloudlab/run_perftest.sh server
+#   DEV=mlx5_1 MODE=lat SIZE=8 bash scripts/cloudlab/run_perftest.sh client 10.10.1.1
 #
 #   # Custom size sweep (default: 1 × 65536 B, 10s, QPs=1):
 #   SIZE=16384 DURATION=20 QPS=4 bash scripts/cloudlab/run_perftest.sh ...
 #
-# Expected results on d7525 CX-6 / 100 GbE / RoCEv2:
-#   ib_write_bw  -s 65536 : ~92-96 Gbps
-#   ib_write_lat -s 8     : ~1.5-2.0 µs
+# Expected results by hardware class (RoCEv2, GID idx 1, RC, 1 QP, 65536 B):
+#   d7525 CX-6 100 GbE   : ib_write_bw ~92-96 Gbps,  ib_write_lat -s8 ~1.5-2.0 µs
+#   c240g5 CX-6 Lx 25 GbE: ib_write_bw ~24.4 Gbps,  ib_write_lat -s8 ~2.3 µs (p99 2.36)
+#   See docs/phase3/stage-b-hardware-notes.md §8.2 for c240g5 measurement.
 
 set -euo pipefail
 

@@ -3,10 +3,12 @@
 #
 # Run on EACH node right after the experiment reaches Ready state.
 # Verifies hardware, RDMA stack, and link speed match Stage B's
-# assumptions.  Empirically observed on CloudLab (2026-04-21):
-#   - d7525 Wisc: ConnectX-6 (MT28908, fw 20.38.1002), 100 GbE, RoCEv2 GID 1
-#   - d7615 Utah: ConnectX-5 (typ. fw 16.x), 100 GbE, RoCEv2 GID 1
-# This script accepts either NIC family; both use the mlx5_core driver.
+# assumptions.  Empirically observed on CloudLab:
+#   - d7525   Wisc (2026-04-21): CX-6 (MT28908, fw 20.38.1002), 100 GbE, GID 1
+#   - d7615   Utah:              CX-5 (typ. fw 16.x), 100 GbE, GID 1
+#   - c240g5  Wisc (2026-04-23): CX-6 Lx (MT2894), 25 GbE, RoCEv2 GID 1
+# This script accepts CX-5/CX-6/CX-6-Lx; all use the mlx5_core driver.
+# Link speed PASS set: 25 / 50 / 100 / 200 GbE (i.e. any RoCEv2-class link).
 #
 # Does NOT modify system state.  Safe to rerun.
 #
@@ -62,7 +64,7 @@ done
 hdr "Kernel modules"
 lsmod | grep -E '^(mlx5_core|mlx5_ib|ib_core|ib_uverbs|rdma_ucm|ib_umad|rdma_cm)' \
     | awk '{print "  " $1}' || true
-if lsmod | grep -q '^mlx5_core'; then
+if lsmod | awk '$1 == "mlx5_core" {found=1} END {exit !found}'; then
     pass "mlx5_core loaded (Mellanox driver)"
 else
     warn "mlx5_core not loaded — NIC may not be Mellanox, double-check Day-0 product"
@@ -84,16 +86,19 @@ else
     hdr "Experiment link: $IFACE"
     SPEED=$(sudo -n ethtool "$IFACE" 2>/dev/null | awk '/Speed:/ {print $2}')
     DRIVER=$(sudo -n ethtool -i "$IFACE" 2>/dev/null | awk '/^driver:/ {print $2}')
-    MTU=$(ip -br link show "$IFACE" | awk '{print $NF}')
+    MTU=$(ip -o link show "$IFACE" 2>/dev/null | grep -oP 'mtu \K[0-9]+')
     IP4=$(ip -br addr show "$IFACE" | awk '{print $3}')
     echo "  speed:   ${SPEED:-?}"
     echo "  driver:  ${DRIVER:-?}"
     echo "  mtu:     ${MTU:-?}"
     echo "  ipv4:    ${IP4:-none}"
     case "${SPEED:-}" in
-        100000Mb/s) pass "link is 100 Gbps" ;;
+        25000Mb/s)  pass "link is 25 Gbps  (CX-6 Lx class)" ;;
+        50000Mb/s)  pass "link is 50 Gbps" ;;
+        100000Mb/s) pass "link is 100 Gbps (CX-5/CX-6 class)" ;;
+        200000Mb/s) pass "link is 200 Gbps" ;;
         ""|Unknown!) warn "could not read link speed (need sudo?)" ;;
-        *) fail "link speed $SPEED is not 100 Gbps" ;;
+        *) fail "link speed $SPEED outside RoCEv2 expected set {25,50,100,200} Gbps" ;;
     esac
     case "${DRIVER:-}" in
         mlx5_core) pass "driver is mlx5_core (Mellanox CX-5/6)" ;;
