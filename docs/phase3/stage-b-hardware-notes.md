@@ -222,3 +222,79 @@ torchrun --nnodes=2 --node_rank=0 --master_addr=<node0-IP> \
 - [`experiments/configs/stage_b_cloudlab.yaml`](../../experiments/configs/stage_b_cloudlab.yaml) — Hydra 真机 config（dev_name=mlx5_0, GID idx 1, chunk_bytes TBD）
 - [`docs/phase3/rq5-results-ddp-baseline.md`](./rq5-results-ddp-baseline.md) — Stage A on SoftRoCE（已完成）
 - [`docs/phase3/design-ddp-integration.md`](./design-ddp-integration.md) — Stage A/B/C 总设计（本笔记是其 §2.2 的硬件附录）
+
+---
+
+## 8. 2026-04-23 · c240g5 双节点替代记录 + Phase 2 真机重跑
+
+> **节点：** `c240g5-110231`（node0）+ `c240g5-110225`（node1），CloudLab Wisconsin
+> **触发：** 第一次约的 c220g1 节点是纯 Intel NIC（X520 10 GbE，无 RDMA 硬件），不可用；切到 c240g5 拿到真硬件 RoCE。
+> **目标：** §3 的 pending 列表前 3 项一次性收掉（perftest baseline / Phase 2 真机重扫 / 单节点 microbench 在新 CPU 上复测）。
+
+### 8.1 硬件对照（vs §0 d7525）
+
+| 维度 | d7525（§0） | c240g5（本节） | 影响 |
+|------|------------|----------------|------|
+| 机型 | AMD EPYC 7302 16-core (NUMA 2×) | **Intel Xeon Silver 4114 ×2 (40 核)** | CPU 代差/IPC 差异，M1/M2/M4 对应放慢 ~2-3× |
+| 内存 | — | 187 GiB | 对 RQ3 layer-adaptive chunk 留出 buffer 头部 |
+| NIC | CX-6 (MT28908, fw 20.38.1002) | **CX-6 Lx (MT2894)** | 同 ASIC 系列，WQE/sec 同量级；带宽减档 |
+| 链路 | 100 GbE | **25 GbE**（DAC 直连） | 4× 减速；RQ1 chunk-size 拐点不变（CPU-bound） |
+| GPU | 无 | **2× NVIDIA Tesla P100 12 GB** | 后续 RQ5/RQ6 端到端训练有 GPU 可用 |
+| MTU | 1024 (port DOWN) | **9000 jumbo 双向通**（Step 2 sudo set） | RoCEv2 path MTU 自动 ≤ 4096 |
+| PFC | — | **关闭**（`ethtool -A rx off tx off`） | "lossy RoCE" 假设成立 |
+| Experiment LAN | — | 10.10.1.1 ↔ 10.10.1.2，RTT 0.12 ms | 同机架 |
+| RDMA dev 命名 | mlx5_0 | **mlx5_2 on node0 / mlx5_1 on node1** | 不对称，脚本用 `rdma link show` 检测 ACTIVE 那条 |
+
+### 8.2 双节点 perftest baseline
+
+| 测试 | 命令 | 结果 |
+|------|------|------|
+| `ib_write_bw -s 65536` (RC, 1 QP, 10s) | `DEV=mlx5_X bash scripts/cloudlab/run_perftest.sh server/client` | **24.39 Gbps avg**（线速 25 GbE 的 **97.6%**） |
+| `ib_write_lat -s 8` (RC, 10 k iter) | `DEV=mlx5_X MODE=lat SIZE=8 bash scripts/cloudlab/run_perftest.sh server/client` | **t_typical=2.29 µs / p50=2.30 µs / p99=2.36 µs / p99.9=3.53 µs** |
+
+硬件验证：CX-6 Lx 25 GbE 真链路在 RC QP / RoCEv2 GID idx 1 / MTU 4096 下接近线速，p99 latency 极稳。
+
+### 8.3 Phase 2 三组实验真机重跑
+
+完整结果在 [stage-b-phase2-resweep.md](./stage-b-phase2-resweep.md)，CSV 落盘 `experiments/results/cx6lx25g_c240g5/`。要点：
+
+- **RQ1 chunk_sweep**：CPU 轮询主导（chunk_sweep 测的是 server-side wait 而非端到端线速），16 KiB chunk 处 WQE/s 达峰 ~2.55 M/s，与 SoftRoCE 同拐点 → **chunk_bytes=16384 沿用**
+- **RQ2 ghost mask**：1% 丢包 ratio = **0.7065**, 5% 丢包 ratio = **0.7069** — 两节点真线完美命中 1/√2 ≈ 0.7071，与 aliyun SoftRoCE 等价
+- **RQ4 ratio/timeout sweep**：真线 RTT 让 timeout=1ms 全部超时（loopback 下 ms 内可达），新 sweet spot **(ratio=0.95, timeout_ms=5)**：achieved=0.953, wait_p99=**1.46 ms**, timeout_rate=0% — 与 aliyun (0.95, 20ms) 比 timeout 阈下移 4×
+
+测试一处 SoftRoCE 时代固化的 50 ms drain 节流被发现并 patch 成 env-var 可覆盖（[test_chunk_sweep.cpp](../../tests/phase2/test_chunk_sweep.cpp) `SEMIRDMA_DRAIN_MS` / `SEMIRDMA_SETTLE_US`，默认行为不变）。
+
+### 8.4 Stage B 微基准 M1-M5 在 c240g5 上的复测
+
+数据落盘 `experiments/results/cx6lx25g_c240g5/stage_b/microbench_2026-04-22_22-17-23/`。与 d7525 (§2.5) 对照：
+
+| Metric | d7525 (EPYC 7302) | c240g5 (Xeon Silver 4114) | 偏差 |
+|--------|-------------------|--------------------------|------|
+| M1 poll_cq empty (max_n≤16) | 441 ns | **1.43-1.44 µs** | 慢 3.3× |
+| M1 max_n=64 | 541 ns | **1.56 µs** | 慢 2.9× |
+| M2 post_recv (batch=1) | 401 ns | **1.28 µs** | 慢 3.2× |
+| M2 batch=100 | 10.5 ns/WR | **23.6 ns/WR** | 慢 2.2× |
+| M3 reg_mr 256 MiB | 133 ms | **218 ms** | 慢 1.6× |
+| M4 pybind trampoline | 230 ns | **731 ns** | 慢 3.2× |
+| M5 ghost_mask 256 MiB @ 10% loss | ~21 ms (12 GiB/s) | **5.99 ms (41.76 GiB/s)** | **快 3.5×** |
+
+**解读：** M1/M2/M4 主要受 CPU 频率 + IPC 影响（Xeon Silver 4114 是 2.2 GHz Skylake-SP, EPYC 7302 是 3.0 GHz Zen 2）；c240g5 单线程 2-3× 慢。M3 reg_mr 是单核固定开销 + 内存吞吐复合。**M5 反而快 3.5×** 反直觉，待进一步分析（怀疑是 trial 测量 / cache 局部性 / mask 通路的 SIMD 差异）。
+
+**结论方向**与 §2.5 一致：M1 微秒级、M2 必须 batch、M3 reg_mr 不能频繁、M4 非热点、M5 仍 GB/s 级。SemiRDMA 设计假设在 c240g5 / Xeon Silver / CX-6 Lx 上仍成立，绝对开销按本节数字记录。
+
+### 8.5 day0_check.sh 三处 patch
+
+为兼容 25 GbE：
+- L94：增加 25/50/200 Gbps PASS 分支
+- L65：`lsmod | awk '$1 == "mlx5_core"'` 替换 grep 假阴
+- L87：`ip -o link show` + `grep -oP 'mtu \K[0-9]+'` 修 MTU 解析 bug
+
+### 8.6 §3 pending 项状态更新
+
+| 原 §3 项 | 状态 |
+|---------|------|
+| 1. RTR/RTS + 真机 loopback | ✅ 双节点完成（24.39 Gbps + 2.29 µs lat） |
+| 2. ib_write_bw / ib_write_lat baseline | ✅ §8.2 |
+| 3. Phase 2 RQ1 真机重扫 | ✅ §8.3，结论：16 KiB 拐点不变 |
+| 4. RC-Lossy / OptiReduce 5-baseline (RQ6) | 📋 推迟到 GPU/CUDA 装好之后 |
+| 5. Stage A 等价性真机复现 | 📋 同上（需 PyTorch GPU build + NCCL）

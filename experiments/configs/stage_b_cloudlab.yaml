@@ -1,19 +1,22 @@
 # Stage B · CloudLab real-NIC · ResNet-18 / CIFAR-10 / 2 nodes × 1 worker
 #
 # Derived from stage_a_baseline.yaml.  Diffs vs Stage A:
-#   - dev_name: mlx5_0        (CloudLab ConnectX-6, not SoftRoCE rxe0)
+#   - dev_name:   per-node detection — c240g5: mlx5_2 on node0 / mlx5_1 on node1
+#                 (asymmetric NIC slot; auto-detect via:
+#                  rdma link show | awk '$3=="state" && $4=="ACTIVE" {print $2}'
+#                  | cut -d/ -f1).  Earlier d7525 nodes used mlx5_0.
 #   - dist.master_addr:       node1 experiment-LAN IP (set per-run)
 #   - dist.world_size:  2     but one process per node (not same-host MP)
-#   - chunk_bytes:      TBD   — Stage B week-1 recalibration deliverable;
-#                               Phase 2 RQ1 was SoftRoCE, CX-6 100 GbE has
-#                               ~60-100× the WQE rate so the saturation
-#                               point may shift.  Start from 16 KiB and
-#                               re-sweep {4,8,16,32,64,128} KiB on first
-#                               real-NIC run.
-#   - buffer_bytes:     256 MiB — real 100 GbE has no MR-size bottleneck;
-#                                 bump from 128 MiB so single-bucket fits
+#   - chunk_bytes:      16384 — re-sweep on c240g5 CX-6 Lx 25 GbE confirmed
+#                               16 KiB still the WQE-rate peak; CPU-bound
+#                               ChunkSet bookkeeping makes the knee NIC-
+#                               independent.  See docs/phase3/stage-b-phase2-resweep.md §2
+#   - buffer_bytes:     256 MiB — bump from 128 MiB so single-bucket fits
 #                                 ResNet-50 head-room for upcoming Stage B2
 #   - sq_depth / rq_depth:    bumped 4× for CX-6 higher inflight
+#   - timeout_ms:       5 — c240g5 2-node real-wire RQ4 sweep showed (0.95, 5ms)
+#                           sweet spot, wait_p99 = 1.46 ms (vs aliyun 14.8 ms);
+#                           20 ms over-provisions on real NIC.  See resweep doc §4.
 #   - data.root:              ~/data/cifar10 (pre-staged on CloudLab node)
 #
 # Usage (on CloudLab, node0):
@@ -63,14 +66,14 @@ dist:
 
 # --- SemiRDMA transport (real NIC) ------------------------------------
 transport_cfg:
-  dev_name: mlx5_0              # CloudLab d7525 CX-6 (MT28908)
+  dev_name: mlx5_2              # c240g5 node0 default; override per-host (see header)
   gid_index: 1                  # RoCEv2 GID, verified via day0_check.sh
   buffer_bytes: 268435456       # 256 MiB per slot × n_slots=2 → 512 MiB MR
-  chunk_bytes: 16384            # placeholder — re-sweep in Stage B week 1
+  chunk_bytes: 16384            # CX-6 Lx 25 GbE re-sweep confirmed (resweep doc §2)
   sq_depth: 512
   rq_depth: 16384
-  ratio: 0.95                   # Phase 2 RQ4 sweet spot (may re-tune on lossy real NIC)
-  timeout_ms: 20
+  ratio: 0.95                   # Phase 2 RQ4 sweet spot, holds on real NIC
+  timeout_ms: 5                 # c240g5 2-node sweep: (0.95, 5ms) sweet spot
 
 # --- Hydra output layout -----------------------------------------------
 hydra:
