@@ -106,10 +106,15 @@ def _install_hook(ddp_model: DDP, cfg: DictConfig, rank: int) -> object:
             loss_rate=cfg.loss_rate,
             loss_seed=cfg.seed * 31 + 7,   # different drop pattern per seed
         )
+        # Per-rank peer host: rank 0 connects to rank 1's IP, and vice versa.
+        # On same-host runs (Stage A SoftRoCE), set SEMIRDMA_PEER_HOST=127.0.0.1
+        # on both ranks; on multi-host (Stage B real NIC), set it to the
+        # OTHER node's experiment-LAN IP per rank.
+        peer_host = os.environ.get("SEMIRDMA_PEER_HOST", cfg.dist.master_addr)
         state = SemiRDMAHookState.for_rank(
             rank=rank,
             world_size=cfg.dist.world_size,
-            peer_host=cfg.dist.master_addr,
+            peer_host=peer_host,
             port=cfg.dist.semirdma_port,
             cfg=tcfg,
         )
