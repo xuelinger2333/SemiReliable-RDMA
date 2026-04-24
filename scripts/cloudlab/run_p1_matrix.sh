@@ -108,6 +108,17 @@ HAMMER_HOST="${HAMMER_HOST:-chen123@$HAMMER_IP}"
 MIDDLEBOX_HOST="${MIDDLEBOX_HOST:-}"    # e.g. chen123@middlebox.utah.cloudlab.us
 MIDDLEBOX_REPO="${MIDDLEBOX_REPO:-\$HOME/SemiRDMA}"
 
+# GID index.  When MIDDLEBOX_HOST is set we MUST force GID idx 3 (IPv4-mapped
+# RoCE v2, ::ffff:10.10.1.x) so kernel ARP is consulted for dst MAC lookup
+# and the ARP spoof actually steers RoCE through the middlebox.  Idx 1
+# (IPv6 link-local) has its MAC derived from the GID by HW and bypasses
+# the spoof.  Override with GID_INDEX=N if you know what you're doing.
+if [ -n "$MIDDLEBOX_HOST" ]; then
+    GID_INDEX="${GID_INDEX:-3}"
+else
+    GID_INDEX="${GID_INDEX:-1}"
+fi
+
 # HAMMER_MODE — off (default) | rdma
 # When rdma, LOADS="line" cells activate ib_write_bw RC hammer overlay on top of any
 # middlebox-injected drop.  Useful for studying NIC contention on top of wire loss.
@@ -206,9 +217,11 @@ t0=$(date +%s)
 log "=== P1 matrix start (ts=$MATRIX_TS  cells=$total_cells  steps=$STEPS) ==="
 log "    transports=[$TRANSPORTS]  timeouts=[$TIMEOUTS_MS]  loads=[$LOADS]  drop_rates=[$DROP_RATES]  seed=$SEED"
 if [ -n "$MIDDLEBOX_HOST" ]; then
-    log "    middlebox=$MIDDLEBOX_HOST  (DPDK dropbox — wire-level Bernoulli drop on UDP:4791)"
+    log "    middlebox=$MIDDLEBOX_HOST  (XDP dropbox — wire-level Bernoulli drop on UDP:4791)"
+    log "    gid_index=$GID_INDEX (IPv4-mapped RoCE v2 — required for ARP-spoof steering)"
 else
     log "    middlebox=(none — star topology, no wire-level drop injection)"
+    log "    gid_index=$GID_INDEX"
 fi
 case "$HAMMER_MODE" in
     off)  log "    hammer_mode=off  (no ib_write_bw overlay)" ;;
@@ -260,6 +273,7 @@ torchrun --nnodes=2 --node_rank=1 --master_addr=$NODE0_IP --master_port=$master_
   --config-name stage_b_cloudlab \
   transport=$transport loss_rate=0.0 seed=$SEED steps=$STEPS warmup_steps=$WARMUP \
   transport_cfg.dev_name=\$DEV_PEER transport_cfg.ratio=$RATIO transport_cfg.timeout_ms=$timeout_ms \
+  transport_cfg.gid_index=$GID_INDEX \
   dist.semirdma_port=$semi_port \
   hydra.run.dir=$cell_dir \
   > /tmp/p1_peer_${cell_tag}.log 2>&1
@@ -279,6 +293,7 @@ torchrun --nnodes=2 --node_rank=1 --master_addr=$NODE0_IP --master_port=$master_
                 steps="$STEPS" warmup_steps="$WARMUP" \
                 transport_cfg.dev_name="$DEV_THIS" transport_cfg.ratio="$RATIO" \
                 transport_cfg.timeout_ms="$timeout_ms" \
+                transport_cfg.gid_index="$GID_INDEX" \
                 dist.semirdma_port="$semi_port" \
                 hydra.run.dir="$cell_dir" \
                 > "/tmp/p1_this_${cell_tag}.log" 2>&1
