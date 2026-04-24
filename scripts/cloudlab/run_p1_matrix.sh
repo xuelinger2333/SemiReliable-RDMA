@@ -146,14 +146,18 @@ log() { echo "[$(date +%H:%M:%S)] $*" | tee -a "$MATRIX_LOG"; }
 
 middlebox_set_rate() {
     # $1 = drop_rate as decimal (e.g. 0.01 for 1%)
-    # No-op when MIDDLEBOX_HOST is empty (baseline star topology, no DPDK forwarder).
+    # No-op when MIDDLEBOX_HOST is empty (baseline star topology, no middlebox).
     [ -z "$MIDDLEBOX_HOST" ] && return 0
     local rate="$1"
-    ssh "$MIDDLEBOX_HOST" "bash $MIDDLEBOX_REPO/scripts/cloudlab/middlebox_setup.sh set-rate $rate" \
-        >/dev/null 2>&1 || {
-            echo "WARN: middlebox_set_rate $rate on $MIDDLEBOX_HOST failed — continuing" >&2
-            return 1
-        }
+    # set-rate writes a BPF map (CAP_BPF), so it needs sudo on the middlebox.
+    # Assume passwordless sudo (CloudLab default for the experiment user).
+    # Non-silent on failure so misconfigurations surface in the matrix log —
+    # a silent fail would mean cells run at the wrong drop rate and we'd
+    # chase phantom "no drops observed" bugs (like the first attempt did).
+    if ! ssh "$MIDDLEBOX_HOST" "sudo bash $MIDDLEBOX_REPO/scripts/cloudlab/middlebox_setup.sh set-rate $rate" 2>&1 | tee -a "$MATRIX_LOG"; then
+        log "ERR: middlebox_set_rate $rate on $MIDDLEBOX_HOST failed — aborting matrix"
+        exit 10
+    fi
     sleep 2   # let forwarder reseed RNG + reset counters
 }
 

@@ -100,6 +100,7 @@ def _install_hook(ddp_model: DDP, cfg: DictConfig, rank: int) -> object:
         )
         tcfg = TransportConfig(
             dev_name=cfg.transport_cfg.dev_name,
+            gid_index=cfg.transport_cfg.get("gid_index", -1),
             buffer_bytes=cfg.transport_cfg.buffer_bytes,
             chunk_bytes=cfg.transport_cfg.chunk_bytes,
             sq_depth=cfg.transport_cfg.sq_depth,
