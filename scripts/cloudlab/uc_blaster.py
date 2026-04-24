@@ -114,16 +114,24 @@ def run_server(args) -> int:
 
     n_recv = 0
     n_error = 0
+    err_samples = []
     refill_threshold = rq_depth // 2
 
     while time.time() < deadline:
         cqes = engine.poll_cq(256, 10)  # 10 ms block; wakes up on activity
         for c in cqes:
-            # Successful incoming Write-with-immediate → count.
-            if c["opcode_name"] == "IBV_WC_RECV_RDMA_WITH_IMM" and c["status"] == 0:
+            # Successful incoming Write-with-immediate → count.  pybind
+            # opcode_name returns the IBV_WC_ *tail* (e.g. "RECV_RDMA_WITH_IMM",
+            # not the full symbol) — see src/bindings/py_semirdma.cpp opcode_name().
+            if c["opcode_name"] == "RECV_RDMA_WITH_IMM" and c["status"] == 0:
                 n_recv += 1
             else:
                 n_error += 1
+                if len(err_samples) < 5:
+                    err_samples.append(
+                        f"op={c['opcode_name']}({c['opcode']}) "
+                        f"status={c['status_name']}({c['status']})"
+                    )
         # Top up RQ — each consumed WR must be refunded or the NIC will
         # drop future Writes (UC still needs a posted Recv WR for the
         # with-imm variant because the immediate is consumed like a RECV).
@@ -145,6 +153,10 @@ def run_server(args) -> int:
                f"err={n_error}")
     conn.sendall(summary.encode() + b"\n")
     print(f"[server] {summary}", flush=True)
+    if err_samples:
+        print(f"[server] first {len(err_samples)} error CQEs:", flush=True)
+        for s in err_samples:
+            print(f"[server]   {s}", flush=True)
     conn.close()
     srv.close()
     return 0
@@ -175,9 +187,7 @@ def run_client(args) -> int:
     peer_qpn, peer_gid, peer_addr, peer_rkey = exchange(
         sock, local_qp.qpn, local_qp.gid, local_mr.addr, local_mr.rkey
     )
-    remote = RemoteMR()
-    remote.addr = peer_addr
-    remote.rkey = peer_rkey
+    remote = RemoteMR(peer_addr, peer_rkey)
 
     engine.bring_up(RemoteQpInfo(peer_qpn, peer_gid))
     print(f"[client] QP up  peer_qpn={peer_qpn} peer_addr=0x{peer_addr:x} "
