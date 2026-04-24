@@ -10,7 +10,6 @@ from semirdma.config import TransportConfig
 from semirdma.hooks import (
     SemiRDMAHookState,
     semirdma_allreduce_hook,
-    semirdma_hybrid_allreduce_hook,
 )
 from semirdma.transport import SemiRDMATransport
 
@@ -22,5 +21,4 @@ __all__ = [
     "TransportConfig",
     "__version__",
     "semirdma_allreduce_hook",
-    "semirdma_hybrid_allreduce_hook",
 ]

@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# Phase 4 · P1 — Lossy-wire decision matrix: does hybrid buy us anything?
+# Phase 4 · P1 — Lossy-wire decision matrix: semirdma (pure UC) characterization.
 #
 # Matrix:
-#   transport ∈ {semirdma, semirdma_hybrid}
+#   transport ∈ {semirdma}        # pure UC; hybrid variant removed 2026-04-25
+#                                 # (see docs/phase4/hybrid-dead-end.md)
 #   timeout_ms ∈ {5, 50, 500}
 #   drop_rate ∈ $DROP_RATES     # wire-level Bernoulli drop via XDP middlebox
 #   seed = 42 (single seed; Phase 3 already characterized seed variance)
@@ -70,7 +71,7 @@
 set -uo pipefail
 
 # ================== knobs ==================
-TRANSPORTS="${TRANSPORTS:-semirdma semirdma_hybrid}"
+TRANSPORTS="${TRANSPORTS:-semirdma}"
 TIMEOUTS_MS="${TIMEOUTS_MS:-5 50 500}"
 DROP_RATES="${DROP_RATES:-0}"           # Bernoulli wire-level drop via XDP middlebox; "0" = pass-through
 SEED="${SEED:-42}"
