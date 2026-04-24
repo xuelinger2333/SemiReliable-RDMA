@@ -34,6 +34,7 @@ CHUNK_BYTES="${CHUNK_BYTES:-16384}"
 SQ_DEPTH="${SQ_DEPTH:-512}"
 RQ_DEPTH="${RQ_DEPTH:-4096}"
 DURATION="${DURATION:-30}"
+RATE_CAP_GBPS="${RATE_CAP_GBPS:-0}"   # 0 = uncapped blast; >0 paces client offered rate
 
 # ---- hammer tunables -----------------------------------------------------
 # Set to "0" to skip a hammer-off cell; anything else is passed to iperf3 -b.
@@ -43,6 +44,14 @@ HAMMER_RATES="${HAMMER_RATES:-0 5G 10G 20G}"
 HAMMER_PARALLEL="${HAMMER_PARALLEL:-16}"
 HAMMER_PKT="${HAMMER_PKT:-8900}"
 HAMMER_DUR="${HAMMER_DUR:-$((DURATION + 15))}"
+# HAMMER_TYPE = udp | rdma
+# - udp:  iperf3 UDP blast, exercises kernel softirq on target → useful for
+#         "does UDP competition destabilize RoCE receive" story.  Subject to
+#         Python RQ-refill cliff at 15+ Gbps UC offered.
+# - rdma: ib_write_bw RC blast from hammer node → target.  DMA path, no
+#         kernel softirq on target, so this actually exercises switch
+#         egress overflow instead of kernel contention.
+HAMMER_TYPE="${HAMMER_TYPE:-udp}"
 
 REPO="${REPO:-$HOME/SemiRDMA}"
 TS=$(date +%Y%m%d_%H%M%S)
@@ -65,16 +74,42 @@ cleanup_servers() {
 start_hammer() {
     local rate="$1"
     [ "$rate" = "0" ] && return 0
-    ssh "$SRV_HOST" "bash $REPO/scripts/cloudlab/hammer_udp.sh server" >/dev/null
-    ssh -f "$HMR_HOST" "cd $REPO && PARALLEL=$HAMMER_PARALLEL PKT_SIZE=$HAMMER_PKT \
-        nohup bash scripts/cloudlab/hammer_udp.sh client $SRV_IP $rate $HAMMER_DUR \
-        </dev/null >/tmp/uc_cal_hammer_${TS}_${rate}.log 2>&1"
+    case "$HAMMER_TYPE" in
+        udp)
+            ssh "$SRV_HOST" "bash $REPO/scripts/cloudlab/hammer_udp.sh server" >/dev/null
+            ssh -f "$HMR_HOST" "cd $REPO && PARALLEL=$HAMMER_PARALLEL PKT_SIZE=$HAMMER_PKT \
+                nohup bash scripts/cloudlab/hammer_udp.sh client $SRV_IP $rate $HAMMER_DUR \
+                </dev/null >/tmp/uc_cal_hammer_${TS}_${rate}.log 2>&1"
+            ;;
+        rdma)
+            # ib_write_bw server on target (amd203), client on hammer node (amd186).
+            # Note: the two ib_write_bw ports must NOT collide with uc_blaster's
+            # port (31111); hammer_rdma.sh defaults to 18600.  They also must not
+            # collide with each other across back-to-back cells — hammer_rdma.sh
+            # pkills stale sessions in its `stop`.
+            ssh "$SRV_HOST" "bash $REPO/scripts/cloudlab/hammer_rdma.sh server" >/dev/null
+            sleep 1
+            ssh "$HMR_HOST" "bash $REPO/scripts/cloudlab/hammer_rdma.sh client $SRV_IP $rate $HAMMER_DUR" >/dev/null
+            ;;
+        *)
+            echo "ERR: unknown HAMMER_TYPE=$HAMMER_TYPE (want udp or rdma)" >&2
+            return 1
+            ;;
+    esac
     sleep 3   # ramp
 }
 
 stop_hammer() {
-    ssh "$HMR_HOST" "bash $REPO/scripts/cloudlab/hammer_udp.sh stop" >/dev/null 2>&1 || true
-    ssh "$SRV_HOST" "bash $REPO/scripts/cloudlab/hammer_udp.sh stop" >/dev/null 2>&1 || true
+    case "$HAMMER_TYPE" in
+        udp)
+            ssh "$HMR_HOST" "bash $REPO/scripts/cloudlab/hammer_udp.sh stop" >/dev/null 2>&1 || true
+            ssh "$SRV_HOST" "bash $REPO/scripts/cloudlab/hammer_udp.sh stop" >/dev/null 2>&1 || true
+            ;;
+        rdma)
+            ssh "$HMR_HOST" "bash $REPO/scripts/cloudlab/hammer_rdma.sh stop" >/dev/null 2>&1 || true
+            ssh "$SRV_HOST" "bash $REPO/scripts/cloudlab/hammer_rdma.sh stop" >/dev/null 2>&1 || true
+            ;;
+    esac
 }
 
 run_one() {
@@ -101,7 +136,8 @@ run_one() {
     python "$REPO/scripts/cloudlab/uc_blaster.py" client \
         --peer "$SRV_IP" --dev "$DEV" --port "$BLAST_PORT" \
         --duration "$DURATION" --chunk-bytes "$CHUNK_BYTES" \
-        --sq-depth "$SQ_DEPTH" 2>&1 | tee "$client_log"
+        --sq-depth "$SQ_DEPTH" --rate-cap-gbps "$RATE_CAP_GBPS" \
+        2>&1 | tee "$client_log"
     local rc=${PIPESTATUS[0]}
 
     stop_hammer

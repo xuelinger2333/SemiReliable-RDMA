@@ -206,6 +206,17 @@ def run_client(args) -> int:
     n_post_fail = 0
     imm = 0
 
+    # Rate-cap pacing: every BATCH posts, sleep to hold offered rate at
+    # --rate-cap-gbps.  With 0 cap, the check is a no-op.  Purpose: diagnose
+    # whether blaster-side UC "loss" is a NIC/switch property or a Python
+    # RQ-refill bottleneck on the receiver (Phase 4 causality split).
+    BATCH = 1024
+    bytes_per_batch = BATCH * args.chunk_bytes
+    target_batch_sec = (bytes_per_batch * 8 / (args.rate_cap_gbps * 1e9)
+                        if args.rate_cap_gbps > 0 else 0.0)
+    t_batch_start = time.perf_counter()
+    posts_this_batch = 0
+
     # Main blast loop.  We keep SQ full; when post_write fails due to queue
     # overrun, drain CQEs for send completions and retry.
     while time.time() < t_stop:
@@ -227,11 +238,22 @@ def run_client(args) -> int:
             imm += 1
             n_sq += 1
             n_sent += 1
+            posts_this_batch += 1
         # Free SQ slots by polling send completions.
         cqes = engine.poll_cq(256, 0)
         n_sq -= len(cqes)
         if n_sq < 0:
             n_sq = 0
+        # Pace for --rate-cap-gbps: every BATCH posts, sleep to the target
+        # batch duration.  Coarse but adequate — 1024 × 16 KB = 16 MB per
+        # batch, at 1 Gbps that's 128 ms, plenty of sleep granularity.
+        if target_batch_sec > 0 and posts_this_batch >= BATCH:
+            now = time.perf_counter()
+            elapsed = now - t_batch_start
+            if elapsed < target_batch_sec:
+                time.sleep(target_batch_sec - elapsed)
+            t_batch_start = time.perf_counter()
+            posts_this_batch = 0
 
     # Drain remaining inflight sends before reporting totals.
     drain_deadline = time.time() + 2.0
@@ -273,6 +295,10 @@ def main() -> int:
     c.add_argument("--duration", type=float, default=30.0)
     c.add_argument("--chunk-bytes", type=int, default=16384)
     c.add_argument("--sq-depth", type=int, default=512)
+    c.add_argument("--rate-cap-gbps", type=float, default=0.0,
+                   help="Cap offered rate (Gbps). 0 = uncapped (blast as fast as SQ allows). "
+                        "Used by Phase 4 calibration to separate NIC hardware loss from "
+                        "Python RQ-refill bottleneck.")
 
     args = p.parse_args()
     if args.role == "server":
