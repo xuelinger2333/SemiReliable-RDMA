@@ -116,8 +116,9 @@ parse_cell() {
         final_loss=$(tail -n1 "$cell_dir/loss_per_step.csv" | cut -d, -f2)
     fi
     if [ -f "$cell_dir/iter_time.csv" ]; then
-        # iter_time.csv schema: step,iter_s (first line is header).  Convert s → ms, mean of last (STEPS-WARMUP) rows.
-        mean_iter_ms=$(awk -F, -v w="$WARMUP" 'NR>1+w {sum+=$2; n++} END {if(n>0) printf "%.2f", sum/n*1000; else print "?"}' "$cell_dir/iter_time.csv")
+        # iter_time.csv schema:  step,fwd_ms,bwd_ms,opt_ms,total_ms  (col 5 = full iter time, already in ms).
+        # Exclude warmup rows (first WARMUP+1 lines = header + warmup steps).
+        mean_iter_ms=$(awk -F, -v w="$WARMUP" 'NR>1+w {sum+=$5; n++} END {if(n>0) printf "%.2f", sum/n; else print "?"}' "$cell_dir/iter_time.csv")
     fi
     echo "$final_loss $mean_iter_ms"
 }
