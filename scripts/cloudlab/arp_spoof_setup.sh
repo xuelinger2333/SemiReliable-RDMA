@@ -31,6 +31,21 @@
 #
 # The middlebox MAC is printed by middlebox_setup.sh bootstrap and also
 # visible via `ip -br link show enp65s0f0np0` on amd186.
+#
+# IPv4 vs IPv6 note
+# -----------------
+# RoCE v2 GID index 1 uses the peer's IPv6 link-local address, and mlx5 HW
+# derives the dst MAC from that GID *without* consulting the kernel neigh
+# table — so IPv4 ARP spoof alone is not enough.  Two paths to handle this:
+#
+#   a. Force training code + ib_write_bw to use GID index 3 (IPv4-mapped
+#      RoCE v2 — ::ffff:10.10.1.x).  That path DOES use kernel ARP → IPv4
+#      ARP spoof works.  This is what run_p1_matrix.sh does; it passes
+#      transport_cfg.gid_index=3 on the experiment and -x 3 on ib_write_bw.
+#
+#   b. Additionally spoof IPv6 link-local neighbor entries (apply-v6
+#      subcommand).  Defensive — covers rdma_cm / older stacks that don't
+#      honor the gid_index override.
 
 set -uo pipefail
 
@@ -71,11 +86,11 @@ require_mac() {
 }
 
 # -------------------------------------------------------------------------
-# apply — write static ARP entries on both peers
+# apply — write static IPv4 ARP entries on both peers
 # -------------------------------------------------------------------------
 do_apply() {
     require_mac
-    info "applying ARP spoof: both peers → $MIDDLEBOX_MAC for the other peer's IP"
+    info "applying IPv4 ARP spoof: both peers → $MIDDLEBOX_MAC for the other peer's IP"
 
     # On PEER_A (the receiver, often local self): PEER_B_IP → MIDDLEBOX_MAC
     info "  $PEER_A_HOST (=${PEER_A_HOST:-self}): arp -s $PEER_B_IP $MIDDLEBOX_MAC"
@@ -87,7 +102,52 @@ do_apply() {
     peer_run "$PEER_B_HOST" "sudo ip neigh replace $PEER_A_IP lladdr $MIDDLEBOX_MAC nud permanent dev $PEER_IFACE" \
         || { err "peer B apply failed"; exit 4; }
 
-    info "✓ ARP spoof in place — verify with 'bash $0 status'"
+    info "✓ IPv4 ARP spoof in place — verify with 'bash $0 status'"
+    info "  If RoCE still bypasses middlebox, also run: bash $0 apply-v6"
+}
+
+# -------------------------------------------------------------------------
+# apply-v6 — additionally spoof IPv6 link-local neighbor entries
+# -------------------------------------------------------------------------
+do_apply_v6() {
+    require_mac
+    info "applying IPv6 neighbor spoof on link-local addresses"
+
+    # Peer link-locals are EUI-64 derived from each peer's MAC.  Discover
+    # them from /sys/class/net/<iface>/address on the respective peer
+    # rather than hardcoding — avoids nested-quoting hell with ssh+awk.
+    local peer_a_mac peer_b_mac peer_a_ll peer_b_ll
+    peer_a_mac=$(peer_run "$PEER_A_HOST" "cat /sys/class/net/$PEER_IFACE/address")
+    peer_b_mac=$(peer_run "$PEER_B_HOST" "cat /sys/class/net/$PEER_IFACE/address")
+    peer_a_ll=$(mac_to_ll6 "$peer_a_mac")
+    peer_b_ll=$(mac_to_ll6 "$peer_b_mac")
+    info "  peer A LL = $peer_a_ll  (from mac $peer_a_mac)"
+    info "  peer B LL = $peer_b_ll  (from mac $peer_b_mac)"
+
+    # On A: B's link-local → middlebox MAC
+    peer_run "$PEER_A_HOST" "sudo ip -6 neigh replace $peer_b_ll lladdr $MIDDLEBOX_MAC nud permanent dev $PEER_IFACE" \
+        || { err "peer A v6 spoof failed"; exit 5; }
+    # On B: A's link-local → middlebox MAC
+    peer_run "$PEER_B_HOST" "sudo ip -6 neigh replace $peer_a_ll lladdr $MIDDLEBOX_MAC nud permanent dev $PEER_IFACE" \
+        || { err "peer B v6 spoof failed"; exit 6; }
+    info "✓ IPv6 link-local neighbors spoofed"
+}
+
+# Compute the IPv6 link-local (fe80::/10) address from a MAC via EUI-64.
+mac_to_ll6() {
+    local mac="$1"
+    python3 -c "
+mac = '$mac'.lower().split(':')
+# Flip universal/local bit of first byte, then insert ff:fe between bytes 3 and 4.
+b = [int(x, 16) for x in mac]
+b[0] ^= 0x02
+eui64 = [b[0], b[1], b[2], 0xff, 0xfe, b[3], b[4], b[5]]
+# format as colon-separated 16-bit groups
+groups = [(eui64[i] << 8) | eui64[i+1] for i in range(0, 8, 2)]
+ll = 'fe80::' + ':'.join(f'{g:x}' for g in groups).lstrip(':')
+# Drop leading zeros in each group — Linux canonicalizes that way.
+print(ll)
+"
 }
 
 # -------------------------------------------------------------------------
@@ -104,33 +164,47 @@ do_status() {
 # restore — remove the static entries so normal ARP resolution takes over
 # -------------------------------------------------------------------------
 do_restore() {
-    info "removing static ARP entries"
-    peer_run "$PEER_A_HOST" "sudo ip neigh del $PEER_B_IP dev $PEER_IFACE" || true
-    peer_run "$PEER_B_HOST" "sudo ip neigh del $PEER_A_IP dev $PEER_IFACE" || true
-    info "✓ restored.  Normal ARP resolution will rediscover the real peer MACs."
+    info "removing static IPv4 ARP entries"
+    peer_run "$PEER_A_HOST" "sudo ip neigh del $PEER_B_IP dev $PEER_IFACE" 2>/dev/null || true
+    peer_run "$PEER_B_HOST" "sudo ip neigh del $PEER_A_IP dev $PEER_IFACE" 2>/dev/null || true
+    # Also clean v6 spoofs if any.
+    local peer_a_mac peer_b_mac peer_a_ll peer_b_ll
+    peer_a_mac=$(peer_run "$PEER_A_HOST" "cat /sys/class/net/$PEER_IFACE/address" 2>/dev/null)
+    peer_b_mac=$(peer_run "$PEER_B_HOST" "cat /sys/class/net/$PEER_IFACE/address" 2>/dev/null)
+    if [ -n "$peer_a_mac" ] && [ -n "$peer_b_mac" ]; then
+        peer_a_ll=$(mac_to_ll6 "$peer_a_mac")
+        peer_b_ll=$(mac_to_ll6 "$peer_b_mac")
+        peer_run "$PEER_A_HOST" "sudo ip -6 neigh del $peer_b_ll dev $PEER_IFACE" 2>/dev/null || true
+        peer_run "$PEER_B_HOST" "sudo ip -6 neigh del $peer_a_ll dev $PEER_IFACE" 2>/dev/null || true
+    fi
+    info "✓ restored.  Normal ARP/ND resolution will rediscover the real peer MACs."
 }
 
 # -------------------------------------------------------------------------
 # dispatch
 # -------------------------------------------------------------------------
 case "$MODE" in
-    apply)   do_apply   ;;
-    status)  do_status  ;;
-    restore) do_restore ;;
+    apply)    do_apply    ;;
+    apply-v6) do_apply_v6 ;;
+    status)   do_status   ;;
+    restore)  do_restore  ;;
     *)
         cat >&2 <<USAGE
-Usage: $0 {apply | status | restore}
+Usage: $0 {apply | apply-v6 | status | restore}
 
-  apply    write static ARP entries on both peers → middlebox MAC
-           requires MIDDLEBOX_MAC env var (from amd186's ip -br link)
-  status   show current ARP entries for the two peer IPs on both peers
-  restore  remove the static entries, let normal ARP take over
+  apply      write static IPv4 ARP entries on both peers → middlebox MAC
+             requires MIDDLEBOX_MAC env var (from amd186's ip -br link)
+  apply-v6   additionally spoof IPv6 link-local neighbor entries
+             needed when RoCE v2 uses GID idx 1 (IPv6 link-local) —
+             unnecessary if training is configured with gid_index=3
+  status     show current ARP entries for the two peer IPs on both peers
+  restore    remove the static entries, let normal ARP/ND take over
 
 Env overrides:
   PEER_A_HOST, PEER_A_IP (default: self, 10.10.1.1 — receiver)
   PEER_B_HOST, PEER_B_IP (default: chen123@10.10.1.3, 10.10.1.3 — sender)
   PEER_IFACE             (default: enp65s0f0np0)
-  MIDDLEBOX_MAC          (required for apply)
+  MIDDLEBOX_MAC          (required for apply and apply-v6)
 USAGE
         exit 2
         ;;

@@ -89,6 +89,19 @@ struct {
     __uint(pinning, LIBBPF_PIN_BY_NAME);
 } drop_rate_map SEC(".maps");
 
+// self_mac[0] = the 6-byte MAC of the interface XDP is attached to.  We
+// rewrite src_mac on every XDP_TX so the upstream switch's MAC-learning
+// table stays consistent (no flapping between real-peer MACs seen from
+// multiple switch ports) — without this, RoCE traffic stalls because the
+// switch treats our forwarding as a MAC-move event and starts dropping.
+struct {
+    __uint(type, BPF_MAP_TYPE_ARRAY);
+    __uint(max_entries, 1);
+    __type(key, __u32);
+    __type(value, unsigned char[6]);
+    __uint(pinning, LIBBPF_PIN_BY_NAME);
+} self_mac SEC(".maps");
+
 // Per-CPU counters.  Loader sums across CPUs for reporting.
 struct {
     __uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);
@@ -126,56 +139,71 @@ int xdp_dropbox(struct xdp_md *ctx)
     if ((void *)(eth + 1) > data_end)
         return XDP_PASS;
     if (eth->h_proto != bpf_htons(ETH_P_IP))
-        return XDP_PASS;    // IPv6, ARP, etc. — let kernel handle
+        return XDP_PASS;    // IPv6, ARP, etc. — let kernel handle normally
 
     // ---- Parse IPv4 ----
     struct iphdr *ip = (struct iphdr *)(eth + 1);
     if ((void *)(ip + 1) > data_end)
         return XDP_PASS;
-    if (ip->protocol != IPPROTO_UDP)
-        return XDP_PASS;
-    // Accept only the common 20-byte IP header (no options).  RoCE v2
-    // packets never use options in practice.  Supporting ihl > 5 would
-    // require a variable-offset parse that often fails the verifier.
-    if (ip->ihl != 5)
+
+    // If dst IP isn't one of the two training peers, the packet is actually
+    // addressed to the middlebox (or beyond) — hand it to the kernel so SSH,
+    // apt, ICMP to ourselves, ARP probes, etc. keep working.
+    unsigned char *new_mac = bpf_map_lookup_elem(&peer_macs, &ip->daddr);
+    if (!new_mac)
         return XDP_PASS;
 
-    // ---- Parse UDP ----
-    struct udphdr *udp = (struct udphdr *)((void *)ip + 20);
-    if ((void *)(udp + 1) > data_end)
-        return XDP_PASS;
-    if (udp->dest != bpf_htons(ROCE_V2_UDP_PORT))
-        return XDP_PASS;
+    // From here on, we *know* the packet is meant for a training peer via
+    // the ARP-spoof trick.  All such traffic (TCP bootstrap, ICMP, other
+    // UDP, and RoCE v2 data) must be transparently forwarded at L2, with
+    // only UDP:4791 subject to the Bernoulli drop.
 
-    stat_inc(STAT_RX_ROCE);
-
-    // ---- Bernoulli drop ----
-    __u32 zero = 0;
-    __u32 *rate_ppm = bpf_map_lookup_elem(&drop_rate_map, &zero);
-    if (rate_ppm && *rate_ppm > 0) {
-        __u32 roll = bpf_get_prandom_u32() % 1000000U;
-        if (roll < *rate_ppm) {
-            stat_inc(STAT_DROPPED);
-            return XDP_DROP;
+    // ---- Optional: Bernoulli drop on RoCE v2 only ----
+    // Parse UDP lazily, and only if the IP header is a common 20-byte
+    // form — RoCE v2 packets never use IP options.  If the header shape
+    // is anything else (ihl>5, TCP, ICMP, etc.), just forward it.
+    int is_roce = 0;
+    if (ip->ihl == 5 && ip->protocol == IPPROTO_UDP) {
+        struct udphdr *udp = (struct udphdr *)((void *)ip + 20);
+        if ((void *)(udp + 1) <= data_end &&
+            udp->dest == bpf_htons(ROCE_V2_UDP_PORT)) {
+            is_roce = 1;
+        }
+    }
+    if (is_roce) {
+        stat_inc(STAT_RX_ROCE);
+        __u32 zero = 0;
+        __u32 *rate_ppm = bpf_map_lookup_elem(&drop_rate_map, &zero);
+        if (rate_ppm && *rate_ppm > 0) {
+            __u32 roll = bpf_get_prandom_u32() % 1000000U;
+            if (roll < *rate_ppm) {
+                stat_inc(STAT_DROPPED);
+                return XDP_DROP;
+            }
         }
     }
 
-    // ---- Rewrite dst MAC ----
-    unsigned char *new_mac = bpf_map_lookup_elem(&peer_macs, &ip->daddr);
-    if (new_mac) {
-        // Copy 6 bytes explicitly — verifier is happier with this than
-        // __builtin_memcpy when the source is a map value pointer.
-        eth->h_dest[0] = new_mac[0];
-        eth->h_dest[1] = new_mac[1];
-        eth->h_dest[2] = new_mac[2];
-        eth->h_dest[3] = new_mac[3];
-        eth->h_dest[4] = new_mac[4];
-        eth->h_dest[5] = new_mac[5];
+    // ---- Rewrite dst + src MAC and XDP_TX out the same port ----
+    // dst_mac: peer's real MAC (so peer's kernel/NIC accepts as local).
+    // src_mac: our own MAC (so switch MAC-learning stays consistent and
+    //          doesn't treat us as a MAC-flap / port-security violation).
+    eth->h_dest[0] = new_mac[0];
+    eth->h_dest[1] = new_mac[1];
+    eth->h_dest[2] = new_mac[2];
+    eth->h_dest[3] = new_mac[3];
+    eth->h_dest[4] = new_mac[4];
+    eth->h_dest[5] = new_mac[5];
+
+    __u32 zero2 = 0;
+    unsigned char *self = bpf_map_lookup_elem(&self_mac, &zero2);
+    if (self) {
+        eth->h_source[0] = self[0];
+        eth->h_source[1] = self[1];
+        eth->h_source[2] = self[2];
+        eth->h_source[3] = self[3];
+        eth->h_source[4] = self[4];
+        eth->h_source[5] = self[5];
     }
-    // If no mapping: leave dst_mac as-is (= our own MAC, since ARP spoof
-    // pointed the peer here).  NIC will reflect-and-drop that.  This is a
-    // safety net for misconfigured peer_macs: no traffic leaks to wrong
-    // destination; it just fails visibly.
 
     stat_inc(STAT_TX_OK);
     return XDP_TX;

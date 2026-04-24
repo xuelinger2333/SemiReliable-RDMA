@@ -16,12 +16,18 @@ BPFTOOL  ?= bpftool
 ARCH     ?= $(shell uname -m | sed 's/x86_64/x86/; s/aarch64/arm64/')
 KERNEL_RELEASE ?= $(shell uname -r)
 
-# libbpf headers are in /usr/include/bpf/ on Ubuntu 22.04's libbpf-dev.
-# Kernel headers (for linux/bpf.h etc.) are in /usr/include/ or
-# /usr/src/linux-headers-*/include/.
+# libbpf headers live in /usr/include/bpf/ (libbpf-dev).
+# Kernel UAPI headers live in /usr/include/linux/ but pull in <asm/types.h>
+# which is only exposed through arch-specific multiarch include paths on
+# Ubuntu — without -idirafter the compile fails with:
+#   'asm/types.h' file not found
+# Discover that path dynamically; fall back to the common x86_64 location.
+MULTIARCH ?= $(shell dpkg-architecture -qDEB_HOST_MULTIARCH 2>/dev/null || echo x86_64-linux-gnu)
+ASM_INC   ?= /usr/include/$(MULTIARCH)
+
 BPF_CFLAGS = -g -O2 -target bpf -D__TARGET_ARCH_$(ARCH) \
              -Wall -Wno-unused-value -Wno-pointer-sign -Wno-compare-distinct-pointer-types \
-             -I/usr/include -I/usr/include/bpf
+             -I/usr/include -I/usr/include/bpf -idirafter $(ASM_INC)
 
 OBJS = xdp_dropbox.bpf.o
 

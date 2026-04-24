@@ -25,11 +25,19 @@
 #     NODE0 (rank 0 + receiver)  ←─ switch ─→  NODE1 (rank 1)
 #                                  ↑
 #                            amd186 (hammer source, optional overlay)
-#   With DPDK middlebox (line topology):
-#     NODE1 (sender) ─→ MIDDLEBOX (DPDK l2fwd + Bernoulli drop on UDP:4791) ─→ NODE0 (receiver)
-#     MIDDLEBOX_HOST env var points to middlebox's management address; drop rate is set
-#     via ssh + scripts/cloudlab/middlebox_setup.sh set-rate <rate> at the top of each
-#     outer iteration.
+#   With XDP middlebox (ARP-spoof "bump in the wire"):
+#     NODE1 (sender) ─→ MIDDLEBOX (XDP/eBPF on amd186) ─→ NODE0 (receiver)
+#     MIDDLEBOX_HOST env var points to middlebox's management address; drop rate is
+#     set via ssh + scripts/cloudlab/middlebox_setup.sh set-rate <rate> at the top
+#     of each outer iteration.
+#
+#     CRITICAL: when MIDDLEBOX_HOST is set, training MUST use
+#       transport_cfg.gid_index=3
+#     because GID idx 1 (IPv6 link-local) has its dst MAC derived by mlx5 HW
+#     directly from the GID (no kernel ARP lookup), so the ARP spoof doesn't
+#     steer RoCE traffic through amd186.  Idx 3 is RoCE v2 IPv4-mapped and
+#     DOES consult kernel ARP.  The matrix auto-appends gid_index=3 to the
+#     torchrun args when MIDDLEBOX_HOST is non-empty.
 #
 # HAMMER_MODE switch (default off):
 #   off   — no hammer.  Normal operation.  Used by the DPDK-middlebox main matrix.
