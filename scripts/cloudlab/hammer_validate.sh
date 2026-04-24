@@ -78,15 +78,19 @@ echo ""
 ssh_tgt() { $SSH "$SSH_USER@$TGT_HOST" "$@"; }
 ssh_hmr() { $SSH "$SSH_USER@$HMR_HOST" "$@"; }
 
-# Start ib_write_lat server on amd203, with a specific port, in background.
+# Start perftest server in background on the remote.  Uses ssh -f (fork the
+# ssh connection itself) + </dev/null redirect — without this pair, `ssh
+# "nohup X &"` fails to actually launch X because the remote shell exits
+# before the fork completes and systemd cleans up the orphan.  Verified
+# empirically on amd203/CX-5 during Phase 4 P0 setup.
 start_lat_server() {
-    ssh_tgt "cd $REPO && command -v ib_write_lat && nohup ib_write_lat -d $DEV -x $GID_IDX -p $PORT_LAT -s $PROBE_SIZE --iters=$LAT_ITERS -F >/tmp/lat_server_$TS.log 2>&1 &" >/dev/null
-    sleep 1
+    ssh -f "$SSH_USER@$TGT_HOST" "nohup ib_write_lat -d $DEV -x $GID_IDX -p $PORT_LAT -s $PROBE_SIZE --iters=$LAT_ITERS -F </dev/null >/tmp/lat_server_$TS.log 2>&1"
+    sleep 1.5
 }
 
 start_bw_server() {
-    ssh_tgt "cd $REPO && command -v ib_write_bw && nohup ib_write_bw -d $DEV -x $GID_IDX -p $PORT_BW -s $PROBE_SIZE -D $BW_DURATION -q 1 --report_gbits -F >/tmp/bw_server_$TS.log 2>&1 &" >/dev/null
-    sleep 1
+    ssh -f "$SSH_USER@$TGT_HOST" "nohup ib_write_bw -d $DEV -x $GID_IDX -p $PORT_BW -s $PROBE_SIZE -D $BW_DURATION -q 1 --report_gbits -F </dev/null >/tmp/bw_server_$TS.log 2>&1"
+    sleep 1.5
 }
 
 run_lat_client() {
@@ -123,10 +127,12 @@ kill_remote_perftest
 # ---------- Phase B: start hammer ----------
 echo ""
 echo "--- Phase B: start hammer on $HMR_HOST → $TGT_HOST @ $RATE ---"
-# Make sure target has hammer server up
+# Make sure target has hammer server up (hammer_udp.sh server self-backgrounds
+# properly via its own nohup + pidfile, so regular ssh is fine here).
 ssh_tgt "bash $REPO/scripts/cloudlab/hammer_udp.sh server" | sed 's/^/  tgt: /'
-# Fire-and-forget client; runs for $DUR seconds on amd186
-ssh_hmr "cd $REPO && PARALLEL=$PARALLEL PKT_SIZE=$PKT nohup bash scripts/cloudlab/hammer_udp.sh client $TGT_EXP_IP $RATE $DUR >/tmp/hammer_client_$TS.log 2>&1 &" >/dev/null
+# Fire-and-forget client on amd186; use ssh -f so the client runs for $DUR
+# seconds after our ssh returns.
+ssh -f "$SSH_USER@$HMR_HOST" "cd $REPO && PARALLEL=$PARALLEL PKT_SIZE=$PKT nohup bash scripts/cloudlab/hammer_udp.sh client $TGT_EXP_IP $RATE $DUR </dev/null >/tmp/hammer_client_$TS.log 2>&1"
 # Let the hammer ramp; iperf3 UDP reaches target rate in ~1-2 sec
 sleep 3
 echo "  hammer ramped (slept 3s)"
