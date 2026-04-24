@@ -22,9 +22,14 @@ Implementation: mirrors ``SemiRDMAHookState.for_rank`` so the training
 driver can substitute ``transport=rc_rdma`` without touching rendezvous
 / bootstrap code.  Two ``ReliableRDMATransport`` instances (tx/rx), both
 brought up via the same TCP exchange pattern used by the UC hook.
-"""
 
-from __future__ import annotations
+Note: this file intentionally does NOT do ``from __future__ import
+annotations``.  PyTorch's ``DDP.register_comm_hook`` identity-checks the
+``bucket`` type annotation against ``torch.distributed.GradBucket``;
+PEP-563 stringification makes that check fail ("bucket annotation should
+be dist.GradBucket").  ``semirdma.hooks`` avoids the same trap the
+same way.
+"""
 
 import logging
 import threading
