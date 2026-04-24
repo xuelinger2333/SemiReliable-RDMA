@@ -67,9 +67,19 @@ class SemiRDMATransport:
 
     def __init__(self, cfg: TransportConfig) -> None:
         self._cfg = cfg
+        # Forward qp_type + RC params even though SemiRDMA's primary caller
+        # always uses "uc" — lets the baselines subpackage reuse this same
+        # transport class with qp_type="rc" at construction time.  RC attrs
+        # are no-ops when qp_type="uc".
         self._engine = UCQPEngine(
             cfg.dev_name, cfg.buffer_bytes, cfg.sq_depth, cfg.rq_depth,
             gid_index=cfg.gid_index,
+            qp_type=cfg.qp_type,
+            rc_timeout=cfg.rc_timeout,
+            rc_retry_cnt=cfg.rc_retry_cnt,
+            rc_rnr_retry=cfg.rc_rnr_retry,
+            rc_min_rnr_timer=cfg.rc_min_rnr_timer,
+            rc_max_rd_atomic=cfg.rc_max_rd_atomic,
         )
         self._ratio = RatioController(self._engine)
         self._wr_seq = 0  # monotonic wr_id for Writes; aids post-mortem debug

@@ -1,13 +1,30 @@
 /*
- * uc_qp_engine.h — RAII C++ wrapper for UC QP lifecycle
+ * uc_qp_engine.h — RAII C++ wrapper for UC/RC QP lifecycle
+ *
+ * Named historically for the UC use-case, but dual-mode since 2026-04-25:
+ * switching ``qp_type`` to "rc" reuses the exact same Write-with-Immediate
+ * data path with the NIC's hardware-implemented RC reliability (ACK,
+ * retransmit, retry-exhausted error).  This is what NCCL does internally
+ * too — both paths call ``ibv_create_qp`` with IBV_QPT_{UC,RC} on the same
+ * NIC — so the RC path here is HW-official, not a self-built reliability
+ * layer.
  *
  * Encapsulates the Phase 1 rdma_common.h patterns into a C++ class:
- *   - Device open, PD, CQ, buffer, MR, UC QP creation (constructor)
+ *   - Device open, PD, CQ, buffer, MR, UC/RC QP creation (constructor)
  *   - QP state transitions INIT → RTR → RTS (bring_up)
  *   - Offset-based RDMA Write / Write-with-Immediate (post_write)
  *   - Zero-length Recv WR posting (post_recv)
  *   - Batch CQ polling with timeout (poll_cq)
  *   - RAII cleanup in destructor
+ *
+ * RC vs UC differences (handled transparently by bring_up via qp_type):
+ *   - RTR adds max_dest_rd_atomic, min_rnr_timer
+ *   - RTS adds timeout, retry_cnt, rnr_retry, max_rd_atomic
+ *   - Wire behavior: RC ACKs every segment, retransmits on loss; UC fires
+ *     and forgets.  On lossy wire, RC send-CQE for a dropped segment is
+ *     delayed by ``4.096us * 2^timeout`` per retry; if retry_cnt is
+ *     exhausted, the send-CQE comes back with ``IBV_WC_RETRY_EXC_ERR``
+ *     and the QP transitions to ERR state (non-recoverable).
  *
  * Key change from Phase 1: post_write uses (local_offset, remote_offset, length)
  * instead of always starting from the buffer base.  This enables ChunkManager
@@ -48,18 +65,39 @@ struct Completion {
 
 class UCQPEngine {
 public:
-    // Allocate all RDMA resources: device, PD, CQ, buffer, MR, UC QP.
+    // Allocate all RDMA resources: device, PD, CQ, buffer, MR, UC/RC QP.
     // buffer_bytes is rounded up to page alignment internally.
     // Throws std::runtime_error on any failure.
-    // gid_index = -1 (default) means auto-discover by trying {1, 0, 2, 3}
-    // and using the first non-zero GID.  A specific non-negative value
-    // pins to that GID index (e.g. 3 for RoCE v2 IPv4-mapped, required
-    // when routing through an XDP middlebox that relies on kernel ARP).
+    //
+    // Params:
+    //   gid_index = -1 (default) means auto-discover by trying {1, 0, 2, 3}
+    //     and using the first non-zero GID.  A specific non-negative value
+    //     pins to that GID index (e.g. 3 for RoCE v2 IPv4-mapped, required
+    //     when routing through an XDP middlebox that relies on kernel ARP).
+    //   qp_type = "uc" (default) creates an Unreliable Connected QP;
+    //     qp_type = "rc" creates a Reliable Connected QP (HW-level retx).
+    //     Any other value throws.
+    //   rc_timeout (RC only; ignored for UC) = Mellanox ``timeout`` attr
+    //     in log2(4.096 us) units.  14 ≈ 67 ms per retry; valid range 0..31.
+    //   rc_retry_cnt (RC only) = number of retransmit attempts before the
+    //     send-CQE returns IBV_WC_RETRY_EXC_ERR.  7 is the IB max.
+    //   rc_rnr_retry (RC only) = RNR retransmit attempts.  7 is infinite.
+    //   rc_min_rnr_timer (RC only) = min RNR NAK timer, log2 encoding.
+    //     12 ≈ 0.64 ms (Mellanox OFED default).
+    //   rc_max_rd_atomic (RC only) = max outstanding RDMA Read + atomic ops
+    //     initiated by this QP.  We only issue Write-with-Imm so 0 suffices,
+    //     but some HW rejects 0; 1 is the safe minimum.
     UCQPEngine(const std::string& dev_name,
                size_t buffer_bytes,
                int    sq_depth,
                int    rq_depth,
-               int    gid_index = -1);
+               int    gid_index        = -1,
+               const std::string& qp_type = "uc",
+               int    rc_timeout       = 14,
+               int    rc_retry_cnt     = 7,
+               int    rc_rnr_retry     = 7,
+               int    rc_min_rnr_timer = 12,
+               int    rc_max_rd_atomic = 1);
 
     ~UCQPEngine();
 
@@ -122,6 +160,17 @@ private:
     int           ib_port_   = 1;
     int           gid_index_ = -1;
     union ibv_gid gid_;
+
+    // QP mode + RC params (captured at construction, consumed by bring_up).
+    // qp_type_ is the enum form of the string arg; RC params are ignored
+    // in UC mode.
+    enum class QPKind { UC, RC };
+    QPKind qp_type_         = QPKind::UC;
+    int    rc_timeout_      = 14;
+    int    rc_retry_cnt_    = 7;
+    int    rc_rnr_retry_    = 7;
+    int    rc_min_rnr_timer_ = 12;
+    int    rc_max_rd_atomic_ = 1;
 
     // Tracks outstanding Receive WRs for post_recv_batch / outstanding_recv.
     // Incremented by post_recv / post_recv_batch, decremented in poll_cq

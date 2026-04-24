@@ -143,6 +143,40 @@ def _install_hook(ddp_model: DDP, cfg: DictConfig, rank: int) -> object:
         ddp_model.register_comm_hook(rc_state, rc_lossy_hook)
         return rc_state
 
+    if cfg.transport == "rc_rdma":
+        # HW-reliable RC QP over the same engine as SemiRDMA.  On clean
+        # wire ≈ SemiRDMA-UC throughput; on XDP-dropped wire, exposes
+        # retry-chain tail latency and IBV_WC_RETRY_EXC_ERR aborts.
+        # loss_rate MUST be 0 — RC loss comes from the middlebox, not
+        # app-level simulation (TransportConfig.__post_init__ enforces).
+        from semirdma import TransportConfig
+        from semirdma.baselines import RCRDMAHookState, rc_rdma_allreduce_hook
+        tcfg = TransportConfig(
+            dev_name=cfg.transport_cfg.dev_name,
+            gid_index=cfg.transport_cfg.get("gid_index", -1),
+            buffer_bytes=cfg.transport_cfg.buffer_bytes,
+            chunk_bytes=cfg.transport_cfg.chunk_bytes,
+            sq_depth=cfg.transport_cfg.sq_depth,
+            rq_depth=cfg.transport_cfg.rq_depth,
+            ratio=cfg.transport_cfg.ratio,
+            timeout_ms=cfg.transport_cfg.timeout_ms,
+            loss_rate=0.0,
+            loss_seed=cfg.seed * 31 + 7,
+            qp_type="rc",
+            rc_timeout=cfg.transport_cfg.get("rc_timeout", 14),
+            rc_retry_cnt=cfg.transport_cfg.get("rc_retry_cnt", 7),
+        )
+        peer_host = os.environ.get("SEMIRDMA_PEER_HOST", cfg.dist.master_addr)
+        state = RCRDMAHookState.for_rank(
+            rank=rank,
+            world_size=cfg.dist.world_size,
+            peer_host=peer_host,
+            port=cfg.dist.semirdma_port,
+            cfg=tcfg,
+        )
+        ddp_model.register_comm_hook(state, rc_rdma_allreduce_hook)
+        return state
+
     raise ValueError(f"transport={cfg.transport!r}")
 
 

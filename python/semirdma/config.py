@@ -80,11 +80,35 @@ class TransportConfig:
     # methodology: skip posting the Write for a Bernoulli(p) fraction of
     # chunks).  Stage A uses this to drive RQ5-A2 without touching netem.
     # 0.0 means "post every chunk"; 1.0 would drop everything.
+    # Only meaningful for qp_type="uc"; must be 0 for RC since HW ACK/retx
+    # would paper over any simulated drop before the hook ever sees it.
     loss_rate: float = 0.0
 
     # RNG seed for the loss-rate Bernoulli sampler.  Fixing this makes the
     # drop pattern reproducible across Gloo / SemiRDMA seed-matched runs.
     loss_seed: int = 0xC1FA  # "CIFAR" -- arbitrary
+
+    # QP reliability mode (added 2026-04-25).
+    #   "uc" — Unreliable Connected, semi-reliable app layer (SemiRDMA core)
+    #   "rc" — Reliable Connected, HW retransmit + ACK (RC-Baseline at the
+    #          training layer; combine with XDP middlebox to show RC崩
+    #          under real wire drop without self-building an RC engine).
+    qp_type: str = "uc"
+
+    # RC state-transition params (ignored when qp_type == "uc").
+    # Defaults match Mellanox OFED conservative values; reviewer will check
+    # these against the PRM.
+    #   rc_timeout in log2(4.096 µs) units: 14 → 67 ms per retry
+    #   rc_retry_cnt: total retransmits before IBV_WC_RETRY_EXC_ERR. 7 = max
+    #   rc_rnr_retry: RNR (receiver-not-ready) NAK retries. 7 = infinite
+    #   rc_min_rnr_timer: min RNR NAK timer in log2 units. 12 ≈ 0.64 ms
+    #   rc_max_rd_atomic: outstanding Reads+atomic (we only Write, but 0 is
+    #     rejected by some HW; 1 is the safe floor).
+    rc_timeout: int = 14
+    rc_retry_cnt: int = 7
+    rc_rnr_retry: int = 7
+    rc_min_rnr_timer: int = 12
+    rc_max_rd_atomic: int = 1
 
     def __post_init__(self) -> None:
         if self.buffer_bytes <= 0:
@@ -103,6 +127,24 @@ class TransportConfig:
             # loss_rate == 1.0 would mean "drop everything" and is useless for
             # training — reject it to catch config typos early.
             raise ValueError(f"loss_rate must lie in [0, 1), got {self.loss_rate}")
+        if self.qp_type not in ("uc", "rc"):
+            raise ValueError(
+                f"qp_type must be 'uc' or 'rc', got {self.qp_type!r}"
+            )
+        if self.qp_type == "rc" and self.loss_rate > 0.0:
+            # App-level drop simulation on top of HW retx is a logic error:
+            # either the retx papers over the skipped post (so effective
+            # loss rate ≠ loss_rate), or the loss lands on the receiver's
+            # RQ refill path (which would time out under HW-reliable QP
+            # semantics).  Force the config writer to choose one.
+            raise ValueError(
+                "qp_type='rc' requires loss_rate=0.0 (RC relies on wire-"
+                "level loss via the middlebox, not app-level simulation)"
+            )
+        if not (0 <= self.rc_timeout <= 31):
+            raise ValueError(f"rc_timeout must lie in [0, 31], got {self.rc_timeout}")
+        if not (0 <= self.rc_retry_cnt <= 7):
+            raise ValueError(f"rc_retry_cnt must lie in [0, 7], got {self.rc_retry_cnt}")
 
 
 __all__ = ["TransportConfig"]

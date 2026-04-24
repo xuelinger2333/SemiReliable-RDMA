@@ -37,9 +37,51 @@ UCQPEngine::UCQPEngine(const std::string& dev_name,
                        size_t buffer_bytes,
                        int    sq_depth,
                        int    rq_depth,
-                       int    gid_index_pref)
+                       int    gid_index_pref,
+                       const std::string& qp_type,
+                       int    rc_timeout,
+                       int    rc_retry_cnt,
+                       int    rc_rnr_retry,
+                       int    rc_min_rnr_timer,
+                       int    rc_max_rd_atomic)
 {
     std::memset(&gid_, 0, sizeof(gid_));
+
+    // Parse & validate qp_type.  We intentionally use a tiny string map so
+    // Python callers don't need to import a C++ enum binding.
+    if (qp_type == "uc") {
+        qp_type_ = QPKind::UC;
+    } else if (qp_type == "rc") {
+        qp_type_ = QPKind::RC;
+    } else {
+        throw std::runtime_error("qp_type must be 'uc' or 'rc', got '" +
+                                 qp_type + "'");
+    }
+
+    // Bounds-check RC attrs — ibv_modify_qp will fail cryptically on
+    // out-of-range values, so catch them here where we have the name.
+    if (qp_type_ == QPKind::RC) {
+        if (rc_timeout < 0 || rc_timeout > 31) {
+            throw std::runtime_error("rc_timeout must be in [0, 31]");
+        }
+        if (rc_retry_cnt < 0 || rc_retry_cnt > 7) {
+            throw std::runtime_error("rc_retry_cnt must be in [0, 7]");
+        }
+        if (rc_rnr_retry < 0 || rc_rnr_retry > 7) {
+            throw std::runtime_error("rc_rnr_retry must be in [0, 7]");
+        }
+        if (rc_min_rnr_timer < 0 || rc_min_rnr_timer > 31) {
+            throw std::runtime_error("rc_min_rnr_timer must be in [0, 31]");
+        }
+        if (rc_max_rd_atomic < 0 || rc_max_rd_atomic > 16) {
+            throw std::runtime_error("rc_max_rd_atomic must be in [0, 16]");
+        }
+    }
+    rc_timeout_       = rc_timeout;
+    rc_retry_cnt_     = rc_retry_cnt;
+    rc_rnr_retry_     = rc_rnr_retry;
+    rc_min_rnr_timer_ = rc_min_rnr_timer;
+    rc_max_rd_atomic_ = rc_max_rd_atomic;
 
     // --- Open device (ref: lines 91-109) ---
     int num_devices = 0;
@@ -144,7 +186,7 @@ UCQPEngine::UCQPEngine(const std::string& dev_name,
         }
     }
 
-    // --- UC QP creation (ref: lines 167-179) ---
+    // --- QP creation (ref: lines 167-179) ---
     {
         struct ibv_qp_init_attr qp_attr;
         std::memset(&qp_attr, 0, sizeof(qp_attr));
@@ -154,11 +196,18 @@ UCQPEngine::UCQPEngine(const std::string& dev_name,
         qp_attr.cap.max_recv_wr     = rq_depth;
         qp_attr.cap.max_send_sge    = 1;
         qp_attr.cap.max_recv_sge    = 1;
-        qp_attr.qp_type             = IBV_QPT_UC;
+        qp_attr.qp_type             = (qp_type_ == QPKind::RC)
+                                         ? IBV_QPT_RC : IBV_QPT_UC;
 
         qp_ = ibv_create_qp(pd_, &qp_attr);
-        if (!qp_) { cleanup(); throw std::runtime_error("ibv_create_qp (UC) failed"); }
-        SEMIRDMA_LOG_INFO("Created UC QP, qpn=%u", qp_->qp_num);
+        if (!qp_) {
+            cleanup();
+            throw std::runtime_error(
+                std::string("ibv_create_qp (") +
+                (qp_type_ == QPKind::RC ? "RC" : "UC") + ") failed");
+        }
+        SEMIRDMA_LOG_INFO("Created %s QP, qpn=%u",
+                          qp_type_ == QPKind::RC ? "RC" : "UC", qp_->qp_num);
     }
 }
 
@@ -204,6 +253,8 @@ void UCQPEngine::bring_up(const RemoteQpInfo& remote)
     }
 
     // --- RTR (ref: lines 211-232) ---
+    // RC adds max_dest_rd_atomic + min_rnr_timer on top of the UC attrs.
+    // Per IB spec §11.2.1: these are REQUIRED for RC, silently ignored for UC.
     {
         struct ibv_qp_attr attr;
         std::memset(&attr, 0, sizeof(attr));
@@ -221,6 +272,11 @@ void UCQPEngine::bring_up(const RemoteQpInfo& remote)
 
         int flags = IBV_QP_STATE | IBV_QP_PATH_MTU | IBV_QP_DEST_QPN
                   | IBV_QP_AV | IBV_QP_RQ_PSN;
+        if (qp_type_ == QPKind::RC) {
+            attr.max_dest_rd_atomic = static_cast<uint8_t>(rc_max_rd_atomic_);
+            attr.min_rnr_timer      = static_cast<uint8_t>(rc_min_rnr_timer_);
+            flags |= IBV_QP_MAX_DEST_RD_ATOMIC | IBV_QP_MIN_RNR_TIMER;
+        }
         int ret = ibv_modify_qp(qp_, &attr, flags);
         if (ret) {
             throw std::runtime_error(std::string("QP->RTR failed: ") +
@@ -230,6 +286,7 @@ void UCQPEngine::bring_up(const RemoteQpInfo& remote)
     }
 
     // --- RTS (ref: lines 235-246) ---
+    // RC adds timeout, retry_cnt, rnr_retry, max_rd_atomic; UC uses only sq_psn.
     {
         struct ibv_qp_attr attr;
         std::memset(&attr, 0, sizeof(attr));
@@ -237,6 +294,21 @@ void UCQPEngine::bring_up(const RemoteQpInfo& remote)
         attr.sq_psn   = 0;
 
         int flags = IBV_QP_STATE | IBV_QP_SQ_PSN;
+        if (qp_type_ == QPKind::RC) {
+            attr.timeout       = static_cast<uint8_t>(rc_timeout_);
+            attr.retry_cnt     = static_cast<uint8_t>(rc_retry_cnt_);
+            attr.rnr_retry     = static_cast<uint8_t>(rc_rnr_retry_);
+            attr.max_rd_atomic = static_cast<uint8_t>(rc_max_rd_atomic_);
+            flags |= IBV_QP_TIMEOUT | IBV_QP_RETRY_CNT
+                   | IBV_QP_RNR_RETRY | IBV_QP_MAX_QP_RD_ATOMIC;
+            SEMIRDMA_LOG_INFO(
+                "RC params: timeout=%d (~%.1f ms) retry_cnt=%d rnr_retry=%d "
+                "min_rnr_timer=%d max_rd_atomic=%d",
+                rc_timeout_,
+                0.004096 * (1LL << rc_timeout_),
+                rc_retry_cnt_, rc_rnr_retry_,
+                rc_min_rnr_timer_, rc_max_rd_atomic_);
+        }
         int ret = ibv_modify_qp(qp_, &attr, flags);
         if (ret) {
             throw std::runtime_error(std::string("QP->RTS failed: ") +

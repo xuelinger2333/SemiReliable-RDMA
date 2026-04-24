@@ -1,24 +1,25 @@
-"""RC-Lossy DDP comm hook.
+"""RC-Lossy DDP comm hook — drift-free lossy baseline.
 
-Represents "reliable transport + simulated chunk loss" in the RQ6
-5-baseline comparison.  We cannot induce real wire loss on CX-6 Lx (tc
-netem is bypassed; see rq6-loss-injection-strategy.md §1), so loss is
-simulated at the application layer:
+Represents "reliable transport + simulated chunk loss, identical across
+ranks" in the baseline comparison.  Purpose: isolate "accuracy
+degradation from lossy information" from "UC-specific per-rank drift".
+If semirdma-UC matches RC-Lossy in final accuracy, the parity comes
+from SGD's tolerance to missing chunks (not from UC's error pattern),
+and UC's unique contribution is throughput, not accuracy.
 
   1. A reliable AllReduce runs first (gloo TCP backend, identical to
-     RC-Baseline) — all bytes arrive correctly.
-  2. We then mask a Bernoulli fraction ``loss_rate`` of
-     ``chunk_bytes``-sized chunks in the averaged bucket to zeros — as if
-     those chunks had been corrupted on the wire and the reliable layer
-     chose not to retransmit (or RC reached its retry limit and gave up).
+     RC-Baseline) — all bytes arrive correctly, both ranks hold the
+     same averaged gradient.
+  2. Both ranks then apply the SAME Bernoulli chunk mask (shared
+     ``loss_seed``, identical RNG state across ranks because DDP
+     invokes the hook with matched cadence on equal-sized buckets),
+     zeroing the same chunk indices on both sides.  Post-mask, both
+     ranks still hold bit-identical gradients → no drift.
 
-This error model matches SemiRDMA's own drop+ghost-mask output (the
-reduced gradient ends up with the same fraction of zero'd chunks in
-both cases), giving an apples-to-apples convergence comparison.  What
-it does NOT model is the HW retry tail-latency that a real RC QP would
-pay on a lossy wire — the paper's tail-latency discussion handles that
-analytically (citing Mellanox retry-timeout configs) rather than via
-this simulation.
+The HW retry tail-latency that a real RC QP would pay on a lossy wire
+is captured separately by the ``ib_write_bw`` RC throughput sweep
+(transport-layer evidence); this hook is for training-layer convergence
+only.
 """
 
 from dataclasses import dataclass
@@ -63,18 +64,19 @@ class RCLossyState:
         rank: int,
         cfg: RCLossyConfig,
     ) -> "RCLossyState":
-        """Mirrors ``SemiRDMAHookState.for_rank`` so both baselines have the
-        same construction contract in the training driver."""
-        # Offset seed per rank so rank 0 and rank 1 don't drop the same
-        # chunks when running the same bucket — prevents accidentally
-        # correlated drop patterns that would under-estimate effective
-        # loss rate after AllReduce averaging.
-        per_rank_cfg = RCLossyConfig(
-            chunk_bytes=cfg.chunk_bytes,
-            loss_rate=cfg.loss_rate,
-            loss_seed=cfg.loss_seed + rank * 1009,
-        )
-        return cls(per_rank_cfg)
+        """Mirrors ``SemiRDMAHookState.for_rank`` so both baselines have
+        the same construction contract in the training driver.
+
+        Note: ``rank`` is intentionally unused — RC-Lossy is the
+        drift-free baseline, so every rank must build its RNG from the
+        *same* ``loss_seed``.  Matched RNG state + matched hook-call
+        cadence across ranks produces bit-identical Bernoulli masks,
+        and post-mask the averaged gradient stays identical on all
+        ranks (no drift).  Introducing a per-rank offset would make
+        ranks drift on every bucket after the first masked step.
+        """
+        del rank
+        return cls(cfg)
 
 
 def rc_lossy_hook(

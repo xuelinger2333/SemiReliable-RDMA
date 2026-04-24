@@ -124,13 +124,22 @@ PYBIND11_MODULE(_semirdma_ext, m) {
         });
 
     // ---- UCQPEngine ----------------------------------------------------
+    // Historically UC-only; ``qp_type="rc"`` enables HW-reliable RC mode
+    // with the RC-specific RTR/RTS attrs.  RC params are no-ops for UC.
     py::class_<UCQPEngine>(m, "UCQPEngine")
-        .def(py::init<const std::string&, size_t, int, int, int>(),
+        .def(py::init<const std::string&, size_t, int, int, int,
+                      const std::string&, int, int, int, int, int>(),
              py::arg("dev_name"),
              py::arg("buffer_bytes"),
              py::arg("sq_depth"),
              py::arg("rq_depth"),
-             py::arg("gid_index") = -1)
+             py::arg("gid_index")        = -1,
+             py::arg("qp_type")          = "uc",
+             py::arg("rc_timeout")       = 14,
+             py::arg("rc_retry_cnt")     = 7,
+             py::arg("rc_rnr_retry")     = 7,
+             py::arg("rc_min_rnr_timer") = 12,
+             py::arg("rc_max_rd_atomic") = 1)
         .def("bring_up", &UCQPEngine::bring_up, py::arg("remote"))
         .def("post_write", &UCQPEngine::post_write,
              py::arg("wr_id"),

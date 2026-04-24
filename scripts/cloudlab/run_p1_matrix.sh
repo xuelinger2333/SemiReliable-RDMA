@@ -1,18 +1,45 @@
 #!/usr/bin/env bash
-# Phase 4 · P1 — Lossy-wire decision matrix: semirdma (pure UC) characterization.
+# Phase 4 · P1/P2 — Lossy-wire decision matrix.
 #
-# Matrix:
-#   transport ∈ {semirdma}        # pure UC; hybrid variant removed 2026-04-25
-#                                 # (see docs/phase4/hybrid-dead-end.md)
-#   timeout_ms ∈ {5, 50, 500}
-#   drop_rate ∈ $DROP_RATES     # wire-level Bernoulli drop via XDP middlebox
+# Transport roster (post-2026-04-25 RC-RDMA baseline):
+#
+#   gloo        Pure PyTorch Gloo-TCP default hook.  "Baseline of
+#               baselines" — fully reliable, unaffected by XDP middlebox
+#               (talks TCP:29500, not UDP:4791).  Gives the pure-SGD
+#               reference curve with no wire-drop noise.
+#   rc_lossy    Gloo-TCP all_reduce + shared-seed per-chunk Bernoulli
+#               zeroing (drift-free).  Isolates "accuracy degradation
+#               from lossy information" from "UC per-rank drift".
+#               loss_rate is taken from $drop_rate (app-level
+#               simulation; NOT wire drop).
+#   rc_rdma     HW-reliable RC QP over the same UCQPEngine as SemiRDMA.
+#               Wire loss comes from the XDP middlebox; NIC HW handles
+#               ACK/retx; retry-exhausted → IBV_WC_RETRY_EXC_ERR.
+#               Exposes real "RC崩" at training layer.
+#   semirdma    Your method: UC QP + semi-reliable ghost mask.  Wire
+#               loss from the middlebox.
+#
+#   timeout_ms ∈ {5, 50, 500}     # meaningful for UC only; RC has its
+#                                 # own internal 30s deadline + rc_timeout
+#   drop_rate ∈ $DROP_RATES       # wire-level Bernoulli drop via XDP middlebox
 #   seed = 42 (single seed; Phase 3 already characterized seed variance)
-#   steps = 500, loss_rate = 0  (app-level synthetic drop off — wire drops come from middlebox)
+#   steps = 500
+#
+# Per-transport loss_rate wiring (per $drop_rate iteration):
+#   gloo / rc_rdma / semirdma:    loss_rate=0
+#   rc_lossy:                     loss_rate=$drop_rate
 #
 # Total cells = |DROP_RATES| × |TRANSPORTS| × |TIMEOUTS_MS|.
-# Default DROP_RATES="0" → 6 cells (benign-wire baseline, no middlebox hook).
-# Paper main matrix: DROP_RATES="0 0.001 0.005 0.01 0.02 0.05"
-#                    → 36 cells (~9 h on CX-5 25 GbE).
+# Default DROP_RATES="0" → sanity cells only (no middlebox hook).
+# Paper P2 matrix: DROP_RATES="0 0.001 0.005 0.01 0.05" TIMEOUTS_MS=50
+#                  TRANSPORTS="gloo rc_lossy rc_rdma semirdma" SEED={42,1337}
+#                  → 40 cells (~3.5 h on CX-5 25 GbE).
+#
+# RC timeout sweep (run matrix twice):
+#   RC_TIMEOUT=14 RC_RETRY_CNT=7 ...   # default: ~67 ms × 7 ≈ 500 ms/chunk
+#   RC_TIMEOUT=18 RC_RETRY_CNT=7 ...   # extreme: ~1 s × 7 ≈ 7 s/chunk
+# Only forwarded to transport_cfg when transport=rc_rdma; other
+# transports ignore them.
 #
 # Ordering:
 #   outer  = drop_rate (set middlebox once per rate, then inner matrix)
@@ -79,6 +106,12 @@ STEPS="${STEPS:-500}"
 WARMUP="${WARMUP:-10}"
 RATIO="${RATIO:-0.95}"
 PORT_BASE="${PORT_BASE:-32000}"
+
+# RC QP state-transition params (only forwarded when transport=rc_rdma).
+#   RC_TIMEOUT is log2(4.096 µs) — 14 ≈ 67 ms per retry; 18 ≈ 1 s
+#   RC_RETRY_CNT is total retransmits before IBV_WC_RETRY_EXC_ERR; 7 = max
+RC_TIMEOUT="${RC_TIMEOUT:-14}"
+RC_RETRY_CNT="${RC_RETRY_CNT:-7}"
 
 NODE0_IP="${NODE0_IP:-10.10.1.1}"       # rank 0 + experiment receiver (amd203)
 NODE1_IP="${NODE1_IP:-10.10.1.3}"       # rank 1 + experiment sender (amd196)
@@ -184,6 +217,9 @@ t0=$(date +%s)
 
 log "=== P1 matrix start (ts=$MATRIX_TS  cells=$total_cells  steps=$STEPS) ==="
 log "    transports=[$TRANSPORTS]  timeouts=[$TIMEOUTS_MS]  drop_rates=[$DROP_RATES]  seed=$SEED"
+if echo "$TRANSPORTS" | grep -qw rc_rdma; then
+    log "    rc_rdma params: rc_timeout=$RC_TIMEOUT (~$(awk -v t=$RC_TIMEOUT 'BEGIN{printf "%.1f", 0.004096 * (2^t)}') ms/retry)  rc_retry_cnt=$RC_RETRY_CNT"
+fi
 if [ -n "$MIDDLEBOX_HOST" ]; then
     log "    middlebox=$MIDDLEBOX_HOST  (XDP dropbox — wire-level Bernoulli drop on UDP:4791)"
     log "    gid_index=$GID_INDEX (IPv4-mapped RoCE v2 — required for ARP-spoof steering)"
@@ -215,6 +251,25 @@ for drop_rate in $DROP_RATES; do
             continue
         fi
 
+        # Per-transport loss_rate wiring:
+        #   rc_lossy uses cfg.loss_rate for its shared-seed app-level
+        #     chunk mask (no RDMA involvement, no middlebox effect on it).
+        #   gloo / rc_rdma / semirdma leave loss_rate=0 because wire drops
+        #     arrive via the XDP middlebox (or, for gloo, aren't injected
+        #     at all — that's exactly gloo's baseline-of-baselines role).
+        case "$transport" in
+          rc_lossy) cell_loss_rate="$drop_rate" ;;
+          *)        cell_loss_rate=0.0 ;;
+        esac
+
+        # RC-specific Hydra overrides.  Use Hydra's `+` prefix because
+        # rc_timeout / rc_retry_cnt aren't declared in the YAML (the
+        # Python side reads them via transport_cfg.get(..., default)).
+        rc_args=""
+        if [ "$transport" = "rc_rdma" ]; then
+            rc_args="+transport_cfg.rc_timeout=$RC_TIMEOUT +transport_cfg.rc_retry_cnt=$RC_RETRY_CNT"
+        fi
+
         # ---- start peer (amd196, rank 1) in background via ssh ----
         ssh "$NODE_PEER_HOST" "
 cd $REPO
@@ -224,9 +279,10 @@ SEMIRDMA_PEER_HOST=$NODE0_IP \
 torchrun --nnodes=2 --node_rank=1 --master_addr=$NODE0_IP --master_port=$master_port --nproc_per_node=1 \
   experiments/stage_a/train_cifar10.py \
   --config-name stage_b_cloudlab \
-  transport=$transport loss_rate=0.0 seed=$SEED steps=$STEPS warmup_steps=$WARMUP \
+  transport=$transport loss_rate=$cell_loss_rate seed=$SEED steps=$STEPS warmup_steps=$WARMUP \
   transport_cfg.dev_name=\$DEV_PEER transport_cfg.ratio=$RATIO transport_cfg.timeout_ms=$timeout_ms \
   transport_cfg.gid_index=$GID_INDEX \
+  $rc_args \
   dist.semirdma_port=$semi_port \
   hydra.run.dir=$cell_dir \
   > /tmp/p1_peer_${cell_tag}.log 2>&1
@@ -242,11 +298,12 @@ torchrun --nnodes=2 --node_rank=1 --master_addr=$NODE0_IP --master_port=$master_
             --master_port="$master_port" --nproc_per_node=1 \
             experiments/stage_a/train_cifar10.py \
             --config-name stage_b_cloudlab \
-            transport="$transport" loss_rate=0.0 seed="$SEED" \
+            transport="$transport" loss_rate="$cell_loss_rate" seed="$SEED" \
             steps="$STEPS" warmup_steps="$WARMUP" \
             transport_cfg.dev_name="$DEV_THIS" transport_cfg.ratio="$RATIO" \
             transport_cfg.timeout_ms="$timeout_ms" \
             transport_cfg.gid_index="$GID_INDEX" \
+            $rc_args \
             dist.semirdma_port="$semi_port" \
             hydra.run.dir="$cell_dir" \
             > "/tmp/p1_this_${cell_tag}.log" 2>&1
