@@ -69,6 +69,13 @@ cmake --build build -j "$(nproc)"
 cp build/python/semirdma/_semirdma_ext*.so python/semirdma/
 echo "  pybind extension copied into python/semirdma/"
 
+# Register the semirdma package in the venv (editable install).  Without
+# this, torchrun-launched train scripts can't import semirdma (hooks,
+# baselines, transport.py) because the repo root isn't on sys.path even
+# when CWD is repo-root — torchrun puts ONLY the script's own dir on sys.path.
+pip install -e . --no-build-isolation --quiet
+echo "  semirdma package installed (editable)"
+
 hdr "Step 5/5 — pybind smoke test"
 DEV=$(bash scripts/cloudlab/detect_rdma_dev.sh)
 echo "  RDMA device (experiment LAN): $DEV"
