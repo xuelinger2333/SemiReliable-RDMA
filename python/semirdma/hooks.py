@@ -392,6 +392,13 @@ def semirdma_hybrid_allreduce_hook(
     gathered = torch.empty_like(flat)
     dist.all_gather_into_tensor(gathered, own_partial.contiguous())
 
+    # Write the averaged result back into flat so DDP sees the aggregated
+    # gradient.  Each own_partial[i] = g_own[i] + ghost(g_peer[i]) ≈ g0[i]+g1[i]
+    # (sum, not mean), so dividing by world_size gives the true average.
+    # (Without this copy, DDP would see the un-modified local gradient —
+    # training still converges but each rank steps only on its own data.)
+    flat.copy_(gathered.div_(state.world_size))
+
     logger.debug(
         "semirdma_hybrid_allreduce_hook: bucket=%d numel=%d half_nbytes=%d "
         "n_missing=%d stats=%s",
