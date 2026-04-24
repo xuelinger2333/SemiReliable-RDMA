@@ -4,19 +4,25 @@
 # Matrix:
 #   transport ∈ {semirdma, semirdma_hybrid}
 #   timeout_ms ∈ {5, 50, 500}
-#   load ∈ {0, 1G}             # 0 = benign wire; 1G = UDP hammer from amd186
+#   load ∈ {0, line}           # 0 = benign wire; line = RDMA hammer at wire line-rate
 #   seed = 42 (single seed; Phase 3 already characterized seed variance)
 #   steps = 500, loss_rate = 0  (no synthetic loss — only real wire drops)
 #
 # 12 cells total.  Ordering:
-#   outer  = load    (0 first, then 1G — benign data protected against hammer bugs)
+#   outer  = load    (0 first, then line — benign data protected against hammer bugs)
 #   middle = transport
 #   inner  = timeout (5/50/500 — tight-to-loose)
 #
 # Topology (driven FROM amd203, THIS_NODE=0):
 #   amd203 (10.10.1.1) — rank 0 + experiment receiver + hammer target
 #   amd196 (10.10.1.3) — rank 1
-#   amd186 (10.10.1.2) — hammer source (iperf3 UDP, 1G, P=1, pkt=1470)
+#   amd186 (10.10.1.2) — hammer source (ib_write_bw RC, line-rate ≈ 25 Gbps on CX-5 25 GbE)
+#
+# Why RDMA hammer (not UDP):
+#   UDP hammer at 1 Gbps on CPU-only nodes triggers Python RQ-refill starvation
+#   instead of true switch egress overflow, producing a fake-lossy-wire artifact.
+#   ib_write_bw RC line-rate reliably saturates the 25 GbE switch egress and
+#   yields measurable UC drop (see run_uc_loss_calibration.sh).
 #
 # Per-cell output:
 #   $P1_ROOT/cell_NN_<transport>_t<to>_load<ld>/            (Hydra run dir)
@@ -31,10 +37,10 @@
 #   $P1_ROOT/MATRIX.log            chronological progress
 #
 # Usage (on amd203):
-#   bash scripts/cloudlab/run_p1_matrix.sh                        # default 12 cells
-#   STEPS=200 bash scripts/cloudlab/run_p1_matrix.sh              # quick smoke
-#   LOADS=0 bash scripts/cloudlab/run_p1_matrix.sh                # benign only
-#   TRANSPORTS=semirdma_hybrid TIMEOUTS_MS=5 LOADS=1G bash ...    # single cell
+#   bash scripts/cloudlab/run_p1_matrix.sh                          # default 12 cells
+#   STEPS=200 bash scripts/cloudlab/run_p1_matrix.sh                # quick smoke
+#   LOADS=0 bash scripts/cloudlab/run_p1_matrix.sh                  # benign only
+#   TRANSPORTS=semirdma_hybrid TIMEOUTS_MS=5 LOADS=line bash ...    # single cell
 #
 # Recover from failure:
 #   A failed cell leaves $P1_ROOT/cell_NN_.../ either empty or partial.
@@ -46,7 +52,7 @@ set -uo pipefail
 # ================== knobs ==================
 TRANSPORTS="${TRANSPORTS:-semirdma semirdma_hybrid}"
 TIMEOUTS_MS="${TIMEOUTS_MS:-5 50 500}"
-LOADS="${LOADS:-0 1G}"
+LOADS="${LOADS:-0 line}"
 SEED="${SEED:-42}"
 STEPS="${STEPS:-500}"
 WARMUP="${WARMUP:-10}"
@@ -60,9 +66,7 @@ NODE_PEER_HOST="${NODE_PEER_HOST:-chen123@$NODE1_IP}"
 HAMMER_HOST="${HAMMER_HOST:-chen123@$HAMMER_IP}"
 
 CELL_TIMEOUT="${CELL_TIMEOUT:-900}"     # hard ceiling per cell (15 min)
-HAMMER_PARALLEL="${HAMMER_PARALLEL:-1}"
-HAMMER_PKT="${HAMMER_PKT:-1470}"
-HAMMER_DUR="${HAMMER_DUR:-$((CELL_TIMEOUT + 60))}"  # outlast the cell
+HAMMER_DUR="${HAMMER_DUR:-$((CELL_TIMEOUT + 60))}"  # outlast the cell; passed to ib_write_bw -D
 
 REPO="${REPO:-$HOME/SemiRDMA}"
 DEV_THIS="${DEV_THIS:-$(bash "$REPO/scripts/cloudlab/detect_rdma_dev.sh")}"
@@ -81,23 +85,31 @@ source .venv/bin/activate
 log() { echo "[$(date +%H:%M:%S)] $*" | tee -a "$MATRIX_LOG"; }
 
 hammer_start() {
+    # $1 = rate label (e.g. "line"); ib_write_bw always blasts at wire line-rate,
+    # so rate is informational only — passed through for log readability.
     local rate="$1"
-    ssh "$NODE_PEER_HOST" "pkill -f 'iperf3' 2>/dev/null; true" 2>/dev/null
-    ssh "$HAMMER_HOST"    "pkill -f 'iperf3' 2>/dev/null; true" 2>/dev/null
-    # Server on the amd203 (target) — but we're on amd203 already.  Run locally.
-    pkill -f 'iperf3 -s' 2>/dev/null || true
-    bash "$REPO/scripts/cloudlab/hammer_udp.sh" server >/dev/null
-    sleep 0.5
-    # Client on amd186 (hammer source).
-    ssh -f "$HAMMER_HOST" "cd $REPO && PARALLEL=$HAMMER_PARALLEL PKT_SIZE=$HAMMER_PKT \
-        nohup bash scripts/cloudlab/hammer_udp.sh client $NODE0_IP $rate $HAMMER_DUR \
+    # Wipe any stale hammer process (UDP or RDMA) on all three nodes so the
+    # RC QP server port + uverbs resources are clean before we start.
+    ssh "$NODE_PEER_HOST" "pkill -f 'iperf3|ib_write_bw' 2>/dev/null; true" 2>/dev/null
+    ssh "$HAMMER_HOST"    "pkill -f 'iperf3|ib_write_bw' 2>/dev/null; true" 2>/dev/null
+    pkill -f 'iperf3|ib_write_bw' 2>/dev/null || true
+    # Server on amd203 (target) — we're already on amd203, so run locally.
+    bash "$REPO/scripts/cloudlab/hammer_rdma.sh" server >/dev/null
+    sleep 1   # ib_write_bw -D server needs a beat to listen
+    # Client on amd186 (hammer source).  hammer_rdma.sh client returns immediately
+    # (ib_write_bw runs for $HAMMER_DUR seconds then exits, or hammer_stop reaps it).
+    ssh -f "$HAMMER_HOST" "cd $REPO && \
+        nohup bash scripts/cloudlab/hammer_rdma.sh client $NODE0_IP $rate $HAMMER_DUR \
         </dev/null >/tmp/hammer_p1_${MATRIX_TS}_$(date +%H%M%S).log 2>&1"
-    sleep 3   # hammer ramp
+    sleep 3   # hammer ramp — RC QP reaches line rate within a second
 }
 
 hammer_stop() {
-    ssh "$HAMMER_HOST" "bash $REPO/scripts/cloudlab/hammer_udp.sh stop" >/dev/null 2>&1 || true
-    bash "$REPO/scripts/cloudlab/hammer_udp.sh" stop >/dev/null 2>&1 || true
+    ssh "$HAMMER_HOST" "bash $REPO/scripts/cloudlab/hammer_rdma.sh stop" >/dev/null 2>&1 || true
+    bash "$REPO/scripts/cloudlab/hammer_rdma.sh" stop >/dev/null 2>&1 || true
+    # Belt + suspenders: kill any orphan ib_write_bw that escaped the stop subcommand.
+    ssh "$HAMMER_HOST" "pkill -f ib_write_bw 2>/dev/null; true" 2>/dev/null || true
+    pkill -f ib_write_bw 2>/dev/null || true
 }
 
 cell_done() {
@@ -130,6 +142,7 @@ t0=$(date +%s)
 
 log "=== P1 matrix start (ts=$MATRIX_TS  cells=$total_cells  steps=$STEPS) ==="
 log "    transports=[$TRANSPORTS]  timeouts=[$TIMEOUTS_MS]  loads=[$LOADS]  seed=$SEED"
+log "    hammer=rdma (ib_write_bw RC line-rate on $HAMMER_HOST → $NODE0_IP, duration=${HAMMER_DUR}s)"
 log "    root=$P1_ROOT"
 
 for load in $LOADS; do
