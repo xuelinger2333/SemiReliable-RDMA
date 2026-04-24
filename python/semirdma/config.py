@@ -47,6 +47,14 @@ class TransportConfig:
     # on aliyun; real deployments will pass "mlx5_0" etc.
     dev_name: str = "rxe0"
 
+    # GID table index to pin.  -1 means auto-discover (the C++ engine tries
+    # {1, 0, 2, 3} and uses the first non-zero GID).  Use an explicit non-
+    # negative value when the choice matters — e.g. gid_index=3 selects
+    # RoCE v2 IPv4-mapped (::ffff:10.10.1.x) so kernel ARP is consulted for
+    # dst MAC resolution, which is required when routing through an XDP
+    # middlebox that relies on ARP-spoof to steer traffic.
+    gid_index: int = -1
+
     # Registered MR size.  Must be >= max bucket size the trainer posts.
     buffer_bytes: int = _DEFAULT_BUFFER_BYTES
 

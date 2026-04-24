@@ -68,7 +68,8 @@ class SemiRDMATransport:
     def __init__(self, cfg: TransportConfig) -> None:
         self._cfg = cfg
         self._engine = UCQPEngine(
-            cfg.dev_name, cfg.buffer_bytes, cfg.sq_depth, cfg.rq_depth
+            cfg.dev_name, cfg.buffer_bytes, cfg.sq_depth, cfg.rq_depth,
+            gid_index=cfg.gid_index,
         )
         self._ratio = RatioController(self._engine)
         self._wr_seq = 0  # monotonic wr_id for Writes; aids post-mortem debug

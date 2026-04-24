@@ -51,10 +51,15 @@ public:
     // Allocate all RDMA resources: device, PD, CQ, buffer, MR, UC QP.
     // buffer_bytes is rounded up to page alignment internally.
     // Throws std::runtime_error on any failure.
+    // gid_index = -1 (default) means auto-discover by trying {1, 0, 2, 3}
+    // and using the first non-zero GID.  A specific non-negative value
+    // pins to that GID index (e.g. 3 for RoCE v2 IPv4-mapped, required
+    // when routing through an XDP middlebox that relies on kernel ARP).
     UCQPEngine(const std::string& dev_name,
                size_t buffer_bytes,
                int    sq_depth,
-               int    rq_depth);
+               int    rq_depth,
+               int    gid_index = -1);
 
     ~UCQPEngine();
 

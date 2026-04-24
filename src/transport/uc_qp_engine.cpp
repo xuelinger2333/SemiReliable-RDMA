@@ -36,7 +36,8 @@ static size_t round_up_page(size_t bytes)
 UCQPEngine::UCQPEngine(const std::string& dev_name,
                        size_t buffer_bytes,
                        int    sq_depth,
-                       int    rq_depth)
+                       int    rq_depth,
+                       int    gid_index_pref)
 {
     std::memset(&gid_, 0, sizeof(gid_));
 
@@ -80,33 +81,66 @@ UCQPEngine::UCQPEngine(const std::string& dev_name,
     mr_ = ibv_reg_mr(pd_, buf_, buf_size_, mr_flags);
     if (!mr_) { cleanup(); throw std::runtime_error("ibv_reg_mr failed"); }
 
-    // --- GID discovery (ref: lines 113-133) ---
+    // --- GID selection (ref: lines 113-133) ---
+    // When gid_index_pref >= 0, pin to that specific index; error out if it's
+    // zero / invalid.  When < 0, fall back to the old auto-discovery order
+    // {1, 0, 2, 3}.  Pinning is necessary e.g. when routing through an XDP
+    // middlebox on a shared switch: idx 1 (IPv6 link-local) has its dst MAC
+    // derived by mlx5 HW from the GID via EUI-64 reverse (bypassing kernel
+    // ARP), while idx 3 (RoCE v2 IPv4-mapped ::ffff:10.10.1.x) DOES consult
+    // kernel ARP and honors the middlebox's ARP spoof.
     {
         struct ibv_port_attr pa;
         if (ibv_query_port(ctx_, ib_port_, &pa) != 0) {
             cleanup();
             throw std::runtime_error("ibv_query_port failed");
         }
-        int try_idx[] = {1, 0, 2, 3};
         union ibv_gid zero_gid;
         std::memset(&zero_gid, 0, sizeof(zero_gid));
 
-        bool found = false;
-        for (int idx : try_idx) {
-            if (idx >= static_cast<int>(pa.gid_tbl_len)) continue;
+        if (gid_index_pref >= 0) {
+            // Explicit pin — fail hard if unusable so config mistakes surface
+            // immediately instead of silently auto-selecting the wrong GID.
+            if (gid_index_pref >= static_cast<int>(pa.gid_tbl_len)) {
+                cleanup();
+                throw std::runtime_error("gid_index " + std::to_string(gid_index_pref) +
+                                         " exceeds gid_tbl_len=" +
+                                         std::to_string(pa.gid_tbl_len));
+            }
             union ibv_gid g;
-            if (ibv_query_gid(ctx_, ib_port_, idx, &g) != 0) continue;
-            if (std::memcmp(&g, &zero_gid, sizeof(g)) == 0) continue;
+            if (ibv_query_gid(ctx_, ib_port_, gid_index_pref, &g) != 0) {
+                cleanup();
+                throw std::runtime_error("ibv_query_gid failed for pinned idx " +
+                                         std::to_string(gid_index_pref));
+            }
+            if (std::memcmp(&g, &zero_gid, sizeof(g)) == 0) {
+                cleanup();
+                throw std::runtime_error("GID at pinned idx " +
+                                         std::to_string(gid_index_pref) +
+                                         " is zero — requested GID type not configured");
+            }
             gid_       = g;
-            gid_index_ = idx;
-            found      = true;
-            SEMIRDMA_LOG_INFO("Using GID index %d", idx);
-            break;
-        }
-        if (!found) {
-            cleanup();
-            throw std::runtime_error("No valid GID found on port " +
-                                     std::to_string(ib_port_));
+            gid_index_ = gid_index_pref;
+            SEMIRDMA_LOG_INFO("Using GID index %d (pinned via config)", gid_index_);
+        } else {
+            int try_idx[] = {1, 0, 2, 3};
+            bool found = false;
+            for (int idx : try_idx) {
+                if (idx >= static_cast<int>(pa.gid_tbl_len)) continue;
+                union ibv_gid g;
+                if (ibv_query_gid(ctx_, ib_port_, idx, &g) != 0) continue;
+                if (std::memcmp(&g, &zero_gid, sizeof(g)) == 0) continue;
+                gid_       = g;
+                gid_index_ = idx;
+                found      = true;
+                SEMIRDMA_LOG_INFO("Using GID index %d (auto-discovered)", idx);
+                break;
+            }
+            if (!found) {
+                cleanup();
+                throw std::runtime_error("No valid GID found on port " +
+                                         std::to_string(ib_port_));
+            }
         }
     }
 

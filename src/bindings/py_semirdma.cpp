@@ -125,11 +125,12 @@ PYBIND11_MODULE(_semirdma_ext, m) {
 
     // ---- UCQPEngine ----------------------------------------------------
     py::class_<UCQPEngine>(m, "UCQPEngine")
-        .def(py::init<const std::string&, size_t, int, int>(),
+        .def(py::init<const std::string&, size_t, int, int, int>(),
              py::arg("dev_name"),
              py::arg("buffer_bytes"),
              py::arg("sq_depth"),
-             py::arg("rq_depth"))
+             py::arg("rq_depth"),
+             py::arg("gid_index") = -1)
         .def("bring_up", &UCQPEngine::bring_up, py::arg("remote"))
         .def("post_write", &UCQPEngine::post_write,
              py::arg("wr_id"),
