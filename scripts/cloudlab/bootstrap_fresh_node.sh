@@ -9,7 +9,7 @@
 #     and this script is invoked from inside that clone
 #
 # Chains the existing per-concern scripts so each node needs just one
-# command to go from empty → ready for Phase 4 P0 hammer + P1 matrix:
+# command to go from empty → ready for Phase 4 P1 matrix:
 #
 #   day0_check.sh   hardware / NIC sanity    (read-only)
 #   setup_env.sh    apt + venv + torch-cpu   (idempotent)
@@ -93,4 +93,5 @@ echo "  exp LAN:  $(ip -br addr show enp65s0f0np0 2>/dev/null | awk '{print $3}'
 echo "  RDMA dev: ${DEV}"
 echo "  elapsed:  $((T1 - T0))s"
 echo ""
-echo "Next: P0 hammer setup — see scripts/cloudlab/hammer_udp.sh"
+echo "Next: on receiver node — run scripts/cloudlab/run_p1_matrix.sh"
+echo "      (see its header for MIDDLEBOX_HOST / DROP_RATES invocation)"
