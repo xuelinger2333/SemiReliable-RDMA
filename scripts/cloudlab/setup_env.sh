@@ -32,7 +32,7 @@ if [ -z "${SKIP_APT:-}" ]; then
     sudo apt-get install -y -qq \
         build-essential cmake pkg-config python3 python3-pip python3-venv python3-dev \
         libibverbs-dev librdmacm-dev ibverbs-utils rdmacm-utils perftest rdma-core \
-        libgtest-dev ethtool pciutils
+        libgtest-dev ethtool pciutils iperf3
     echo "  apt deps installed"
 fi
 
