@@ -1,0 +1,5 @@
+idx,drop_rate,transport,timeout_ms,rc,final_loss,mean_iter_ms,cell_dir
+0,0.05,semirdma,50,0,1.289206,791.63,/users/chen123/SemiRDMA/experiments/results/phase4_p1_highdrop_20260424_095327/seed1337/cell_00_drop0.05_semirdma_t50
+1,0.05,semirdma_hybrid,50,0,1.428264,859.87,/users/chen123/SemiRDMA/experiments/results/phase4_p1_highdrop_20260424_095327/seed1337/cell_01_drop0.05_semirdma_hybrid_t50
+2,0.1,semirdma,50,0,1.225254,829.61,/users/chen123/SemiRDMA/experiments/results/phase4_p1_highdrop_20260424_095327/seed1337/cell_02_drop0.1_semirdma_t50
+3,0.1,semirdma_hybrid,50,0,1.452414,864.95,/users/chen123/SemiRDMA/experiments/results/phase4_p1_highdrop_20260424_095327/seed1337/cell_03_drop0.1_semirdma_hybrid_t50

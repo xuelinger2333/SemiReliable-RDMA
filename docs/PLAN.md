@@ -1,8 +1,8 @@
 # SemiRDMA 进度 & 下一步计划
 
-> **最后更新：** 2026-04-23
-> **当前阶段：** Phase 3 已完结；Phase 4 (lossy wire validation + paper writing) 启动
-> **关键前置文档：** [phase2/phase2-final.md](phase2/phase2-final.md) + [phase3/phase3-final.md](phase3/phase3-final.md)
+> **最后更新：** 2026-04-25
+> **当前阶段：** Phase 4 — XDP 中间盒 lossy-wire 平台贯通；hybrid 已删；paper 核心对照待跑
+> **关键前置文档：** [phase2/phase2-final.md](phase2/phase2-final.md) + [phase3/phase3-final.md](phase3/phase3-final.md) + [phase4/hybrid-dead-end.md](phase4/hybrid-dead-end.md)
 
 ---
 
@@ -15,122 +15,128 @@
 - Phase 3 Stage B（CloudLab 真 NIC）CX-6 Lx (c240g5) 归档 + CX-5 (amd203/amd196) post-fix 主数据
 - Phase 3 B.5 RC-Baseline / RC-Lossy 12-cell 对照
 - Ratio controller effective-loss bug 修复（commit `9386f2e`）
-- Hybrid Ring AllReduce (UC reduce-scatter + gloo all-gather) 实现 + magnitude compensation
-- H3 drift 假设否决；A2 "+0.5 gap" 真正根因定位为 CX-5 CQE bursty latency + 5ms timeout 过紧
+- **Phase 4 XDP 中间盒平台（amd186）**：ARP-spoof "bump in the wire" + Bernoulli drop on UDP:4791，端到端校准 drop_pct 准确到 ±0.1%，见
+  [scripts/cloudlab/middlebox_setup.sh](../scripts/cloudlab/middlebox_setup.sh)
+  + [xdp_dropbox/xdp_dropbox.bpf.c](../scripts/cloudlab/xdp_dropbox/xdp_dropbox.bpf.c)
+- **Phase 4 P1 lossy-wire 矩阵（20 cells, 2–3 seeds）**：semirdma vs
+  semirdma_hybrid × drop ∈ {0, 0.01, 0.05, 0.1} × timeout=50ms × STEPS=500
+- **Hybrid 删除（2026-04-25）**：hybrid 在所有 drop 档位严格劣于 pure
+  semirdma（final loss 高 +0.03～+0.64，iter_ms 高 +11%）。详见
+  [phase4/hybrid-dead-end.md](phase4/hybrid-dead-end.md)。代码移除：commit `7257186`
 
 ### 0.2 已锁定的设计结论（不再改动）
 - `chunk_bytes = 16384`（Phase 2 RQ1）
 - `ratio = 0.95` 作为 floor，dynamic target = `max(0.95, 1 − loss − 0.005)`
 - `GhostMask::apply` 默认 on
-- Hybrid 保留为 conditional safeguard（lossy wire 场景）
+- **唯一 UC-backed hook**：`semirdma_allreduce_hook`（hybrid 删除后）
+- **GID idx 3**（RoCE v2 IPv4-mapped）是 middlebox ARP-spoof 有效的前提；
+  `run_p1_matrix.sh` 在 `MIDDLEBOX_HOST` 非空时自动 pin
 
 ### 0.3 已知 open 问题
-- **CX-5 benign wire 不是论文主数据的合适平台**：wire 太干净，SemiRDMA 的 tail-hiding 卖点不 visible
-- **timeout 参数在不同 wire 上需要重标定**：benign wire 上 500ms 合理，lossy wire 上 5ms 才有意义
-- **Hybrid vs semirdma 的真实差距需要 lossy wire 验证**：当前 benign wire 上两者不可区分
+- **pure semirdma 在 0–10% wire drop 下稳健 converge**（final_loss
+  0.87–1.36），但 **vs. RC-baseline 的直接对比还没跑**。paper 核心卖点
+  ("UC-based semi-reliable > RC 在 lossy wire 下") 需要 P2 填数据
+- **timeout 参数跨 wire 的重标定**：benign wire 上 500ms，lossy wire 上
+  50ms 看起来合理，但 drop=0.05/0.1 下是否有更 aggressive 的 5ms 操作点
+  能让 RC 崩得更彻底 / semirdma 扛得更清晰，值得扫 1 档
 
 ---
 
-## 1. 下一步优先级（Phase 4 Lossy Wire Validation）
+## 1. 下一步优先级（Phase 4 完成 + Paper 主数据）
 
-按 ROI 排。每条任务标注**单人工作量估计**。
+### P0 ✅ 完成 — XDP middlebox 平台（2026-04-24）
 
-### P0 — 申请第三台 CloudLab 节点（阻塞项，~1 day wall-clock）
+amd186 上 XDP eBPF 单口 "bump in the wire" 转发 + ARP/IPv6 邻居欺骗。
+端到端实测 drop_pct 准确到目标 ±0.1%（13.4 M RoCE packets，drop=0.01
+设定下实测 0.9966%）。见
+[scripts/cloudlab/middlebox_setup.sh](../scripts/cloudlab/middlebox_setup.sh)。
 
-**目标：** 在 amd203/amd196 的同一交换机 hop 上拉起第三个 amd 节点作为 **hammer** 机器，跑背景流把 25 GbE 交换机 link 饱和到 95%+，制造 switch queue overflow → natural packet drop。
+### P1 ✅ 完成 — hybrid vs semirdma 裁决（2026-04-24/25）
 
-**动作：**
-1. CloudLab 上申请 `amd*.utah.cloudlab.us` 第三节点（应该跟 amd203 同 rack / 同 ToR）
-2. 验证三节点同一 experiment LAN（`10.10.1.x`）
-3. 安装 `iperf3` + `D-ITG`（如需 burst 流量）
-4. 确认交换机 PFC off、ECN off（都在 `scripts/cloudlab/link_setup.sh` 默认）
+20 cells 实验（3 seeds × drop ∈ {0, 0.01} + 2 seeds × drop ∈ {0.05, 0.1}）
+给出明确答案：hybrid 在所有测过的操作点下都严格劣于 pure semirdma，
+且 iter_ms 贵 +11%。**hybrid 已删除**。详见
+[phase4/hybrid-dead-end.md](phase4/hybrid-dead-end.md)。
 
-**产物：** 可执行的 `scripts/cloudlab/hammer_iperf.sh`，能把 link 拉到指定 utilization 区间（50% / 80% / 95%）
+Raw data: [phase4/raw_data/aggregate_final.csv](phase4/raw_data/aggregate_final.csv)
 
-### P1 — Lossy wire 下 hybrid vs semirdma 5-cell 最小矩阵（~2 h）
+### P2 🔜 下一步 — semirdma vs RC-baseline 在 wire drop 下的对比（paper 主数据）
 
-**矩阵：**
-- transport ∈ {semirdma, semirdma_hybrid}
-- timeout_ms ∈ {5, 50, 500}
-- background load ∈ {0%, 80% link util}
-- seed = 42（minimum viable）
-- L=0, 500 step ResNet-18 / CIFAR-10
+**核心卖点**：UC-based semirdma 在 wire loss 下仍 converge；RC（标准
+可靠 RDMA）在 wire loss 下崩溃（ib_write_bw smoke：1% drop → BW 从
+9 G 掉到 0.23 G，−97%）。这才是 paper 的 main figure。
 
-**判定：**
-- 若 `hybrid + t=5ms + 80% load` 的 final loss 明显优于 `semirdma + t=5ms + 80% load`：hybrid 在 lossy+tight-timeout 场景有价值 → **paper 核心卖点成立**
-- 若两者接近：hybrid 在 lossy wire 也不必需 → paper 需要其他 motivation
-
-### P2 — Lossy wire 下 5-transport tail-latency 对比（~6 h）
-
-**矩阵：**
-- transport ∈ {gloo, rc_baseline, rc_lossy, semirdma, semirdma_hybrid}
-- background load ∈ {0%, 50%, 80%, 95%}
-- timeout_ms = 5 (tight，tail-hiding 目标操作点)
-- seed = {42, 123, 7}
-- L=0, 500 step
+**矩阵（初版）：**
+- transport ∈ {semirdma, rc_baseline, rc_lossy}
+- drop_rate ∈ {0, 0.001, 0.005, 0.01, 0.05}（5 档）
+- timeout_ms = 50（semirdma 用；RC 忽略此字段）
+- seed ∈ {42, 1337}（先 2 seed 看方向，后续扩到 3）
+- STEPS = 500
+- = 3 × 5 × 2 = 30 cells ≈ 3.5 h
 
 **主指标：**
-- iter_time p50 / p99 / p99:p50 ratio（OptiReduce 对标指标）
-- Final train loss 3-seed mean
-- Effective bucket drop rate（从 `n_missing` log 聚合）
+1. final_loss 2-seed mean（convergence story）
+2. mean_iter_ms + iter_ms p50 / p95（tail latency story）
+3. bucket-level effective_drop_rate（从 semirdma completion log 聚合 vs. middlebox 配置值）
 
-**预期输出：** 一张 4×5 的 tail-latency Pareto 表，能画成 paper 的核心 figure
+**判定：**
+- **primary**: 存在 drop rate 区间 `[d_lo, d_hi]`，其中 rc_baseline
+  final_loss 显著高于 semirdma（>0.2，~4× seed variance）→ paper 主故
+  事成立
+- **secondary**: rc_baseline iter_ms 随 drop 上升而爆涨（retx 效应）
+  → tail story 对照 OptiReduce
 
-### P3 — 3-seed convergence 确认（**部分完成，节点释放截断**）
+**前置检查（~5 min）：** `rc_baseline` / `rc_lossy` transport 分支在
+`train_cifar10.py` 和 `semirdma.baselines` 里应还在；但因今天 hammer
+删除时没动 baselines，需 single-cell smoke 确认 import 不 broken。
 
-2026-04-23 节点释放前在 amd203/amd196 上启动了 4-cell 3-seed 矩阵，只跑完 1/4：
+### P3 — 更大模型 / 更长训练（写作 sprint 前）
 
-- ✅ `semirdma + t=500 + seed 123` → final loss **1.284**（vs RC 1.121，gap +0.16）
-- ⚠️ `semirdma + t=500 + seed 7` → step 400/500 处中断（last loss 1.10）
-- ❌ `hybrid + t=500 + seed 123` → 未启动
-- ❌ `hybrid + t=500 + seed 7` → 未启动
+paper reviewer 问 "ResNet-small 500 步够不够" 的概率非 0。P2 给出方
+向后，选 1 个 hero cell（drop=0.01 或 0.05）重跑：
+- model: ResNet-50 或 GPT-2-small
+- STEPS = 3000
+- 2 seeds
 
-**关键发现**：seed 42 的 0.015 gap 是 seed-lucky，seed 123 的真实 gap 是 0.16。phase3-final §5 已更新为 2-seed mean（semirdma+t=500 = 1.080 vs RC-Baseline = 0.991，+0.089 gap）。
-
-**剩余工作**：新节点到手后把 hybrid+t=500 × seed 123/7 + semirdma+t=500 seed 7 补齐（~25 min）。
-
----
-
-## 2. Stage 2（可选，并行）—— Hybrid C++ RC phase 2
-
-**当前 hybrid 实现**：phase 2 走 gloo TCP all-gather。gloo 不是 RDMA，走 kernel TCP 路径，有额外 ~0.5ms 开销 per bucket。
-
-**Stage 2 目标：** 在 C++ `UCQPEngine` 里加 **RC QP 支持**，hybrid phase 2 走真 RC RDMA（Write + completion），`torch.distributed.all_gather_into_tensor` 换成自定义 RC ring-broadcast。
-
-**价值：**
-- 消除 gloo TCP 开销，hybrid 的 iter_time overhead 从 +50% 降到 +5-10%
-- 支持 world_size > 2 的 ring topology（当前 hybrid 仅 2-rank）
-- 论文框架更干净：两阶段都是 RDMA，不引入 TCP 依赖
-
-**工作量：** 估 3-5 天（读 ibv RC QP state machine + 实装 + 跨节点测试）
-
-**何时做：** 如果 P1 显示 hybrid 在 lossy wire 有价值，Stage 2 值得做（论文图的"真 RDMA hybrid"更漂亮）；如果 P1 否决 hybrid，Stage 2 放弃。
+用于 "conclusion holds at scale" 的补充实验。**不现在做**，留到 P2
+结论明确后再决定是否需要。
 
 ---
 
-## 3. Paper 写作启动清单（P1/P2 完成后）
+## 3. Paper 写作启动清单（P2 完成后）
 
 ### 3.1 叙事结构草案
 
-1. **Motivation**: Cloud RoCE + RC tail latency problem (OptiReduce-aligned) + UC 的 silent loss problem
-2. **Insight**: SGD tolerates 1–5% chunk loss; transport 可以 trade reliability for tail
-3. **Design**: UC QP + chunk-level `{has_cqe, valid_len}` + CQE-driven ratio controller + ghost mask
-4. **Correctness safeguard** (hybrid): UC reduce-scatter + RC all-gather eliminates rank drift under tight-timeout lossy regime
+1. **Motivation**: Cloud RoCE 下 RC 的 tail-latency / reliability-under-loss
+   problem（对标 OptiReduce）+ UC 的 silent-loss problem
+2. **Insight**: SGD tolerates 1–5% chunk loss; transport 可以 trade
+   reliability for tail
+3. **Design**: UC QP + chunk-level `{has_cqe, valid_len}` + CQE-driven
+   ratio controller + ghost mask
+4. **Negative result (honest reporting)**: hybrid UC + gloo-reliable-
+   broadcast correctness-safeguard 在实测下 **被 pure semirdma 严格支配**，
+   因为 magnitude compensation 放大方差比 drift 本身更伤 SGD。删掉。
+   见 [phase4/hybrid-dead-end.md](phase4/hybrid-dead-end.md)
 5. **Evaluation**:
    - Phase 2 RQ1/RQ2/RQ4 结论（SoftRoCE 参数空间）
    - Phase 3 Stage A DDP 集成正确性（A1 bit-for-bit + A2 monotone degradation）
-   - Phase 4 Lossy wire head-to-head 5-transport（P1/P2 结果）
+   - Phase 4 P2 — **semirdma vs RC-baseline（± rc_lossy）** 在 wire
+     drop 下的 convergence + tail 对照（待跑）
+   - 可能需要补：OptiReduce / gloo-UDP baseline（后续）
 
 ### 3.2 需要补的数据（paper 要求）
-- ✅ UC vs RC wire tail latency probe (`rq_hybrid_tail_probe.sh`)，证 CX-5 wire 基本 benign
-- ❌ Lossy wire 下 5-transport tail 对比 (P2)
+- ✅ P1 hybrid 裁决（已否决并删除）
+- ❌ **P2 semirdma vs RC-baseline × drop sweep**（优先级 #1）
 - ❌ TTA (time to accuracy) 对比 — 当前只有 train loss at step 500
-- ❌ 大模型验证（ResNet-50 / GPT-2）— 当前只有 ResNet-18
+- ❌ 大模型验证（ResNet-50 / GPT-2）— 当前 ResNet-small 500 步
+- ❌ **其他 baseline**：OptiReduce (gloo-UDP + Hadamard)、MLT 等，
+  P2 完成后排（用户明确标记为"之后再说"）
 
 ### 3.3 submission timeline
 - INFOCOM 2027 abstract 2026-07-17 / full paper 2026-07-24
-- 倒排推，Phase 4 (P0+P1+P2) 需要在 **2026-05 月底** 前完成才留出足够写作时间
-- 当前 4-23，还有约 5 周完成 lossy validation + 数据回填
+- 当前 2026-04-25，剩 ~12 周
+- P2 预期 ~1 天（含 rc_baseline smoke + 30-cell 矩阵 + 分析）
+- 之后留 10+ 周给大模型补数据 + paper 写作
 
 ---
 
@@ -148,21 +154,24 @@
 
 | 风险 | 概率 | 影响 | Plan B |
 |---|:-:|:-:|---|
-| CloudLab 第三节点申请不到 | 低 | 高 | 改用 MX 类节点（GPU + ConnectX）或回退 D-ITG flood 单节点模拟 |
-| Lossy wire 上 hybrid 相对 semirdma **没有** 显著优势 | 中 | 中 | Paper 叙事从 "hybrid 是核心设计" 退到 "hybrid 是 conditional safeguard"；卖点回归 timeout-tuned semirdma |
-| 真实 lossy wire 的 tail 并不被 RC retx 主导 | 中 | 高 | 在 paper 里诚实报告 + 引用 OptiReduce 的 wire 模型；强调 Cloud lossy RoCE 的 target environment |
-| 第三节点交换机 queue 不 overflow（硬件太强） | 低 | 中 | 用 D-ITG burst / 调整 buffer limit / 引入第四节点 |
+| P2 下 RC 不像预期那样崩溃（BW 不暴跌、final_loss 不明显高）| 中 | 高 | 在 paper 诚实报告；扩 drop rate 到 10-20%；或转 tail-latency-only 卖点（OptiReduce 风格）|
+| rc_baseline / rc_lossy hook 被前几轮 hammer 清理误伤 | 低 | 中 | P2 前做 single-cell smoke；broken 就 git revert 局部 |
+| 大模型（ResNet-50 / GPT-2）在 CPU-only amd203/amd196 上跑太慢 | 中 | 中 | 只跑 hero cell + TTA 代替 500-step loss；或推迟到 GPU 节点 |
+| CloudLab amd203/amd196/amd186 被释放 | 中 | 高 | 已 push 所有脚本到 origin；节点重申请后 bootstrap_fresh_node.sh 一键恢复 + middlebox_setup.sh bootstrap 一次 |
 | INFOCOM ddl 撞到 paper 没收敛 | 低 | 高 | 转投 SoCC 2026 R2（ddl 2026-07-14，早 10 天但审稿窗口短） |
 
 ---
 
-## 6. 本周行动项（2026-04-23 起）
+## 6. 本周行动项（2026-04-25 起）
 
-1. **立刻**：申请 CloudLab 第三节点（amd 系列，同 rack amd203）
-2. **今天 / 明天**：P3 3-seed 补齐（benign wire 上 hybrid + semirdma × seed 123, 7 × timeout=500）
-3. **本周**：P0 hammer 脚本 + link saturation sanity
-4. **下周**：P1 5-cell 最小矩阵 (decides hybrid 命运)
-5. **两周内**：P2 完整 5-transport 矩阵 (paper 核心 figure 数据)
+1. **今天收尾**：archive P1 结果 + 更新 PLAN.md + 删 hybrid 收尾验证 ✅
+2. **下一步（立刻）**：P2 前置 — `rc_baseline` / `rc_lossy` transport
+   的 single-cell smoke (drop=0, STEPS=100) 确认没被 hammer 清理误伤
+3. **今晚 / 明天**：P2 主矩阵 —
+   `DROP_RATES="0 0.001 0.005 0.01 0.05" TRANSPORTS="semirdma rc_baseline rc_lossy" TIMEOUTS_MS=50 STEPS=500`
+   × 2 seeds = 30 cells ≈ 3.5 h
+4. **下周**：P2 结果分析；决定是否需要更高 drop rate / 更长 STEPS
+5. **两周内**：大模型 hero cell + TTA 补充（paper 补弹药）
 
 ---
 
@@ -171,6 +180,7 @@
 保留但不阻塞 paper 的技术债（Phase 5 submit 后再碰）：
 
 - [ ] `src/transport/layer_analyzer.{h,cpp}` — Phase 3 Stage C 原计划的 per-layer 重要性 scoring，后来推迟。当前 chunk_bytes 固定 16KB，没按层自适应
-- [ ] `semirdma_hybrid_allreduce_hook` 仅支持 `world_size=2`，扩 N-rank ring 是 Stage 2 任务
 - [ ] Python hook 里 `import numpy as np` 在 _HOOK_LOCK 内部（性能 hot path），应提到 module-level
 - [ ] CloudLab session 间的 dataset 重新 stage 每次都花 ~5 min，应做成 shared NFS 或 pre-cached
+- [ ] `middlebox_setup.sh status` 的 `rate : ? ppm (?%)` 显示 bug — bpftool json 解析某条路径失败；stats 本身正常
+- [ ] `parse_cell` 读 loss_per_step.csv 时的 `tr -d '\r'` 是 Windows-CRLF 兼容补丁；根因在 training 写 CSV 没强制 LF

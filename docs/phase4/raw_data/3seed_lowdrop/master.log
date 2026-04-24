@@ -1,0 +1,113 @@
+########## seed=42 ##########
+Fri Apr 24 08:04:41 AM MDT 2026
+[08:04:41] === P1 matrix start (ts=20260424_080441  cells=4  steps=500) ===
+[08:04:41]     transports=[semirdma semirdma_hybrid]  timeouts=[50]  drop_rates=[0 0.01]  seed=42
+[08:04:41]     middlebox=chen123@amd186.utah.cloudlab.us  (XDP dropbox — wire-level Bernoulli drop on UDP:4791)
+[08:04:41]     gid_index=3 (IPv4-mapped RoCE v2 — required for ARP-spoof steering)
+[08:04:41]     root=/users/chen123/SemiRDMA/experiments/results/phase4_p1_3seed_20260424_080440/seed42
+[08:04:41] 
+[08:04:41] ########## DROP_RATE=0 block ##########
+[08:04:41] set-rate 0 → 0 ppm
+[08:04:43] === cell #0/4: cell_00_drop0_semirdma_t50 (t+2s) ===
+[08:11:53]     this=0 peer=0  final_loss=1.291881  mean_iter_ms=832.69
+[08:11:53] === cell #1/4: cell_01_drop0_semirdma_hybrid_t50 (t+432s) ===
+[08:19:26]     this=0 peer=0  final_loss=0.956313  mean_iter_ms=874.98
+[08:19:26] 
+[08:19:26] ########## DROP_RATE=0.01 block ##########
+[08:19:26] set-rate 0.01 → 10000 ppm
+[08:19:28] === cell #2/4: cell_02_drop0.01_semirdma_t50 (t+887s) ===
+[08:26:21]     this=0 peer=0  final_loss=1.087281  mean_iter_ms=796.95
+[08:26:21] === cell #3/4: cell_03_drop0.01_semirdma_hybrid_t50 (t+1300s) ===
+[08:34:10]     this=0 peer=0  final_loss=1.088422  mean_iter_ms=905.90
+[08:34:10] set-rate 0 → 0 ppm
+[08:34:12] 
+[08:34:12] === P1 matrix done.  total elapsed: 1771s  cells: 4 ===
+[08:34:12] 
+[08:34:12] === summary ===
+idx  drop_rate  transport        timeout_ms  rc  final_loss  mean_iter_ms  cell_dir
+0    0          semirdma         50          0   1.291881    832.69        /users/chen123/SemiRDMA/experiments/results/phase4_p1_3seed_20260424_080440/seed42/cell_00_drop0_semirdma_t50
+1    0          semirdma_hybrid  50          0   0.956313    874.98        /users/chen123/SemiRDMA/experiments/results/phase4_p1_3seed_20260424_080440/seed42/cell_01_drop0_semirdma_hybrid_t50
+2    0.01       semirdma         50          0   1.087281    796.95        /users/chen123/SemiRDMA/experiments/results/phase4_p1_3seed_20260424_080440/seed42/cell_02_drop0.01_semirdma_t50
+3    0.01       semirdma_hybrid  50          0   1.088422    905.90        /users/chen123/SemiRDMA/experiments/results/phase4_p1_3seed_20260424_080440/seed42/cell_03_drop0.01_semirdma_hybrid_t50
+[08:34:12] 
+[08:34:12] === output tree ===
+/users/chen123/SemiRDMA/experiments/results/phase4_p1_3seed_20260424_080440/seed42/cell_00_drop0_semirdma_t50/
+/users/chen123/SemiRDMA/experiments/results/phase4_p1_3seed_20260424_080440/seed42/cell_01_drop0_semirdma_hybrid_t50/
+/users/chen123/SemiRDMA/experiments/results/phase4_p1_3seed_20260424_080440/seed42/cell_02_drop0.01_semirdma_t50/
+/users/chen123/SemiRDMA/experiments/results/phase4_p1_3seed_20260424_080440/seed42/cell_03_drop0.01_semirdma_hybrid_t50/
+########## seed=1337 ##########
+Fri Apr 24 08:34:12 AM MDT 2026
+[08:34:12] === P1 matrix start (ts=20260424_083412  cells=4  steps=500) ===
+[08:34:12]     transports=[semirdma semirdma_hybrid]  timeouts=[50]  drop_rates=[0 0.01]  seed=1337
+[08:34:12]     middlebox=chen123@amd186.utah.cloudlab.us  (XDP dropbox — wire-level Bernoulli drop on UDP:4791)
+[08:34:12]     gid_index=3 (IPv4-mapped RoCE v2 — required for ARP-spoof steering)
+[08:34:12]     root=/users/chen123/SemiRDMA/experiments/results/phase4_p1_3seed_20260424_080440/seed1337
+[08:34:12] 
+[08:34:12] ########## DROP_RATE=0 block ##########
+[08:34:12] set-rate 0 → 0 ppm
+[08:34:14] === cell #0/4: cell_00_drop0_semirdma_t50 (t+2s) ===
+[08:41:10]     this=0 peer=0  final_loss=1.246195  mean_iter_ms=805.70
+[08:41:11] === cell #1/4: cell_01_drop0_semirdma_hybrid_t50 (t+418s) ===
+[08:48:59]     this=0 peer=0  final_loss=1.348189  mean_iter_ms=908.49
+[08:48:59] 
+[08:48:59] ########## DROP_RATE=0.01 block ##########
+[08:48:59] set-rate 0.01 → 10000 ppm
+[08:49:01] === cell #2/4: cell_02_drop0.01_semirdma_t50 (t+889s) ===
+[08:55:49]     this=0 peer=0  final_loss=1.340924  mean_iter_ms=786.15
+[08:55:49] === cell #3/4: cell_03_drop0.01_semirdma_hybrid_t50 (t+1297s) ===
+[09:03:25]     this=0 peer=0  final_loss=1.386918  mean_iter_ms=886.14
+[09:03:26] set-rate 0 → 0 ppm
+[09:03:28] 
+[09:03:28] === P1 matrix done.  total elapsed: 1756s  cells: 4 ===
+[09:03:28] 
+[09:03:28] === summary ===
+idx  drop_rate  transport        timeout_ms  rc  final_loss  mean_iter_ms  cell_dir
+0    0          semirdma         50          0   1.246195    805.70        /users/chen123/SemiRDMA/experiments/results/phase4_p1_3seed_20260424_080440/seed1337/cell_00_drop0_semirdma_t50
+1    0          semirdma_hybrid  50          0   1.348189    908.49        /users/chen123/SemiRDMA/experiments/results/phase4_p1_3seed_20260424_080440/seed1337/cell_01_drop0_semirdma_hybrid_t50
+2    0.01       semirdma         50          0   1.340924    786.15        /users/chen123/SemiRDMA/experiments/results/phase4_p1_3seed_20260424_080440/seed1337/cell_02_drop0.01_semirdma_t50
+3    0.01       semirdma_hybrid  50          0   1.386918    886.14        /users/chen123/SemiRDMA/experiments/results/phase4_p1_3seed_20260424_080440/seed1337/cell_03_drop0.01_semirdma_hybrid_t50
+[09:03:28] 
+[09:03:28] === output tree ===
+/users/chen123/SemiRDMA/experiments/results/phase4_p1_3seed_20260424_080440/seed1337/cell_00_drop0_semirdma_t50/
+/users/chen123/SemiRDMA/experiments/results/phase4_p1_3seed_20260424_080440/seed1337/cell_01_drop0_semirdma_hybrid_t50/
+/users/chen123/SemiRDMA/experiments/results/phase4_p1_3seed_20260424_080440/seed1337/cell_02_drop0.01_semirdma_t50/
+/users/chen123/SemiRDMA/experiments/results/phase4_p1_3seed_20260424_080440/seed1337/cell_03_drop0.01_semirdma_hybrid_t50/
+########## seed=2024 ##########
+Fri Apr 24 09:03:28 AM MDT 2026
+[09:03:28] === P1 matrix start (ts=20260424_090328  cells=4  steps=500) ===
+[09:03:28]     transports=[semirdma semirdma_hybrid]  timeouts=[50]  drop_rates=[0 0.01]  seed=2024
+[09:03:28]     middlebox=chen123@amd186.utah.cloudlab.us  (XDP dropbox — wire-level Bernoulli drop on UDP:4791)
+[09:03:28]     gid_index=3 (IPv4-mapped RoCE v2 — required for ARP-spoof steering)
+[09:03:28]     root=/users/chen123/SemiRDMA/experiments/results/phase4_p1_3seed_20260424_080440/seed2024
+[09:03:28] 
+[09:03:28] ########## DROP_RATE=0 block ##########
+[09:03:28] set-rate 0 → 0 ppm
+[09:03:30] === cell #0/4: cell_00_drop0_semirdma_t50 (t+2s) ===
+[09:10:27]     this=0 peer=0  final_loss=1.362679  mean_iter_ms=806.42
+[09:10:27] === cell #1/4: cell_01_drop0_semirdma_hybrid_t50 (t+419s) ===
+[09:18:14]     this=0 peer=0  final_loss=1.315969  mean_iter_ms=907.72
+[09:18:14] 
+[09:18:14] ########## DROP_RATE=0.01 block ##########
+[09:18:14] set-rate 0.01 → 10000 ppm
+[09:18:16] === cell #2/4: cell_02_drop0.01_semirdma_t50 (t+888s) ===
+[09:24:57]     this=0 peer=0  final_loss=1.194621  mean_iter_ms=772.98
+[09:24:57] === cell #3/4: cell_03_drop0.01_semirdma_hybrid_t50 (t+1289s) ===
+[09:32:46]     this=0 peer=0  final_loss=1.236981  mean_iter_ms=908.31
+[09:32:46] set-rate 0 → 0 ppm
+[09:32:48] 
+[09:32:48] === P1 matrix done.  total elapsed: 1760s  cells: 4 ===
+[09:32:48] 
+[09:32:48] === summary ===
+idx  drop_rate  transport        timeout_ms  rc  final_loss  mean_iter_ms  cell_dir
+0    0          semirdma         50          0   1.362679    806.42        /users/chen123/SemiRDMA/experiments/results/phase4_p1_3seed_20260424_080440/seed2024/cell_00_drop0_semirdma_t50
+1    0          semirdma_hybrid  50          0   1.315969    907.72        /users/chen123/SemiRDMA/experiments/results/phase4_p1_3seed_20260424_080440/seed2024/cell_01_drop0_semirdma_hybrid_t50
+2    0.01       semirdma         50          0   1.194621    772.98        /users/chen123/SemiRDMA/experiments/results/phase4_p1_3seed_20260424_080440/seed2024/cell_02_drop0.01_semirdma_t50
+3    0.01       semirdma_hybrid  50          0   1.236981    908.31        /users/chen123/SemiRDMA/experiments/results/phase4_p1_3seed_20260424_080440/seed2024/cell_03_drop0.01_semirdma_hybrid_t50
+[09:32:48] 
+[09:32:48] === output tree ===
+/users/chen123/SemiRDMA/experiments/results/phase4_p1_3seed_20260424_080440/seed2024/cell_00_drop0_semirdma_t50/
+/users/chen123/SemiRDMA/experiments/results/phase4_p1_3seed_20260424_080440/seed2024/cell_01_drop0_semirdma_hybrid_t50/
+/users/chen123/SemiRDMA/experiments/results/phase4_p1_3seed_20260424_080440/seed2024/cell_02_drop0.01_semirdma_t50/
+/users/chen123/SemiRDMA/experiments/results/phase4_p1_3seed_20260424_080440/seed2024/cell_03_drop0.01_semirdma_hybrid_t50/
+=== sweep done ===
+Fri Apr 24 09:32:48 AM MDT 2026

@@ -163,12 +163,16 @@ parse_cell() {
     local cell_dir="$1"
     local final_loss="?" mean_iter_ms="?"
     if [ -f "$cell_dir/loss_per_step.csv" ]; then
-        final_loss=$(tail -n1 "$cell_dir/loss_per_step.csv" | cut -d, -f2)
+        # tr -d '\r' because Python's csv writer on CRLF-aware platforms emits
+        # \r\n line endings; without stripping, final_loss ends up as "1.29\r"
+        # and contaminates the downstream MATRIX_SUMMARY.csv with an embedded
+        # CR that breaks DictReader parsers on Windows/mixed environments.
+        final_loss=$(tail -n1 "$cell_dir/loss_per_step.csv" | cut -d, -f2 | tr -d '\r')
     fi
     if [ -f "$cell_dir/iter_time.csv" ]; then
         # iter_time.csv schema:  step,fwd_ms,bwd_ms,opt_ms,total_ms  (col 5 = full iter time, already in ms).
         # Exclude warmup rows (first WARMUP+1 lines = header + warmup steps).
-        mean_iter_ms=$(awk -F, -v w="$WARMUP" 'NR>1+w {sum+=$5; n++} END {if(n>0) printf "%.2f", sum/n; else print "?"}' "$cell_dir/iter_time.csv")
+        mean_iter_ms=$(awk -F, -v w="$WARMUP" 'NR>1+w {sum+=$5; n++} END {if(n>0) printf "%.2f", sum/n; else print "?"}' "$cell_dir/iter_time.csv" | tr -d '\r')
     fi
     echo "$final_loss $mean_iter_ms"
 }
