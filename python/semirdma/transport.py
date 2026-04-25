@@ -310,27 +310,26 @@ class SemiRDMATransport:
         stats = self._ratio.wait_for_ratio(cs, r, t)
         stats["chunks_total"] = cs.size()
 
-        # Zero out regions from chunks that never arrived.  Must happen
-        # *before* the caller reads the buffer, otherwise stale bytes from
-        # a previous step would masquerade as this step's gradient — the
-        # "ghost gradient" problem (RQ2).
-        buf = np.frombuffer(self._engine.local_buf_view(), dtype=np.uint8)
-        apply_ghost_mask(buf, cs)
+        # CRITICAL ORDERING FIX (2026-04-25, DEBUG_LOG.md hypothesis L):
+        # Before this fix, apply_ghost_mask ran *immediately* after
+        # wait_for_ratio, then a "leftover drain" loop merely *logged*
+        # the late CQEs without updating ChunkSet.  Result on benign wire
+        # (drop_rate=0) at SEED=42 cell #3:
+        #   - wait_for_ratio returned with cs.num_completed = 10860 / 10913
+        #   - leftover drain found 53 more RECV_RDMA_WITH_IMM CQEs
+        #     (10860 + 53 = 10913 → all chunks DID arrive)
+        #   - apply_ghost_mask had already zeroed 53 perfectly-delivered
+        #     chunks because cs.state(i).has_cqe was still False
+        #   - Effective receive ratio = 99.5% (artificial, software-
+        #     introduced; not a wire/NIC property).
+        # Fix: drain late CQEs into ChunkSet *before* applying ghost mask.
 
-        # DIAG: capture per-step receive-side counters BEFORE refill, to
-        # diagnose RQ depletion hypothesis.  outstanding_recv() == current
-        # number of Recv WRs still posted but not yet consumed by an
-        # incoming Write-with-Imm.  Cumulative consumed = (initial rq_depth +
-        # all post_recv_batch increments) - outstanding_recv.
-        n_completed = cs.num_completed()
-        n_expected = cs.size()
-        out_recv_pre = self._engine.outstanding_recv()
-
-        # DIAG2: drain whatever CQEs are STILL sitting in the CQ right after
-        # wait_for_ratio returned.  This separates "CQEs never arrived"
-        # (post-drain count == 0) from "wait_for_ratio undercounted"
-        # (post-drain count > 0).  Bucket by status / opcode to catch any
-        # error-status CQEs that the C++ ratio loop silently skipped.
+        # Step 1: drain late CQEs into ChunkSet.
+        # ratio_controller exits as soon as the threshold is hit; CQEs
+        # whose imm_data corresponds to chunks that arrived in the
+        # microseconds AFTER threshold but BEFORE wait_for_ratio observed
+        # them are still sitting in the CQ.  Mark them on cs so
+        # apply_ghost_mask doesn't zero their (delivered) data.
         leftover_recv_ok = 0
         leftover_recv_err = 0
         leftover_other = 0
@@ -343,12 +342,25 @@ class SemiRDMATransport:
                 op = c.get("opcode_name")
                 st = c.get("status")
                 if op == "RECV_RDMA_WITH_IMM" and st == 0:
+                    imm = int(c.get("imm_data", 0))
+                    cs.mark_completed(imm)             # ← THE FIX
                     leftover_recv_ok += 1
-                    leftover_imm_unique.add(int(c.get("imm_data", 0)))
+                    leftover_imm_unique.add(imm)
                 elif op in ("RECV", "RECV_RDMA_WITH_IMM"):
                     leftover_recv_err += 1
                 else:
                     leftover_other += 1
+
+        # Step 2: snapshot completion stats AFTER leftover drain.
+        n_completed = cs.num_completed()
+        n_expected = cs.size()
+        out_recv_pre = self._engine.outstanding_recv()
+
+        # Step 3: ghost-mask only the chunks that truly never arrived.
+        # On a benign wire this should now zero zero chunks; ratio threshold
+        # + leftover drain together capture the full delivery.
+        buf = np.frombuffer(self._engine.local_buf_view(), dtype=np.uint8)
+        apply_ghost_mask(buf, cs)
 
         logger.info(
             "await_gradient DIAG: completed=%d/%d outstanding_recv_pre=%d "

@@ -113,6 +113,38 @@ Append-only log of debug investigations. Format defined in [DEBUG_PROTOCOL.md](D
 - Observation: 24.5 Gb/s line rate, 0 loss.
 - **Status: REJECTED**. NIC tolerates 1 µs/WR submission cleanly when the rest of the stack (libmlx5 fast path, receiver) is healthy. The "1 µs cliff" is a property of OUR receiver/refill chain, not the NIC.
 
+### Hypothesis L: residual ~0.5% loss is await_gradient leftover-drain bookkeeping race — chunks DO arrive, but ratio_controller returns before their CQEs are visible, and the leftover drain reads the late CQEs but never marks them on ChunkSet so apply_ghost_mask zeros their (perfectly-delivered) data [PRIMARY CANDIDATE]
+
+**Discovered**: 2026-04-25 ~08:42 from cell #3 of P0 SEED=42 (`drop=0 semirdma`, 500 buckets).
+
+**Symptom data per bucket (mean over 500)**:
+- `wait_for_ratio` returns with `ok=True timed_out=False` in 3.65–66 ms (well below 200 ms timeout)
+- `cs.num_completed = 10860/10913` (99.5%) at return
+- `LEFTOVER_after_wait` non-blocking drain finds **`recv_ok = 49–54` extra `RECV_RDMA_WITH_IMM` CQEs** with **unique imm_data**
+- **`completed (10860) + leftover_recv_ok (53) = 10913 = total chunks`** (all chunks DID arrive)
+
+**Mechanism**:
+- `ratio_controller.wait_for_ratio` exits on `cs.completion_ratio() >= r=0.995`. At 10860/10913 = 0.9951, threshold is met. Loop exits.
+- The remaining ~53 chunks have already produced `RECV_RDMA_WITH_IMM` CQEs at the NIC, but those CQEs hadn't been polled into `cs` yet at the moment ratio was hit (CQE-visibility timing race in tight C++ poll loop).
+- `await_gradient` then runs the leftover drain (`for _ in range(64): poll_cq(16384, 0)`), which DOES collect those 53 CQEs — but **only increments a counter and adds to a `set` for logging**; it never calls `cs.mark_completed(c.imm_data)`.
+- `apply_ghost_mask(buf, cs)` then sees `cs.state(i).has_cqe == False` for those 53 chunks and **zeros their data even though the data was delivered correctly to the MR**.
+
+**Predictions if true**:
+1. Adding `cs.mark_completed(c.imm_data)` inside the leftover drain loop should bring `cs.num_completed` to 10913/10913 (100%) on benign wire.
+2. With 100% effective completion, SemiRDMA at `drop=0` should produce `final_loss ≈ gloo's final_loss` (within seed variance ~0.01), not 0.03 lower.
+3. The "0.83 < 0.86 final_loss surprise" disappears.
+4. At `drop_rate > 0` (real wire drop via XDP), the fix should still leave `cs.num_completed < n_chunks` for chunks that **truly didn't arrive** — leftover drain only marks completions it actually received.
+
+**Predictions if false**:
+- After fix, `cs.num_completed` < 10913 even at `drop=0` (some other source of dropped chunks beyond the bookkeeping race).
+- OR `cs.num_completed = 10913` but `final_loss` is still 0.83 (final_loss reduction was seed luck, not regularization noise).
+
+**Experiment plan**: Apply the one-line fix, rebuild, run a single SemiRDMA cell at `drop=0` with `STEPS=500 SEED=42` (same as the P0 cell #3 we have data for). Then compare `cs.num_completed` distribution and `final_loss` against:
+- The archived P0 cell #3 SEED=42 (`final_loss=0.830595`)
+- The P0 cell #0 gloo SEED=42 (`final_loss=0.860358`)
+
+**Status**: ABOUT TO TEST. Hypothesis G/H/I/K (receiver SRQ refill / PCIe doorbell / SQ overflow / multi-QP) are now SUPERSEDED — they were chasing a phenomenon that has a much simpler software-bookkeeping explanation. They are NOT formally rejected (the underlying mechanisms could still be real for OTHER residual loss patterns), but they are no longer relevant to the "0.5% residual on benign wire" symptom.
+
 ### Hypothesis K: dual-QP fanout would double delivery [PENDING — should have been run last session]
 
 - User suggested in the previous round; not yet executed.
