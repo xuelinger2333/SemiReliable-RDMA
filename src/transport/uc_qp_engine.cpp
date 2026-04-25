@@ -399,49 +399,20 @@ ChunkSet UCQPEngine::post_bucket_chunks(size_t          base_offset,
     const int capacity = std::max(1, sq_depth_throttle - 1);
     int       inflight = 0;
 
-    // Pre-allocate one wave's worth of WRs / SGEs once; reused across waves.
-    std::vector<struct ibv_send_wr> wrs(capacity);
-    std::vector<struct ibv_sge>     sges(capacity);
-    std::vector<struct ibv_wc>      wcs(capacity);
+    // Reusable scratch.  Each WR is posted individually (NOT chained via
+    // wr.next) so the NIC TX scheduler sees the same per-WR cadence the
+    // pre-fix Python loop produced.  Chained ibv_post_send hands the NIC
+    // a back-to-back burst, which empirically triggers ~25% per-IB-packet
+    // loss on CX-5 + UC even on a benign cable.  The Python interpreter
+    // overhead in the old code (~5 µs / WR) was an *implicit* pacer; here
+    // we just don't chain.
+    struct ibv_sge     sge;
+    struct ibv_send_wr wr;
+    struct ibv_send_wr* bad_wr = nullptr;
+    std::vector<struct ibv_wc> wcs(static_cast<size_t>(capacity));
 
-    auto build_and_post = [&](size_t chunk_start, size_t wave_size) {
-        for (size_t j = 0; j < wave_size; j++) {
-            const ChunkDescriptor& cd = cs.chunk(chunk_start + j);
-
-            std::memset(&sges[j], 0, sizeof(struct ibv_sge));
-            sges[j].addr   = reinterpret_cast<uint64_t>(buf_ + cd.local_offset);
-            sges[j].length = static_cast<uint32_t>(cd.length);
-            sges[j].lkey   = mr_->lkey;
-
-            std::memset(&wrs[j], 0, sizeof(struct ibv_send_wr));
-            wrs[j].wr_id      = wr_id_base + chunk_start + j;
-            wrs[j].sg_list    = &sges[j];
-            wrs[j].num_sge    = 1;
-            wrs[j].opcode     = with_imm ? IBV_WR_RDMA_WRITE_WITH_IMM
-                                         : IBV_WR_RDMA_WRITE;
-            wrs[j].send_flags = IBV_SEND_SIGNALED;
-            if (with_imm) {
-                wrs[j].imm_data = htonl(cd.chunk_id);
-            }
-            wrs[j].wr.rdma.remote_addr =
-                remote.addr + remote_base_offset +
-                (cd.local_offset - base_offset);
-            wrs[j].wr.rdma.rkey = remote.rkey;
-
-            wrs[j].next = (j + 1 < wave_size) ? &wrs[j + 1] : nullptr;
-        }
-        struct ibv_send_wr* bad_wr = nullptr;
-        int ret = ibv_post_send(qp_, &wrs[0], &bad_wr);
-        if (ret) {
-            throw std::runtime_error(
-                std::string("post_bucket_chunks: ibv_post_send failed: ") +
-                strerror(ret));
-        }
-    };
-
-    size_t i = 0;
-    while (i < n_chunks) {
-        // Drain enough headroom for the next wave.
+    for (size_t i = 0; i < n_chunks; i++) {
+        // Wave throttle: hold inflight at most ``capacity``.
         while (inflight >= capacity) {
             int n = ibv_poll_cq(cq_, capacity, wcs.data());
             if (n < 0) {
@@ -452,13 +423,37 @@ ChunkSet UCQPEngine::post_bucket_chunks(size_t          base_offset,
                 inflight = std::max(0, inflight - n);
             }
         }
-        const size_t headroom  = static_cast<size_t>(capacity - inflight);
-        const size_t remaining = n_chunks - i;
-        const size_t wave_size = std::min(headroom, remaining);
 
-        build_and_post(i, wave_size);
-        inflight += static_cast<int>(wave_size);
-        i        += wave_size;
+        const ChunkDescriptor& cd = cs.chunk(i);
+
+        std::memset(&sge, 0, sizeof(sge));
+        sge.addr   = reinterpret_cast<uint64_t>(buf_ + cd.local_offset);
+        sge.length = static_cast<uint32_t>(cd.length);
+        sge.lkey   = mr_->lkey;
+
+        std::memset(&wr, 0, sizeof(wr));
+        wr.wr_id      = wr_id_base + i;
+        wr.sg_list    = &sge;
+        wr.num_sge    = 1;
+        wr.opcode     = with_imm ? IBV_WR_RDMA_WRITE_WITH_IMM
+                                 : IBV_WR_RDMA_WRITE;
+        wr.send_flags = IBV_SEND_SIGNALED;
+        if (with_imm) {
+            wr.imm_data = htonl(cd.chunk_id);
+        }
+        wr.wr.rdma.remote_addr =
+            remote.addr + remote_base_offset +
+            (cd.local_offset - base_offset);
+        wr.wr.rdma.rkey = remote.rkey;
+        wr.next         = nullptr;
+
+        int ret = ibv_post_send(qp_, &wr, &bad_wr);
+        if (ret) {
+            throw std::runtime_error(
+                std::string("post_bucket_chunks: ibv_post_send failed: ") +
+                strerror(ret));
+        }
+        inflight++;
     }
 
     // Tail drain: wait for remaining SEND CQEs so the next bucket starts
