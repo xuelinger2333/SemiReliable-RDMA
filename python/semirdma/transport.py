@@ -216,16 +216,27 @@ class SemiRDMATransport:
         # lost Write (software loss on the peer's rx path — not possible with
         # our current model, but defensive) can't hang the sender.
         drain_deadline_ms = max(50, self._cfg.timeout_ms)
+        n_drained_in_tail = 0
         while inflight > 0:
             cqes = self._engine.poll_cq(capacity, drain_deadline_ms)
             if not cqes:
                 break
             inflight = max(0, inflight - len(cqes))
+            n_drained_in_tail += len(cqes)
 
-        logger.debug(
-            "post_gradient: %d/%d chunks posted (loss_rate=%.3f, total=%d B)",
-            n_posted, n_chunks, self._cfg.loss_rate, total,
-        )
+        # DIAG: if the tail drain bailed with inflight>0, those send CQEs are
+        # still pending (will get drained on next call's wave-throttle).  Log
+        # so we can see whether sender is leaking inflight across buckets.
+        if inflight > 0 or n_posted != n_drained_in_tail + (n_posted - inflight - n_drained_in_tail):
+            logger.warning(
+                "post_gradient DIAG: n_posted=%d tail_drained=%d inflight_left=%d",
+                n_posted, n_drained_in_tail, inflight,
+            )
+        else:
+            logger.info(
+                "post_gradient DIAG: n_posted=%d all CQEs drained",
+                n_posted,
+            )
         return cs
 
     def drain_send_completions(self, max_n: int = 64) -> int:
@@ -290,6 +301,22 @@ class SemiRDMATransport:
         # "ghost gradient" problem (RQ2).
         buf = np.frombuffer(self._engine.local_buf_view(), dtype=np.uint8)
         apply_ghost_mask(buf, cs)
+
+        # DIAG: capture per-step receive-side counters BEFORE refill, to
+        # diagnose RQ depletion hypothesis.  outstanding_recv() == current
+        # number of Recv WRs still posted but not yet consumed by an
+        # incoming Write-with-Imm.  Cumulative consumed = (initial rq_depth +
+        # all post_recv_batch increments) - outstanding_recv.
+        n_completed = cs.num_completed()
+        n_expected = cs.size()
+        out_recv_pre = self._engine.outstanding_recv()
+        logger.info(
+            "await_gradient DIAG: completed=%d/%d outstanding_recv_pre=%d "
+            "ok=%s timed_out=%s latency_ms=%.2f",
+            n_completed, n_expected, out_recv_pre,
+            stats.get("ok"), stats.get("timed_out"),
+            stats.get("latency_ms", 0.0),
+        )
 
         # Refill the RQ to keep up with the incoming Write-with-Imm stream.
         # ``outstanding_recv()`` returns the current surplus, so we only
