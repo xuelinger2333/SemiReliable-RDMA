@@ -346,6 +346,25 @@ class SemiRDMATransport:
             len(leftover_imm_unique),
         )
 
+        # DIAG3: positional histogram of MISSING chunk_ids — answers
+        # "are the residual losses concentrated at start of bucket
+        # (NIC TX cold-start) vs end of bucket (tail race) vs uniform".
+        # Only emit when there are actually missing chunks AND missing
+        # rate is small enough to make positional analysis cheap.
+        if 0 < (n_expected - n_completed) <= 1024:
+            missing = [i for i in range(n_expected) if not cs.state(i)["has_cqe"]]
+            if missing:
+                # 10-bucket histogram across [0, n_expected)
+                bins = [0] * 10
+                for m in missing:
+                    bins[min(9, m * 10 // n_expected)] += 1
+                logger.info(
+                    "await_gradient DIAG3 missing_pos: count=%d  first=%d  last=%d  "
+                    "hist10=[%s]",
+                    len(missing), missing[0], missing[-1],
+                    ",".join(str(b) for b in bins),
+                )
+
         # Refill the RQ to keep up with the incoming Write-with-Imm stream.
         # ``outstanding_recv()`` returns the current surplus, so we only
         # re-post what was consumed.
