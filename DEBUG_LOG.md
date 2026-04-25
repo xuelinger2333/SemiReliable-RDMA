@@ -143,7 +143,58 @@ Append-only log of debug investigations. Format defined in [DEBUG_PROTOCOL.md](D
 - The archived P0 cell #3 SEED=42 (`final_loss=0.830595`)
 - The P0 cell #0 gloo SEED=42 (`final_loss=0.860358`)
 
-**Status**: ABOUT TO TEST. Hypothesis G/H/I/K (receiver SRQ refill / PCIe doorbell / SQ overflow / multi-QP) are now SUPERSEDED — they were chasing a phenomenon that has a much simpler software-bookkeeping explanation. They are NOT formally rejected (the underlying mechanisms could still be real for OTHER residual loss patterns), but they are no longer relevant to the "0.5% residual on benign wire" symptom.
+**Status**: PARTIALLY CONFIRMED (2026-04-25 ~09:00). Code at commit `9a0bdbc`.
+
+**Falsification result** (`/tmp/p0_falsify_L/cell_00_drop0_semirdma_t200`, same config as P0 cell #3):
+
+- Mean delivery: 99.51% → **99.97%** (mean 2.90 chunks/bucket missing instead of 53)
+- Distribution: **459 / 500 buckets perfect (10913/10913)**, 41 / 500 with non-zero missing
+- Outliers: occasional buckets with 60–203 missing (`min ratio = 0.9814`)
+- Final loss: 0.830595 → **0.844591** (closed half the gap to gloo's 0.860358)
+- iter_ms: 725 → 810 (+85 ms, from `cs.mark_completed(imm)` calls in drain)
+
+**Interpretation**: Hypothesis L is the dominant cause for 92% of buckets. The bookkeeping race was real and the fix works. BUT a secondary timing issue remains for 8% of buckets — the leftover drain breaks too early when `poll_cq` transiently returns 0 even though more CQEs are about to be generated.
+
+Hypothesis G/H/I/K (receiver SRQ refill / PCIe doorbell / SQ overflow / multi-QP) remain SUPERSEDED for the primary 0.5% residual symptom. They are NOT formally rejected — they could still describe the secondary 8% effect — but the simpler explanation came first and the partial fix landed.
+
+### Hypothesis L.2: leftover drain `for _ in range(64): if not cqes: break` exits too early on transient 0-poll [REJECTED — caused regression]
+
+**Mechanism (proposed)**: After Hypothesis L's fix, the leftover drain still breaks on the first `poll_cq` returning 0. NIC CQE generation is asynchronous; when poll_cq sees 0, the next few µs may still produce CQEs for chunks that are being finalized in NIC's RX path. The drain's "first zero ⇒ done" heuristic loses those.
+
+**Patch tried** (commit `f95892c`, since reverted in `b38a883`): replaced the bounded-iteration drain with a quiescent-based one — `_DRAIN_QUIESCENT_THRESHOLD_NS = 200 µs`, `_DRAIN_MAX_NS = 5 ms` ceiling.
+
+**Predictions if true** (from the original entry):
+1. mean delivery ≥ 99.99% (≤1 chunk/bucket missing avg)
+2. min delivery > 10900 (no 60–200 chunk outliers)
+3. iter_ms ≤ 820 (drain overhead ≤ +10 ms vs current 810)
+4. final_loss within 0.005 of gloo's 0.860358
+
+**Falsification result** (2026-04-26 morning, `/tmp/p0_falsify_L2/cell_00_drop0_semirdma_t200`, same config as L falsify):
+
+The cell never completed a single training step — `loss_per_step.csv` was empty when killed. Per-bucket DIAG sequence:
+
+```
+bucket 1–7:   completed=10913/10913 (perfect, drain finds ~50 late CQEs as before)
+bucket 8:     completed=0/10913, outstanding_recv_pre=16384, ok=False timed_out=True
+              recv_ok=0 recv_err=0 other=0 unique_imm=0 drain_us≈5131 drain_max_aborted=0
+bucket 9–N:   stuck at completed=10211/10913 (deterministic), outstanding_recv_pre=0,
+              every bucket times out at 200ms, recv_ok=0 in drain
+              positional histogram of missing chunks: bin10=[5,0,0,1,8,3,0,0,0,685]
+              (685 of the 702 missing chunks land in last 10% of bucket)
+```
+
+After bucket 7, the receiver permanently loses ability to refill RRs through the normal poll-and-receive cycle. Cell wedges until killed.
+
+Note: `drain_us=5131` on bucket 8 is dominated by `apply_ghost_mask` zeroing 44 MB of buffer, NOT the drain loop itself — `drain_max_aborted=0` confirms the loop exited via the 200 µs quiescence path. So the proposed mechanism (drain hiding CQEs longer) executed as designed; the regression came from elsewhere.
+
+**Verdict**: REJECTED for the patch as written. Criterion 1 fails catastrophically (delivery drops to 93.5% of every bucket after bucket 7, not the targeted 99.99%). Criterion 4 cannot even be evaluated since training never produces a final_loss.
+
+**Mechanism unclear; candidates not yet falsified** (do NOT touch the drain again until one of these is established):
+- Drain takes ~400 µs longer than the bounded-iteration version → ranks drift, ending up writing into different `n_slots` slots after a few buckets, so received chunks land where the local `cs_recv` isn't watching.
+- Quiescent loop greedily consumes SEND completions (now in `leftover_other`) that the SQ flow control or the engine's outstanding-Send bookkeeping needs.
+- `poll_cq` tight loop interferes with libmlx5 doorbell pacing or RR-refill latency on the receiver side.
+
+**Status**: REJECTED (regression confirmed). Code reverted at `b38a883`; deployed code is back to L-only at `9a0bdbc`'s state.
 
 ### Hypothesis K: dual-QP fanout would double delivery [PENDING — should have been run last session]
 
@@ -161,8 +212,9 @@ The deployed configuration:
 - `chunk_bytes = 4096` (Hypothesis D — chunk size = 1 IB packet).
 - `sq_depth = 8`, `timeout_ms = 200` (Hypothesis E + jitter tolerance, commit `80beb30`).
 - `post_gradient` retains the per-chunk Python loop (Hypothesis F withdrawn; tight C++ loop demonstrably loses packets, but the mechanism is not yet identified).
+- Leftover drain marks late CQEs on `cs` before `apply_ghost_mask` runs (Hypothesis L — fix at commit `9a0bdbc`). Drain bounds: `for _ in range(64): if not cqes: break` (the L.2 quiescent variant was tried in `f95892c` and reverted in `b38a883` after wedging the cell after bucket 7).
 
-This gives ~99.5% delivery on benign wire and converges. The residual ~0.5% loss + the tight-C++-loop loss are NOT root-caused. **Hypotheses G, H, I, K must be tested before any paper claim about "the per-WR submission rate floor on CX-5 + UC" or similar.**
+This gives ~99.97% delivery on benign wire (459/500 buckets perfect, 41 imperfect with up to 203 chunks missing each), final_loss=0.844591 vs gloo's 0.860358 at SEED=42. The residual 8% imperfect-bucket tail + the tight-C++-loop loss are NOT root-caused. **Hypotheses G, H, I, K must be tested before any paper claim about "the per-WR submission rate floor on CX-5 + UC" or similar.**
 
 ### Required experiments before this bug can be marked closed
 
