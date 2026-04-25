@@ -22,15 +22,35 @@ Stage A scope:
                                  mimicking Phase 2's software-loss methodology.
   - Stage A explicitly does NOT support GPU tensors (design §1.3); callers
     must stage into a CPU buffer first.
+
+Tunables (DEBUG_LOG.md hypothesis L.2 — quiescent-based leftover drain):
+  ``_DRAIN_QUIESCENT_THRESHOLD_US`` — break the post-ratio leftover drain
+      once this many microseconds have passed since the last RECV CQE was
+      marked on ChunkSet.  Default 200 µs is tuned for ResNet-18 at
+      chunk_bytes=4096 (~10913 chunks/bucket).  Larger models with sparser
+      CQE generation may need recalibration; document threshold + chunk
+      count in any cross-model paper claim.
+  ``_DRAIN_MAX_US`` — hard ceiling on total leftover drain time, kept so
+      a pathological CQE-generation stall cannot block the bucket
+      indefinitely.  If hit, fall through to apply_ghost_mask (the still-
+      missing CQEs become ghost chunks).
 """
 
 from __future__ import annotations
 
 import logging
 import random
+import time
 from typing import Optional, Union
 
 import numpy as np
+
+# DEBUG_LOG.md hypothesis L.2: drain late RECV CQEs until either no new CQE
+# arrives for QUIESCENT_THRESHOLD_US, or MAX_DRAIN_US elapses.  Tuned for
+# chunk_bytes=4096 / ResNet-18 (~10913 chunks/bucket) on CX-5 25 GbE; larger
+# chunk counts may need recalibration.
+_DRAIN_QUIESCENT_THRESHOLD_NS = 200 * 1_000   # 200 µs
+_DRAIN_MAX_NS                 = 5_000 * 1_000  # 5 ms hard ceiling
 
 from semirdma._semirdma_ext import (
     ChunkSet,
@@ -330,26 +350,43 @@ class SemiRDMATransport:
         # microseconds AFTER threshold but BEFORE wait_for_ratio observed
         # them are still sitting in the CQ.  Mark them on cs so
         # apply_ghost_mask doesn't zero their (delivered) data.
+        #
+        # Drain loop: poll-until-quiescent.  Break when no new RECV CQE
+        # has arrived for ``_DRAIN_QUIESCENT_THRESHOLD_NS`` (default 200 µs)
+        # or total drain time has reached ``_DRAIN_MAX_NS`` (default 5 ms,
+        # pathology fallback).  An earlier first-zero-poll heuristic
+        # exited too early when the NIC's CQE generation took a brief
+        # micro-pause mid-tail (DEBUG_LOG.md L.2).
         leftover_recv_ok = 0
         leftover_recv_err = 0
         leftover_other = 0
         leftover_imm_unique = set()
-        for _ in range(64):  # up to 64 batches × 16384 = 1M CQEs (cap)
+        drain_start_ns = time.monotonic_ns()
+        last_cqe_ns    = drain_start_ns
+        drain_aborted_at_max = False
+        while True:
             cqes = self._engine.poll_cq(16384, 0)
-            if not cqes:
-                break
-            for c in cqes:
-                op = c.get("opcode_name")
-                st = c.get("status")
-                if op == "RECV_RDMA_WITH_IMM" and st == 0:
-                    imm = int(c.get("imm_data", 0))
-                    cs.mark_completed(imm)             # ← THE FIX
-                    leftover_recv_ok += 1
-                    leftover_imm_unique.add(imm)
-                elif op in ("RECV", "RECV_RDMA_WITH_IMM"):
-                    leftover_recv_err += 1
-                else:
-                    leftover_other += 1
+            if cqes:
+                for c in cqes:
+                    op = c.get("opcode_name")
+                    st = c.get("status")
+                    if op == "RECV_RDMA_WITH_IMM" and st == 0:
+                        imm = int(c.get("imm_data", 0))
+                        cs.mark_completed(imm)
+                        leftover_recv_ok += 1
+                        leftover_imm_unique.add(imm)
+                    elif op in ("RECV", "RECV_RDMA_WITH_IMM"):
+                        leftover_recv_err += 1
+                    else:
+                        leftover_other += 1
+                last_cqe_ns = time.monotonic_ns()
+                continue   # don't check quiescence on the same iteration
+            now_ns = time.monotonic_ns()
+            if (now_ns - last_cqe_ns) >= _DRAIN_QUIESCENT_THRESHOLD_NS:
+                break  # quiescent — drain complete
+            if (now_ns - drain_start_ns) >= _DRAIN_MAX_NS:
+                drain_aborted_at_max = True
+                break  # pathology fallback
 
         # Step 2: snapshot completion stats AFTER leftover drain.
         n_completed = cs.num_completed()
@@ -362,15 +399,18 @@ class SemiRDMATransport:
         buf = np.frombuffer(self._engine.local_buf_view(), dtype=np.uint8)
         apply_ghost_mask(buf, cs)
 
+        drain_total_us = (time.monotonic_ns() - drain_start_ns) / 1000.0
         logger.info(
             "await_gradient DIAG: completed=%d/%d outstanding_recv_pre=%d "
             "ok=%s timed_out=%s latency_ms=%.2f "
-            "LEFTOVER_after_wait: recv_ok=%d recv_err=%d other=%d unique_imm=%d",
+            "LEFTOVER_after_wait: recv_ok=%d recv_err=%d other=%d unique_imm=%d "
+            "drain_us=%.0f drain_max_aborted=%d",
             n_completed, n_expected, out_recv_pre,
             stats.get("ok"), stats.get("timed_out"),
             stats.get("latency_ms", 0.0),
             leftover_recv_ok, leftover_recv_err, leftover_other,
             len(leftover_imm_unique),
+            drain_total_us, int(drain_aborted_at_max),
         )
 
         # DIAG3: positional histogram of MISSING chunk_ids — answers
