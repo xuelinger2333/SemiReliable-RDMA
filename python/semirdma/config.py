@@ -73,7 +73,7 @@ class TransportConfig:
     # pace at ~5 µs/WR (interpreter + pybind cost), which empirically
     # matches the NIC's safe submission rate.  Set to 0 on SoftRoCE or
     # future fabrics where back-to-back submission is safe.
-    per_wr_pace_us: int = 5
+    per_wr_pace_us: int = 10
 
     # Write granularity.  post_gradient splits the bucket into
     # ceil(bucket_bytes / chunk_bytes) Writes, one WR per chunk, imm = chunk_id.
