@@ -181,38 +181,18 @@ class SemiRDMATransport:
 
         drain_deadline_ms = max(50, self._cfg.timeout_ms)
 
-        # Fast path: no software loss simulation → entire chunk-emit /
-        # wave-throttle / tail-drain loop runs in C++ (one Python ↔ C++
-        # crossing per bucket instead of ~30K).  This recovers the
-        # kernel-bypass-style throughput; per-bucket overhead drops from
-        # ~50-100 ms (10K Python interpreter + pybind boundary cost) to
-        # ~1 ms (one libmlx5 call per wave, doorbell-write only).
-        if self._cfg.loss_rate <= 0.0:
-            wr_id_base = self._wr_seq + 1
-            cs = self._engine.post_bucket_chunks(
-                base_offset=base_offset,
-                remote_base_offset=remote_base_offset,
-                total_bytes=total,
-                chunk_bytes=self._cfg.chunk_bytes,
-                sq_depth_throttle=self._cfg.sq_depth,
-                drain_timeout_ms=drain_deadline_ms,
-                per_wr_pace_us=self._cfg.per_wr_pace_us,
-                remote=self._remote_mr,
-                with_imm=True,
-                wr_id_base=wr_id_base,
-            )
-            n_posted = cs.size()
-            self._wr_seq += n_posted
-            logger.info(
-                "post_gradient DIAG: n_posted=%d all CQEs drained (fast path)",
-                n_posted,
-            )
-            return cs
-
-        # Slow path: per-chunk Python loop, kept ONLY for the
-        # ``loss_rate > 0`` software-loss simulation used in Phase-2-style
-        # SoftRoCE bring-ups (no middlebox).  Real-wire P2 runs always
-        # have loss_rate=0 and take the fast path above.
+        # Per-chunk Python loop.  We tried moving this to C++ via
+        # UCQPEngine::post_bucket_chunks (commit f5466d8 / 4de0c99 /
+        # 5e71813); on CX-5 + UC the C++ tight loop overran the NIC TX
+        # scheduler at ~1 µs / WR and dropped 25-30% of IB packets even
+        # with explicit per-WR busy-wait pacing.  Re-introducing 5-10 µs
+        # pacing in C++ only matched (not beat) Python's ~5 µs implicit
+        # pacing from interpreter + pybind overhead — and the C++ version
+        # actually ran *slower* end-to-end because the busy-wait + GIL
+        # release/acquire combined cost more than the Python loop's
+        # marshalling.  So Python loop stays as the production path.
+        # The C++ post_bucket_chunks remains in UCQPEngine for SoftRoCE /
+        # future fabric experiments (per_wr_pace_us=0 there is fine).
         cs = ChunkSet(base_offset, total, self._cfg.chunk_bytes)
         n_chunks = cs.size()
         capacity = max(1, self._cfg.sq_depth - 1)
@@ -220,7 +200,10 @@ class SemiRDMATransport:
         n_posted = 0
         for i in range(n_chunks):
             chunk = cs.chunk(i)
-            if self._loss_rng.random() < self._cfg.loss_rate:
+            # Software loss path (cfg.loss_rate > 0) — used by Phase-2
+            # SoftRoCE simulation; real-wire P2 always sets loss_rate=0
+            # and the entire bucket goes through.
+            if self._cfg.loss_rate > 0.0 and self._loss_rng.random() < self._cfg.loss_rate:
                 continue
             while inflight >= capacity:
                 cqes = self._engine.poll_cq(capacity, 1)
@@ -249,12 +232,12 @@ class SemiRDMATransport:
 
         if inflight > 0:
             logger.warning(
-                "post_gradient DIAG: n_posted=%d tail_drained=%d inflight_left=%d (slow path)",
+                "post_gradient DIAG: n_posted=%d tail_drained=%d inflight_left=%d",
                 n_posted, n_drained_in_tail, inflight,
             )
         else:
             logger.info(
-                "post_gradient DIAG: n_posted=%d all CQEs drained (slow path)",
+                "post_gradient DIAG: n_posted=%d all CQEs drained",
                 n_posted,
             )
         return cs
