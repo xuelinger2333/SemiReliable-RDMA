@@ -160,6 +160,10 @@ private:
     int           ib_port_   = 1;
     int           gid_index_ = -1;
     union ibv_gid gid_;
+    // Captured from ibv_query_port at construction; used as path_mtu in RTR.
+    // Hardcoding IBV_MTU_1024 here used to silently 4×-fragment every IB
+    // packet on CX-5/6 active_mtu=4096 links, killing UC delivery.
+    enum ibv_mtu  active_mtu_ = IBV_MTU_1024;
 
     // QP mode + RC params (captured at construction, consumed by bring_up).
     // qp_type_ is the enum form of the string arg; RC params are ignored

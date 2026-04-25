@@ -137,6 +137,14 @@ UCQPEngine::UCQPEngine(const std::string& dev_name,
             cleanup();
             throw std::runtime_error("ibv_query_port failed");
         }
+        active_mtu_ = pa.active_mtu;
+        SEMIRDMA_LOG_INFO("Port active_mtu=%d (IBV_MTU_%d enum)",
+                          active_mtu_,
+                          active_mtu_ == IBV_MTU_256  ? 256  :
+                          active_mtu_ == IBV_MTU_512  ? 512  :
+                          active_mtu_ == IBV_MTU_1024 ? 1024 :
+                          active_mtu_ == IBV_MTU_2048 ? 2048 :
+                          active_mtu_ == IBV_MTU_4096 ? 4096 : -1);
         union ibv_gid zero_gid;
         std::memset(&zero_gid, 0, sizeof(zero_gid));
 
@@ -259,7 +267,12 @@ void UCQPEngine::bring_up(const RemoteQpInfo& remote)
         struct ibv_qp_attr attr;
         std::memset(&attr, 0, sizeof(attr));
         attr.qp_state                = IBV_QPS_RTR;
-        attr.path_mtu                = IBV_MTU_1024;
+        // Use queried active_mtu, NOT hardcoded 1024.  On CX-5/6 with
+        // active_mtu=4096, hardcoding 1024 fragments every IB write into
+        // 4× more packets, and any single packet loss in UC kills the
+        // whole multi-packet message via PSN gap — manifesting as
+        // catastrophic delivery loss even on a benign wire.
+        attr.path_mtu                = active_mtu_;
         attr.dest_qp_num             = remote.qpn;
         attr.ah_attr.is_global       = 1;
         attr.ah_attr.grh.dgid        = remote.gid;
