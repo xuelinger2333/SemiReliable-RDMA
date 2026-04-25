@@ -69,11 +69,34 @@ transport_cfg:
   dev_name: mlx5_2              # c240g5 node0 default; override per-host (see header)
   gid_index: 1                  # RoCEv2 GID, verified via day0_check.sh
   buffer_bytes: 268435456       # 256 MiB per slot × n_slots=2 → 512 MiB MR
-  chunk_bytes: 16384            # CX-6 Lx 25 GbE re-sweep confirmed (resweep doc §2)
-  sq_depth: 512
+  # 2026-04-25: re-tuned on CX-5 amd203/amd196 after fixing path_mtu=1024
+  # hardcode (commit 094e0cc) and discovering bursty-post loss.
+  #
+  # chunk_bytes=4096 == path_mtu — exactly 1 IB packet per chunk, so no
+  # multi-packet PSN-gap can kill a chunk in UC.  Pre-fix (chunk=16K /
+  # path_mtu=1024) gave 32% delivery; post-MTU-fix at chunk=16K still 67%
+  # because each chunk was 4 IB packets and bursty post triggers ~9% per-
+  # IB-packet loss on CX-5 UC.  Down to 1 packet / chunk: chunk delivery
+  # ≈ 1 - per_packet_loss directly.
+  #
+  # sq_depth=8 — wave-throttle floor at 32 KB inflight bytes
+  # (8 × 4 KB).  Larger SQ depth lets the sender post hundreds of WRs
+  # back-to-back; CX-5 + UC silently drops a fraction of the resulting
+  # back-to-back IB packets even on a benign direct cable (verified by
+  # ib_write_bw -c UC -s 16384 hitting 24.5 Gbps line rate with 0 loss
+  # while SemiRDMA at sq_depth=512 lost ~33% on the same wire).  At
+  # sq_depth=8 the wave-throttle drains SEND CQEs every 7 WRs → smaller
+  # NIC TX bursts → 99.55% delivery on benign wire.
+  #
+  # timeout_ms=200 — must exceed peer's per-bucket compute-time jitter
+  # (CIFAR-10 ResNet-18 CPU forward+backward varies ~100 ms run-to-run).
+  # At 50 ms we saw ~1/100 buckets time out before peer's post finished
+  # → completed=0 catastrophic event.  200 ms removes the variance race.
+  chunk_bytes: 4096
+  sq_depth: 8
   rq_depth: 16384
   ratio: 0.95                   # Phase 2 RQ4 sweet spot, holds on real NIC
-  timeout_ms: 5                 # c240g5 2-node sweep: (0.95, 5ms) sweet spot
+  timeout_ms: 200
 
 # --- Hydra output layout -----------------------------------------------
 hydra:

@@ -118,17 +118,19 @@ RC_RETRY_CNT="${RC_RETRY_CNT:-7}"
 # bottleneck under UC line-rate burst.  CX-5 max_qp_wr is 32768.
 RQ_DEPTH="${RQ_DEPTH:-}"
 
-# SQ_DEPTH override.  Default is YAML value (512).  Lower values force
-# the sender's wave-throttle to drain SEND CQEs more often, naturally
-# rate-limiting wire emission so the switch buffer doesn't overflow.
-# Useful on lossy RoCE without PFC.
+# SQ_DEPTH override.  Default is the YAML value (now 8 — see
+# stage_b_cloudlab.yaml header for the 99.55%-vs-67% delivery story).
+# Larger SQ depth lets the sender post hundreds of WRs back-to-back; CX-5
+# UC silently drops a fraction of those back-to-back IB packets even on
+# a benign direct cable.  Tight wave-throttle (SQ=8) keeps NIC TX bursts
+# small enough to avoid that loss.
 SQ_DEPTH="${SQ_DEPTH:-}"
 
-# CHUNK_BYTES override.  Default is YAML (16384).  Larger chunks reduce
-# RECV-CQE rate at receiver (fewer Write-with-Imm completions per bucket)
-# which sidesteps the CX-5 RR-consumption-path bottleneck verified via
-# ib_send_bw vs ib_write_bw delta (Send-with-RR caps at ~8.5 Gbps,
-# pure Write hits 24.5 Gbps line rate).
+# CHUNK_BYTES override.  Default is the YAML value (now 4096 == path_mtu)
+# so each chunk rides the wire as exactly one IB packet, eliminating UC
+# multi-packet PSN-gap loss entirely.  Larger chunks (16K, 64K, ...)
+# spread one chunk over multiple IB packets; in UC any single packet
+# loss kills the whole chunk.
 CHUNK_BYTES="${CHUNK_BYTES:-}"
 
 NODE0_IP="${NODE0_IP:-10.10.1.1}"       # rank 0 + experiment receiver (amd203)
