@@ -121,12 +121,14 @@ public:
                         bool            with_imm,
                         uint32_t        imm_data = 0);
 
-    // Fast path: post an entire bucket's worth of chunks in a single C++ call,
-    // using wr.next chaining so each wave of up to (sq_depth_throttle - 1) WRs
-    // goes to the NIC via ONE ibv_post_send invocation.  This eliminates
-    // ~10K Python ↔ C++ boundary crossings per bucket (RDMA data path is
-    // userspace MMIO; the per-WR overhead at the Python layer was a pure
-    // interpreter / pybind cost, not a syscall cost).
+    // Fast path: post an entire bucket's worth of chunks in a single C++ call.
+    // Each WR is submitted individually (no wr.next chaining) and the loop
+    // applies an explicit ``per_wr_pace_us`` busy-wait between consecutive
+    // ibv_post_send calls.  Empirically CX-5 + UC drops a non-trivial
+    // fraction of IB packets when WRs arrive at the NIC TX scheduler
+    // back-to-back faster than ~5 µs apart on a benign cable; the old
+    // Python loop's ~5 µs interpreter + pybind cost was an *implicit*
+    // pacer that this fast path must replicate.
     //
     // Generates an internal ChunkSet [base_offset .. base_offset+total_bytes)
     // with stride = chunk_bytes, returns it for downstream wait_for_ratio
@@ -144,6 +146,7 @@ public:
                                 size_t          chunk_bytes,
                                 int             sq_depth_throttle,
                                 int             drain_timeout_ms,
+                                int             per_wr_pace_us,
                                 const RemoteMR& remote,
                                 bool            with_imm,
                                 uint64_t        wr_id_base);

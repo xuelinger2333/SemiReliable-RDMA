@@ -196,6 +196,7 @@ class SemiRDMATransport:
                 chunk_bytes=self._cfg.chunk_bytes,
                 sq_depth_throttle=self._cfg.sq_depth,
                 drain_timeout_ms=drain_deadline_ms,
+                per_wr_pace_us=self._cfg.per_wr_pace_us,
                 remote=self._remote_mr,
                 with_imm=True,
                 wr_id_base=wr_id_base,

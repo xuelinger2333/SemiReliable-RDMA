@@ -14,6 +14,7 @@
 #include <arpa/inet.h>   // htonl, ntohl
 
 #include <algorithm>
+#include <chrono>        // steady_clock for per-WR pacing
 #include <cstdlib>       // aligned_alloc, free
 #include <cstring>       // memset, memcmp
 #include <stdexcept>
@@ -388,6 +389,7 @@ ChunkSet UCQPEngine::post_bucket_chunks(size_t          base_offset,
                                        size_t          chunk_bytes,
                                        int             sq_depth_throttle,
                                        int             drain_timeout_ms,
+                                       int             per_wr_pace_us,
                                        const RemoteMR& remote,
                                        bool            with_imm,
                                        uint64_t        wr_id_base)
@@ -399,17 +401,23 @@ ChunkSet UCQPEngine::post_bucket_chunks(size_t          base_offset,
     const int capacity = std::max(1, sq_depth_throttle - 1);
     int       inflight = 0;
 
-    // Reusable scratch.  Each WR is posted individually (NOT chained via
-    // wr.next) so the NIC TX scheduler sees the same per-WR cadence the
-    // pre-fix Python loop produced.  Chained ibv_post_send hands the NIC
-    // a back-to-back burst, which empirically triggers ~25% per-IB-packet
-    // loss on CX-5 + UC even on a benign cable.  The Python interpreter
-    // overhead in the old code (~5 µs / WR) was an *implicit* pacer; here
-    // we just don't chain.
+    // Per-WR explicit pacing.  CX-5 + UC silently drops ~30% of IB
+    // packets when WRs are submitted at the libmlx5 fast-path rate of
+    // ~1 µs apart on a benign cable.  The pre-fix Python prototype
+    // happened to pace at ~5 µs/WR (interpreter + pybind overhead) and
+    // achieved 99.5% delivery; we restore that pacing explicitly here.
+    // Default per_wr_pace_us=5 matches the old Python pacing; callers
+    // can pass 0 for environments (SoftRoCE, future fabrics) where
+    // back-to-back submission is safe.
+    const auto pace_duration =
+        std::chrono::microseconds(std::max(0, per_wr_pace_us));
+
     struct ibv_sge     sge;
     struct ibv_send_wr wr;
     struct ibv_send_wr* bad_wr = nullptr;
     std::vector<struct ibv_wc> wcs(static_cast<size_t>(capacity));
+
+    auto last_post = std::chrono::steady_clock::now();
 
     for (size_t i = 0; i < n_chunks; i++) {
         // Wave throttle: hold inflight at most ``capacity``.
@@ -421,6 +429,15 @@ ChunkSet UCQPEngine::post_bucket_chunks(size_t          base_offset,
             }
             if (n > 0) {
                 inflight = std::max(0, inflight - n);
+            }
+        }
+
+        // Per-WR pacing — busy-wait the remainder of pace_duration since
+        // the previous post, so the NIC TX path doesn't see a back-to-back
+        // burst from libmlx5.
+        if (per_wr_pace_us > 0) {
+            while (std::chrono::steady_clock::now() - last_post < pace_duration) {
+                // spin
             }
         }
 
@@ -454,6 +471,7 @@ ChunkSet UCQPEngine::post_bucket_chunks(size_t          base_offset,
                 strerror(ret));
         }
         inflight++;
+        last_post = std::chrono::steady_clock::now();
     }
 
     // Tail drain: wait for remaining SEND CQEs so the next bucket starts
