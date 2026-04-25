@@ -179,21 +179,47 @@ class SemiRDMATransport:
         mr_view = np.frombuffer(self._engine.local_buf_view(), dtype=np.uint8)
         mr_view[base_offset : base_offset + total] = arr
 
+        drain_deadline_ms = max(50, self._cfg.timeout_ms)
+
+        # Fast path: no software loss simulation → entire chunk-emit /
+        # wave-throttle / tail-drain loop runs in C++ (one Python ↔ C++
+        # crossing per bucket instead of ~30K).  This recovers the
+        # kernel-bypass-style throughput; per-bucket overhead drops from
+        # ~50-100 ms (10K Python interpreter + pybind boundary cost) to
+        # ~1 ms (one libmlx5 call per wave, doorbell-write only).
+        if self._cfg.loss_rate <= 0.0:
+            wr_id_base = self._wr_seq + 1
+            cs = self._engine.post_bucket_chunks(
+                base_offset=base_offset,
+                remote_base_offset=remote_base_offset,
+                total_bytes=total,
+                chunk_bytes=self._cfg.chunk_bytes,
+                sq_depth_throttle=self._cfg.sq_depth,
+                drain_timeout_ms=drain_deadline_ms,
+                remote=self._remote_mr,
+                with_imm=True,
+                wr_id_base=wr_id_base,
+            )
+            n_posted = cs.size()
+            self._wr_seq += n_posted
+            logger.info(
+                "post_gradient DIAG: n_posted=%d all CQEs drained (fast path)",
+                n_posted,
+            )
+            return cs
+
+        # Slow path: per-chunk Python loop, kept ONLY for the
+        # ``loss_rate > 0`` software-loss simulation used in Phase-2-style
+        # SoftRoCE bring-ups (no middlebox).  Real-wire P2 runs always
+        # have loss_rate=0 and take the fast path above.
         cs = ChunkSet(base_offset, total, self._cfg.chunk_bytes)
         n_chunks = cs.size()
-        # SQ flow control: a bucket may need thousands of chunks (ResNet-18's
-        # ~44 MB / 16 KB ≈ 2700) while sq_depth is O(16).  Post in waves,
-        # draining Write CQEs each time the SQ approaches full.  We leave one
-        # slot of slack so a transient spurious inflight count won't trip
-        # ibv_post_send.
         capacity = max(1, self._cfg.sq_depth - 1)
         inflight = 0
         n_posted = 0
         for i in range(n_chunks):
             chunk = cs.chunk(i)
-            # Software loss: skip posting, receiver gets no CQE for this chunk,
-            # GhostMask::apply zeroes the corresponding buffer region.
-            if self._cfg.loss_rate > 0.0 and self._loss_rng.random() < self._cfg.loss_rate:
+            if self._loss_rng.random() < self._cfg.loss_rate:
                 continue
             while inflight >= capacity:
                 cqes = self._engine.poll_cq(capacity, 1)
@@ -212,10 +238,6 @@ class SemiRDMATransport:
             inflight += 1
             n_posted += 1
 
-        # Drain the tail so the next bucket starts clean.  Bound the wait so a
-        # lost Write (software loss on the peer's rx path — not possible with
-        # our current model, but defensive) can't hang the sender.
-        drain_deadline_ms = max(50, self._cfg.timeout_ms)
         n_drained_in_tail = 0
         while inflight > 0:
             cqes = self._engine.poll_cq(capacity, drain_deadline_ms)
@@ -224,17 +246,14 @@ class SemiRDMATransport:
             inflight = max(0, inflight - len(cqes))
             n_drained_in_tail += len(cqes)
 
-        # DIAG: if the tail drain bailed with inflight>0, those send CQEs are
-        # still pending (will get drained on next call's wave-throttle).  Log
-        # so we can see whether sender is leaking inflight across buckets.
-        if inflight > 0 or n_posted != n_drained_in_tail + (n_posted - inflight - n_drained_in_tail):
+        if inflight > 0:
             logger.warning(
-                "post_gradient DIAG: n_posted=%d tail_drained=%d inflight_left=%d",
+                "post_gradient DIAG: n_posted=%d tail_drained=%d inflight_left=%d (slow path)",
                 n_posted, n_drained_in_tail, inflight,
             )
         else:
             logger.info(
-                "post_gradient DIAG: n_posted=%d all CQEs drained",
+                "post_gradient DIAG: n_posted=%d all CQEs drained (slow path)",
                 n_posted,
             )
         return cs

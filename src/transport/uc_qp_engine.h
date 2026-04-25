@@ -35,6 +35,8 @@
 
 #include <infiniband/verbs.h>
 
+#include "transport/chunk_manager.h"
+
 #include <atomic>
 #include <cstdint>
 #include <cstddef>
@@ -118,6 +120,33 @@ public:
                         const RemoteMR& remote,
                         bool            with_imm,
                         uint32_t        imm_data = 0);
+
+    // Fast path: post an entire bucket's worth of chunks in a single C++ call,
+    // using wr.next chaining so each wave of up to (sq_depth_throttle - 1) WRs
+    // goes to the NIC via ONE ibv_post_send invocation.  This eliminates
+    // ~10K Python ↔ C++ boundary crossings per bucket (RDMA data path is
+    // userspace MMIO; the per-WR overhead at the Python layer was a pure
+    // interpreter / pybind cost, not a syscall cost).
+    //
+    // Generates an internal ChunkSet [base_offset .. base_offset+total_bytes)
+    // with stride = chunk_bytes, returns it for downstream wait_for_ratio
+    // bookkeeping.  Drains tail SEND CQEs before returning so the next
+    // bucket starts with inflight=0.
+    //
+    // wr_id_base lets the caller allocate a unique wr_id range
+    // [wr_id_base .. wr_id_base + n_chunks) per bucket so post-mortem
+    // debugging can cross-reference SEND CQEs with their originating chunk.
+    //
+    // Throws on any ibv_post_send / ibv_poll_cq error or on tail-drain timeout.
+    ChunkSet post_bucket_chunks(size_t          base_offset,
+                                size_t          remote_base_offset,
+                                size_t          total_bytes,
+                                size_t          chunk_bytes,
+                                int             sq_depth_throttle,
+                                int             drain_timeout_ms,
+                                const RemoteMR& remote,
+                                bool            with_imm,
+                                uint64_t        wr_id_base);
 
     // Post a zero-length Receive WR (required before each Write-with-Imm arrives).
     // Throws on ibv_post_recv failure.

@@ -149,6 +149,29 @@ PYBIND11_MODULE(_semirdma_ext, m) {
              py::arg("remote"),
              py::arg("with_imm"),
              py::arg("imm_data") = 0)
+        .def("post_bucket_chunks",
+             [](UCQPEngine& self,
+                size_t base_offset, size_t remote_base_offset,
+                size_t total_bytes, size_t chunk_bytes,
+                int sq_depth_throttle, int drain_timeout_ms,
+                const RemoteMR& remote, bool with_imm,
+                uint64_t wr_id_base) {
+                 py::gil_scoped_release release;
+                 return self.post_bucket_chunks(
+                     base_offset, remote_base_offset,
+                     total_bytes, chunk_bytes,
+                     sq_depth_throttle, drain_timeout_ms,
+                     remote, with_imm, wr_id_base);
+             },
+             py::arg("base_offset"),
+             py::arg("remote_base_offset"),
+             py::arg("total_bytes"),
+             py::arg("chunk_bytes"),
+             py::arg("sq_depth_throttle"),
+             py::arg("drain_timeout_ms"),
+             py::arg("remote"),
+             py::arg("with_imm"),
+             py::arg("wr_id_base"))
         .def("post_recv", &UCQPEngine::post_recv, py::arg("wr_id"))
         .def("post_recv_batch", &UCQPEngine::post_recv_batch,
              py::arg("n"), py::arg("base_wr_id") = 0)
