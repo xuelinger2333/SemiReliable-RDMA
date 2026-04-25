@@ -310,12 +310,40 @@ class SemiRDMATransport:
         n_completed = cs.num_completed()
         n_expected = cs.size()
         out_recv_pre = self._engine.outstanding_recv()
+
+        # DIAG2: drain whatever CQEs are STILL sitting in the CQ right after
+        # wait_for_ratio returned.  This separates "CQEs never arrived"
+        # (post-drain count == 0) from "wait_for_ratio undercounted"
+        # (post-drain count > 0).  Bucket by status / opcode to catch any
+        # error-status CQEs that the C++ ratio loop silently skipped.
+        leftover_recv_ok = 0
+        leftover_recv_err = 0
+        leftover_other = 0
+        leftover_imm_unique = set()
+        for _ in range(64):  # up to 64 batches × 16384 = 1M CQEs (cap)
+            cqes = self._engine.poll_cq(16384, 0)
+            if not cqes:
+                break
+            for c in cqes:
+                op = c.get("opcode_name")
+                st = c.get("status")
+                if op == "RECV_RDMA_WITH_IMM" and st == 0:
+                    leftover_recv_ok += 1
+                    leftover_imm_unique.add(int(c.get("imm_data", 0)))
+                elif op in ("RECV", "RECV_RDMA_WITH_IMM"):
+                    leftover_recv_err += 1
+                else:
+                    leftover_other += 1
+
         logger.info(
             "await_gradient DIAG: completed=%d/%d outstanding_recv_pre=%d "
-            "ok=%s timed_out=%s latency_ms=%.2f",
+            "ok=%s timed_out=%s latency_ms=%.2f "
+            "LEFTOVER_after_wait: recv_ok=%d recv_err=%d other=%d unique_imm=%d",
             n_completed, n_expected, out_recv_pre,
             stats.get("ok"), stats.get("timed_out"),
             stats.get("latency_ms", 0.0),
+            leftover_recv_ok, leftover_recv_err, leftover_other,
+            len(leftover_imm_unique),
         )
 
         # Refill the RQ to keep up with the incoming Write-with-Imm stream.
