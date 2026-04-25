@@ -124,6 +124,13 @@ RQ_DEPTH="${RQ_DEPTH:-}"
 # Useful on lossy RoCE without PFC.
 SQ_DEPTH="${SQ_DEPTH:-}"
 
+# CHUNK_BYTES override.  Default is YAML (16384).  Larger chunks reduce
+# RECV-CQE rate at receiver (fewer Write-with-Imm completions per bucket)
+# which sidesteps the CX-5 RR-consumption-path bottleneck verified via
+# ib_send_bw vs ib_write_bw delta (Send-with-RR caps at ~8.5 Gbps,
+# pure Write hits 24.5 Gbps line rate).
+CHUNK_BYTES="${CHUNK_BYTES:-}"
+
 NODE0_IP="${NODE0_IP:-10.10.1.1}"       # rank 0 + experiment receiver (amd203)
 NODE1_IP="${NODE1_IP:-10.10.1.3}"       # rank 1 + experiment sender (amd196)
 NODE_PEER_HOST="${NODE_PEER_HOST:-chen123@$NODE1_IP}"
@@ -281,14 +288,18 @@ for drop_rate in $DROP_RATES; do
             rc_args="+transport_cfg.rc_timeout=$RC_TIMEOUT +transport_cfg.rc_retry_cnt=$RC_RETRY_CNT"
         fi
 
-        # RQ_DEPTH / SQ_DEPTH overrides — only emitted when explicitly
-        # requested.  Both fields ARE in the YAML so we use plain (no `+`).
+        # RQ_DEPTH / SQ_DEPTH / CHUNK_BYTES overrides — only emitted
+        # when explicitly requested.  All fields ARE in the YAML so we
+        # use plain (no `+`).
         rq_args=""
         if [ -n "$RQ_DEPTH" ]; then
             rq_args="transport_cfg.rq_depth=$RQ_DEPTH"
         fi
         if [ -n "$SQ_DEPTH" ]; then
             rq_args="$rq_args transport_cfg.sq_depth=$SQ_DEPTH"
+        fi
+        if [ -n "$CHUNK_BYTES" ]; then
+            rq_args="$rq_args transport_cfg.chunk_bytes=$CHUNK_BYTES"
         fi
 
         # ---- start peer (amd196, rank 1) in background via ssh ----
