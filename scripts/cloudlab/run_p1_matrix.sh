@@ -118,6 +118,12 @@ RC_RETRY_CNT="${RC_RETRY_CNT:-7}"
 # bottleneck under UC line-rate burst.  CX-5 max_qp_wr is 32768.
 RQ_DEPTH="${RQ_DEPTH:-}"
 
+# SQ_DEPTH override.  Default is YAML value (512).  Lower values force
+# the sender's wave-throttle to drain SEND CQEs more often, naturally
+# rate-limiting wire emission so the switch buffer doesn't overflow.
+# Useful on lossy RoCE without PFC.
+SQ_DEPTH="${SQ_DEPTH:-}"
+
 NODE0_IP="${NODE0_IP:-10.10.1.1}"       # rank 0 + experiment receiver (amd203)
 NODE1_IP="${NODE1_IP:-10.10.1.3}"       # rank 1 + experiment sender (amd196)
 NODE_PEER_HOST="${NODE_PEER_HOST:-chen123@$NODE1_IP}"
@@ -275,11 +281,14 @@ for drop_rate in $DROP_RATES; do
             rc_args="+transport_cfg.rc_timeout=$RC_TIMEOUT +transport_cfg.rc_retry_cnt=$RC_RETRY_CNT"
         fi
 
-        # RQ_DEPTH override — only emitted when explicitly requested.
-        # rq_depth IS in the YAML so we use plain (no `+`) override.
+        # RQ_DEPTH / SQ_DEPTH overrides — only emitted when explicitly
+        # requested.  Both fields ARE in the YAML so we use plain (no `+`).
         rq_args=""
         if [ -n "$RQ_DEPTH" ]; then
             rq_args="transport_cfg.rq_depth=$RQ_DEPTH"
+        fi
+        if [ -n "$SQ_DEPTH" ]; then
+            rq_args="$rq_args transport_cfg.sq_depth=$SQ_DEPTH"
         fi
 
         # ---- start peer (amd196, rank 1) in background via ssh ----
