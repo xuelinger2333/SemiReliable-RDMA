@@ -143,48 +143,7 @@ Append-only log of debug investigations. Format defined in [DEBUG_PROTOCOL.md](D
 - The archived P0 cell #3 SEED=42 (`final_loss=0.830595`)
 - The P0 cell #0 gloo SEED=42 (`final_loss=0.860358`)
 
-**Status**: PARTIALLY CONFIRMED (2026-04-25 ~09:00).
-
-**Falsification result** (`/tmp/p0_falsify_L/cell_00_drop0_semirdma_t200`, same config as P0 cell #3):
-
-- Mean delivery: 99.51% → **99.97%** (3 chunks/bucket missing instead of 53)
-- Distribution: **459 / 500 buckets perfect (10913/10913)**, 41 / 500 with non-zero missing
-- Outliers: occasional buckets with 60-171 missing (`min = 10710`)
-- Final loss: 0.830595 → **0.844591** (closed half the gap to gloo's 0.860358)
-- iter_ms: 725 → 810 (+85 ms, from `cs.mark_completed(imm)` calls in drain)
-
-**Interpretation**: Hypothesis L is the dominant cause for 92% of buckets. The bookkeeping race was real and the fix works. BUT a secondary timing issue remains for 8% of buckets — the leftover drain breaks too early when `poll_cq` transiently returns 0 even though more CQEs are about to be generated.
-
-Hypothesis G/H/I/K (receiver SRQ refill / PCIe doorbell / SQ overflow / multi-QP) remain SUPERSEDED for the primary 0.5% residual symptom. They are NOT formally rejected — they could still describe the secondary effect — but Hypothesis L.2 below is the simpler, more direct explanation.
-
-### Hypothesis L.2: leftover drain `for _ in range(64): if not cqes: break` exits too early on transient 0-poll [TESTING]
-
-**Mechanism**: After Hypothesis L's fix, the leftover drain still breaks on the first `poll_cq` returning 0. NIC CQE generation is asynchronous; when poll_cq sees 0, the next few µs may still produce CQEs for chunks that are being finalized in NIC's RX path. The drain's "first zero ⇒ done" heuristic loses those.
-
-**Predictions if true**:
-- Replacing `if not cqes: break` with a *quiescent-based* drain (break only after `quiescent_threshold_us` has passed without a new CQE) should drop the residual missing count to ~0.
-- iter_ms overhead should be modest — most steps reach quiescence quickly (~hundreds of µs), only pathological cases burn the `max_drain_us` ceiling.
-- `final_loss` should converge further toward gloo's `0.860358` (within seed variance ±0.005). If it stays at ~0.844 there is yet another mechanism.
-
-**Predictions if false**:
-- Quiescent drain doesn't help: missing count stays ~3 and outliers still hit 60-171. That would mean the late chunks are *not* arriving in the µs after poll_cq saw 0 — they're either truly dropped or arrive much later.
-- `final_loss` stays ~0.845. The 0.015 gap to gloo is from something else (real wire drops at the rate of 0.03%? receiver-side processing variance?).
-
-**Design**: drain-until-quiescent with hard ceiling
-
-- `quiescent_threshold_us = 200` — break when 200 µs have passed since the last CQE marked
-- `max_drain_us = 5000` — hard ceiling; if we hit this, log a warning (real CQEs are missing, fall through to ghost mask)
-- Threshold tuned for current `chunk_bytes = 4096` ⇒ 10913 chunks. For larger models with much higher chunk counts the threshold may need recalibration; documenting this is paper-relevant.
-
-**Experiment plan**: same config as falsify_L (drop=0, semirdma, STEPS=500, SEED=42).
-
-Pass criteria:
-1. mean delivery ≥ 99.99% (≤ 1 chunk/bucket missing on average)
-2. min delivery > 10900 (no 200-chunk outliers)
-3. iter_ms ≤ 820 (drain overhead ≤ +10 ms vs current 810)
-4. final_loss within 0.005 of gloo's 0.860358 (i.e. 0.855..0.865)
-
-If criterion 4 fails while 1–3 pass, **STOP** — drain race was not the only issue, additional mechanism must be diagnosed before P0.
+**Status**: ABOUT TO TEST. Hypothesis G/H/I/K (receiver SRQ refill / PCIe doorbell / SQ overflow / multi-QP) are now SUPERSEDED — they were chasing a phenomenon that has a much simpler software-bookkeeping explanation. They are NOT formally rejected (the underlying mechanisms could still be real for OTHER residual loss patterns), but they are no longer relevant to the "0.5% residual on benign wire" symptom.
 
 ### Hypothesis K: dual-QP fanout would double delivery [PENDING — should have been run last session]
 
