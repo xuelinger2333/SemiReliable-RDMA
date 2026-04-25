@@ -401,14 +401,25 @@ ChunkSet UCQPEngine::post_bucket_chunks(size_t          base_offset,
     const int capacity = std::max(1, sq_depth_throttle - 1);
     int       inflight = 0;
 
-    // Per-WR explicit pacing.  CX-5 + UC silently drops ~30% of IB
-    // packets when WRs are submitted at the libmlx5 fast-path rate of
-    // ~1 µs apart on a benign cable.  The pre-fix Python prototype
-    // happened to pace at ~5 µs/WR (interpreter + pybind overhead) and
-    // achieved 99.5% delivery; we restore that pacing explicitly here.
-    // Default per_wr_pace_us=5 matches the old Python pacing; callers
-    // can pass 0 for environments (SoftRoCE, future fabrics) where
-    // back-to-back submission is safe.
+    // Per-WR explicit pacing.
+    //
+    // Empirical observation (2026-04-25 on amd203/amd196 CX-5 25 GbE):
+    // a tight C++ ibv_post_send loop (per_wr_pace_us=0) drops ~30% of
+    // chunks at the SemiRDMA-stack level on this hardware, while the
+    // pre-fix Python prototype with its ~5 µs interpreter + pybind
+    // overhead per WR achieves ~99.5% delivery.  Adding explicit
+    // 5-10 µs busy-wait pacing here recovers delivery to ~99% but
+    // is *slower* end-to-end than the Python loop, so the Python loop
+    // is currently the production path (see python/semirdma/transport.py
+    // post_gradient comment + DEBUG_LOG.md hypotheses F–K).
+    //
+    // The mechanism is NOT identified.  `ib_write_bw -c UC -q 1 -s 4096`
+    // submits at ~1.33 µs/WR on the same NIC with 0 loss, so this is
+    // NOT a CX-5 hardware cliff — the bug is somewhere in our software
+    // stack (most likely receiver SRQ refill rate; see DEBUG_LOG.md
+    // for the open hypotheses).  This pacing parameter exists as a
+    // workaround until the root cause is identified.  Set to 0 on
+    // SoftRoCE.
     const auto pace_duration =
         std::chrono::microseconds(std::max(0, per_wr_pace_us));
 

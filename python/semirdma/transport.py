@@ -181,18 +181,30 @@ class SemiRDMATransport:
 
         drain_deadline_ms = max(50, self._cfg.timeout_ms)
 
-        # Per-chunk Python loop.  We tried moving this to C++ via
-        # UCQPEngine::post_bucket_chunks (commit f5466d8 / 4de0c99 /
-        # 5e71813); on CX-5 + UC the C++ tight loop overran the NIC TX
-        # scheduler at ~1 µs / WR and dropped 25-30% of IB packets even
-        # with explicit per-WR busy-wait pacing.  Re-introducing 5-10 µs
-        # pacing in C++ only matched (not beat) Python's ~5 µs implicit
-        # pacing from interpreter + pybind overhead — and the C++ version
-        # actually ran *slower* end-to-end because the busy-wait + GIL
-        # release/acquire combined cost more than the Python loop's
-        # marshalling.  So Python loop stays as the production path.
-        # The C++ post_bucket_chunks remains in UCQPEngine for SoftRoCE /
-        # future fabric experiments (per_wr_pace_us=0 there is fine).
+        # Per-chunk Python loop.  Production path on CX-5.
+        #
+        # We tried moving this loop to C++ via UCQPEngine::post_bucket_chunks
+        # (commits f5466d8 / 4de0c99 / 5e71813 / 389b740) hoping to skip
+        # ~30K Python ↔ pybind boundary crossings per bucket.  All three
+        # variants (chained-WR / per-WR no chain / per-WR + 5-10 µs
+        # busy-wait) ran with WORSE delivery (70%) or worse iter_ms
+        # (1000+ ms) than this Python loop's ~99% / 858 ms baseline.
+        #
+        # Why this Python loop "happens to work" while the C++ tight loop
+        # does not is NOT YET ROOT-CAUSED.  Candidate mechanisms (see
+        # DEBUG_LOG.md hypotheses G–K):
+        #   - receiver SRQ refill cannot keep up with sender at ~1 µs/WR
+        #     (most likely; Python sender is slow enough to stay in sync)
+        #   - libmlx5 BlueFlame doorbell batching interaction
+        #   - sender-side SQ overflow silently swallowed
+        #   - per-QP behavior fixable via multi-QP fanout
+        # `ib_write_bw -c UC -q 1 -s 4096` runs at 1.33 µs/WR with 0 loss
+        # on the same NIC, so this is NOT a CX-5 hardware cliff.
+        #
+        # The C++ post_bucket_chunks is kept in UCQPEngine for SoftRoCE
+        # bring-ups (per_wr_pace_us=0 fine there) and as the future
+        # production path once the CX-5-specific cause is identified.
+        # See DEBUG_PROTOCOL.md before debugging this further.
         cs = ChunkSet(base_offset, total, self._cfg.chunk_bytes)
         n_chunks = cs.size()
         capacity = max(1, self._cfg.sq_depth - 1)

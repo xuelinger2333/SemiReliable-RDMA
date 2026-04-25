@@ -121,23 +121,24 @@ public:
                         bool            with_imm,
                         uint32_t        imm_data = 0);
 
-    // Fast path: post an entire bucket's worth of chunks in a single C++ call.
-    // Each WR is submitted individually (no wr.next chaining) and the loop
-    // applies an explicit ``per_wr_pace_us`` busy-wait between consecutive
-    // ibv_post_send calls.  Empirically CX-5 + UC drops a non-trivial
-    // fraction of IB packets when WRs arrive at the NIC TX scheduler
-    // back-to-back faster than ~5 µs apart on a benign cable; the old
-    // Python loop's ~5 µs interpreter + pybind cost was an *implicit*
-    // pacer that this fast path must replicate.
+    // C++ chunk-emit loop with optional per-WR busy-wait pacing.  Currently
+    // NOT used as the production path — the Python loop in
+    // semirdma.transport.SemiRDMATransport.post_gradient empirically
+    // delivers better on CX-5 (see DEBUG_LOG.md hypothesis F).  Kept here
+    // because it is the natural production path for fabrics that don't
+    // exhibit the unidentified CX-5 receiver-side issue (SoftRoCE,
+    // future hardware).
     //
     // Generates an internal ChunkSet [base_offset .. base_offset+total_bytes)
     // with stride = chunk_bytes, returns it for downstream wait_for_ratio
-    // bookkeeping.  Drains tail SEND CQEs before returning so the next
-    // bucket starts with inflight=0.
+    // bookkeeping.  Each WR posted individually via ibv_post_send (no
+    // wr.next chain — chained submission empirically triggers NIC TX
+    // burst loss on CX-5).  Optional ``per_wr_pace_us`` busy-wait between
+    // submissions.  Drains tail SEND CQEs before returning.
     //
     // wr_id_base lets the caller allocate a unique wr_id range
-    // [wr_id_base .. wr_id_base + n_chunks) per bucket so post-mortem
-    // debugging can cross-reference SEND CQEs with their originating chunk.
+    // [wr_id_base .. wr_id_base + n_chunks) per bucket for SEND CQE
+    // cross-reference during debugging.
     //
     // Throws on any ibv_post_send / ibv_poll_cq error or on tail-drain timeout.
     ChunkSet post_bucket_chunks(size_t          base_offset,

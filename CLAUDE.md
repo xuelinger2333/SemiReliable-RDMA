@@ -1,5 +1,15 @@
 # SemiRDMA — Software Semi-Reliable RDMA Transport for AI Training
 
+## ⚠️ Debug discipline — read this before debugging anything
+
+When investigating an unexpected experimental result (failed cell, wrong delivery rate, unexpected slowness, anything not matching the predicted behavior):
+
+1. **Read [DEBUG_PROTOCOL.md](DEBUG_PROTOCOL.md) first.** It defines the 6-rule procedure (state hypothesis → derive falsification → run falsification first → reconcile with priors → distinguish hardware/software → forbidden moves) and the STOP-SYNC triggers.
+2. **Open [DEBUG_LOG.md](DEBUG_LOG.md)** and review prior hypotheses for related symptoms before forming a new one. Append new hypotheses with their predictions and current status; do not delete rejected ones.
+3. **STOP and SYNC** with the user before: (a) adopting a diagnosis that contradicts an earlier one in the same conversation, (b) proposing a paper-level claim from a debug finding, (c) "fixing" a bug by accepting current behavior, (d) re-interpreting prior measurements.
+
+This protocol exists because earlier debug sessions stacked contradictory diagnoses without reconciliation, used motivated reasoning to fit numeric coincidences, and skipped public-baseline counter-checks (e.g. running `ib_write_bw` before claiming hardware behavior). The discipline below is mandatory overhead designed to prevent those failure modes.
+
 ## Project Overview
 
 SemiRDMA is a **pure-software semi-reliable transport layer** built on RDMA UC QP (Unreliable Connected Queue Pair) for distributed AI training gradient communication. It targets **cloud lossy RoCEv2 networks** (no PFC) where RC QP's strict reliability causes severe tail latency degradation.

@@ -67,12 +67,13 @@ class TransportConfig:
     sq_depth: int = 128
     rq_depth: int = 4096
 
-    # Per-WR pacing in C++ post_bucket_chunks fast path.  CX-5 + UC drops
-    # ~30% of IB packets when WRs hit the NIC TX scheduler back-to-back at
-    # ~1 µs (libmlx5 fast-path rate).  The pre-fix Python loop happened to
-    # pace at ~5 µs/WR (interpreter + pybind cost), which empirically
-    # matches the NIC's safe submission rate.  Set to 0 on SoftRoCE or
-    # future fabrics where back-to-back submission is safe.
+    # Per-WR pacing in C++ post_bucket_chunks (currently unused — Python
+    # loop in transport.py is the production path on CX-5; see
+    # DEBUG_LOG.md hypothesis F for why).  When the C++ path IS used
+    # (SoftRoCE, future fabrics), 0 means no pacing; positive values
+    # busy-wait between consecutive ibv_post_send calls.  We do NOT
+    # currently understand the mechanism connecting submission rate to
+    # delivery on CX-5 — this knob is a workaround placeholder.
     per_wr_pace_us: int = 10
 
     # Write granularity.  post_gradient splits the bucket into
