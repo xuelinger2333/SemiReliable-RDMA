@@ -113,6 +113,11 @@ PORT_BASE="${PORT_BASE:-32000}"
 RC_TIMEOUT="${RC_TIMEOUT:-14}"
 RC_RETRY_CNT="${RC_RETRY_CNT:-7}"
 
+# RQ_DEPTH override (semirdma + rc_rdma).  Default is the YAML value
+# (16384).  Set RQ_DEPTH to test whether the receive-side WR pool is the
+# bottleneck under UC line-rate burst.  CX-5 max_qp_wr is 32768.
+RQ_DEPTH="${RQ_DEPTH:-}"
+
 NODE0_IP="${NODE0_IP:-10.10.1.1}"       # rank 0 + experiment receiver (amd203)
 NODE1_IP="${NODE1_IP:-10.10.1.3}"       # rank 1 + experiment sender (amd196)
 NODE_PEER_HOST="${NODE_PEER_HOST:-chen123@$NODE1_IP}"
@@ -270,6 +275,13 @@ for drop_rate in $DROP_RATES; do
             rc_args="+transport_cfg.rc_timeout=$RC_TIMEOUT +transport_cfg.rc_retry_cnt=$RC_RETRY_CNT"
         fi
 
+        # RQ_DEPTH override — only emitted when explicitly requested.
+        # rq_depth IS in the YAML so we use plain (no `+`) override.
+        rq_args=""
+        if [ -n "$RQ_DEPTH" ]; then
+            rq_args="transport_cfg.rq_depth=$RQ_DEPTH"
+        fi
+
         # ---- start peer (amd196, rank 1) in background via ssh ----
         ssh "$NODE_PEER_HOST" "
 cd $REPO
@@ -282,7 +294,7 @@ torchrun --nnodes=2 --node_rank=1 --master_addr=$NODE0_IP --master_port=$master_
   transport=$transport loss_rate=$cell_loss_rate seed=$SEED steps=$STEPS warmup_steps=$WARMUP \
   transport_cfg.dev_name=\$DEV_PEER transport_cfg.ratio=$RATIO transport_cfg.timeout_ms=$timeout_ms \
   transport_cfg.gid_index=$GID_INDEX \
-  $rc_args \
+  $rc_args $rq_args \
   dist.semirdma_port=$semi_port \
   hydra.run.dir=$cell_dir \
   > /tmp/p1_peer_${cell_tag}.log 2>&1
@@ -303,7 +315,7 @@ torchrun --nnodes=2 --node_rank=1 --master_addr=$NODE0_IP --master_port=$master_
             transport_cfg.dev_name="$DEV_THIS" transport_cfg.ratio="$RATIO" \
             transport_cfg.timeout_ms="$timeout_ms" \
             transport_cfg.gid_index="$GID_INDEX" \
-            $rc_args \
+            $rc_args $rq_args \
             dist.semirdma_port="$semi_port" \
             hydra.run.dir="$cell_dir" \
             > "/tmp/p1_this_${cell_tag}.log" 2>&1
