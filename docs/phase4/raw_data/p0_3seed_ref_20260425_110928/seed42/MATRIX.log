@@ -1,0 +1,59 @@
+[11:09:28] === P1 matrix start (ts=20260425_110928  cells=9  steps=500) ===
+[11:09:28]     transports=[rc_rdma rc_lossy semirdma]  timeouts=[200]  drop_rates=[0 0.01 0.05]  seed=42
+[11:09:28]     rc_rdma params: rc_timeout=14 (~67.1 ms/retry)  rc_retry_cnt=7
+[11:09:28]     middlebox=chen123@amd186.utah.cloudlab.us  (XDP dropbox — wire-level Bernoulli drop on UDP:4791)
+[11:09:28]     gid_index=3 (IPv4-mapped RoCE v2 — required for ARP-spoof steering)
+[11:09:28]     root=/tmp/p0_3seed_ref_20260425_110928/seed42
+[11:09:28] 
+[11:09:28] ########## DROP_RATE=0 block ##########
+[11:09:28] set-rate 0 → 0 ppm
+[11:09:30] === cell #0/9: cell_00_drop0_rc_rdma_t200 (t+2s) ===
+[11:17:18]     this=0 peer=0  final_loss=0.860358  mean_iter_ms=908.09
+[11:17:18] === cell #1/9: cell_01_drop0_rc_lossy_t200 (t+470s) ===
+[11:23:44]     this=0 peer=0  final_loss=0.860358  mean_iter_ms=744.86
+[11:23:44] === cell #2/9: cell_02_drop0_semirdma_t200 (t+856s) ===
+[11:31:32]     this=0 peer=0  final_loss=0.923741  mean_iter_ms=911.07
+[11:31:32] 
+[11:31:32] ########## DROP_RATE=0.01 block ##########
+[11:31:33] set-rate 0.01 → 10000 ppm
+[11:31:35] === cell #3/9: cell_03_drop0.01_rc_rdma_t200 (t+1327s) ===
+[11:46:43]     this=124 peer=1  final_loss=2535.43  mean_iter_ms=
+[11:46:43] === cell #4/9: cell_04_drop0.01_rc_lossy_t200 (t+2235s) ===
+[11:53:23]     this=0 peer=0  final_loss=1.001218  mean_iter_ms=772.86
+[11:53:23] === cell #5/9: cell_05_drop0.01_semirdma_t200 (t+2635s) ===
+[12:01:54]     this=0 peer=0  final_loss=0.793439  mean_iter_ms=993.19
+[12:01:54] 
+[12:01:54] ########## DROP_RATE=0.05 block ##########
+[12:01:55] set-rate 0.05 → 50000 ppm
+[12:01:57] === cell #6/9: cell_06_drop0.05_rc_rdma_t200 (t+3149s) ===
+[12:03:02]     this=1 peer=1  final_loss=loss  mean_iter_ms=?
+[12:03:02] === cell #7/9: cell_07_drop0.05_rc_lossy_t200 (t+3214s) ===
+[12:09:45]     this=0 peer=0  final_loss=0.803703  mean_iter_ms=779.88
+[12:09:45] === cell #8/9: cell_08_drop0.05_semirdma_t200 (t+3617s) ===
+[12:18:02]     this=0 peer=0  final_loss=1.042317  mean_iter_ms=963.77
+[12:18:02] set-rate 0 → 0 ppm
+[12:18:04] 
+[12:18:04] === P1 matrix done.  total elapsed: 4116s  cells: 9 ===
+[12:18:04] 
+[12:18:04] === summary ===
+idx  drop_rate  transport  timeout_ms  rc   final_loss  mean_iter_ms  cell_dir
+0    0          rc_rdma    200         0    0.860358    908.09        /tmp/p0_3seed_ref_20260425_110928/seed42/cell_00_drop0_rc_rdma_t200
+1    0          rc_lossy   200         0    0.860358    744.86        /tmp/p0_3seed_ref_20260425_110928/seed42/cell_01_drop0_rc_lossy_t200
+2    0          semirdma   200         0    0.923741    911.07        /tmp/p0_3seed_ref_20260425_110928/seed42/cell_02_drop0_semirdma_t200
+3    0.01       rc_rdma    200         124  2535.43                   /tmp/p0_3seed_ref_20260425_110928/seed42/cell_03_drop0.01_rc_rdma_t200
+4    0.01       rc_lossy   200         0    1.001218    772.86        /tmp/p0_3seed_ref_20260425_110928/seed42/cell_04_drop0.01_rc_lossy_t200
+5    0.01       semirdma   200         0    0.793439    993.19        /tmp/p0_3seed_ref_20260425_110928/seed42/cell_05_drop0.01_semirdma_t200
+6    0.05       rc_rdma    200         1    loss        ?             /tmp/p0_3seed_ref_20260425_110928/seed42/cell_06_drop0.05_rc_rdma_t200
+7    0.05       rc_lossy   200         0    0.803703    779.88        /tmp/p0_3seed_ref_20260425_110928/seed42/cell_07_drop0.05_rc_lossy_t200
+8    0.05       semirdma   200         0    1.042317    963.77        /tmp/p0_3seed_ref_20260425_110928/seed42/cell_08_drop0.05_semirdma_t200
+[12:18:04] 
+[12:18:04] === output tree ===
+/tmp/p0_3seed_ref_20260425_110928/seed42/cell_00_drop0_rc_rdma_t200/
+/tmp/p0_3seed_ref_20260425_110928/seed42/cell_01_drop0_rc_lossy_t200/
+/tmp/p0_3seed_ref_20260425_110928/seed42/cell_02_drop0_semirdma_t200/
+/tmp/p0_3seed_ref_20260425_110928/seed42/cell_03_drop0.01_rc_rdma_t200/
+/tmp/p0_3seed_ref_20260425_110928/seed42/cell_04_drop0.01_rc_lossy_t200/
+/tmp/p0_3seed_ref_20260425_110928/seed42/cell_05_drop0.01_semirdma_t200/
+/tmp/p0_3seed_ref_20260425_110928/seed42/cell_06_drop0.05_rc_rdma_t200/
+/tmp/p0_3seed_ref_20260425_110928/seed42/cell_07_drop0.05_rc_lossy_t200/
+/tmp/p0_3seed_ref_20260425_110928/seed42/cell_08_drop0.05_semirdma_t200/

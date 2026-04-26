@@ -1,0 +1,2 @@
+idx,drop_rate,transport,timeout_ms,rc,final_loss,mean_iter_ms,cell_dir
+0,0,semirdma,200,0,0.870160,738.22,/tmp/p0_sanity_revert/cell_00_drop0_semirdma_t200

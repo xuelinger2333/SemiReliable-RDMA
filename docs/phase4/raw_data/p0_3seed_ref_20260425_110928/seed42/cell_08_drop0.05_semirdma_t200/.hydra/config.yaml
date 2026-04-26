@@ -1,0 +1,33 @@
+transport: semirdma
+loss_rate: 0.0
+seed: 42
+steps: 500
+warmup_steps: 10
+data:
+  root: ~/data/cifar10
+  download: false
+  batch_size: 128
+  num_workers: 2
+  pin_memory: false
+model:
+  name: resnet18
+  num_classes: 10
+optim:
+  name: sgd
+  lr: 0.1
+  momentum: 0.9
+  weight_decay: 0.0005
+dist:
+  world_size: 2
+  master_addr: 10.10.1.1
+  master_port: 29500
+  semirdma_port: 32085
+transport_cfg:
+  dev_name: mlx5_2
+  gid_index: 3
+  buffer_bytes: 268435456
+  chunk_bytes: 4096
+  sq_depth: 8
+  rq_depth: 16384
+  ratio: 0.95
+  timeout_ms: 200

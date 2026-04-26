@@ -1,0 +1,74 @@
+[2026-04-26 11:24:09,764][__main__][INFO] - Stage A config:
+transport: semirdma_layer_aware
+loss_rate: 0.0
+seed: 123
+steps: 500
+warmup_steps: 10
+data:
+  root: ~/data/cifar10
+  download: false
+  batch_size: 128
+  num_workers: 2
+  pin_memory: false
+model:
+  name: resnet18
+  num_classes: 10
+optim:
+  name: sgd
+  lr: 0.1
+  momentum: 0.9
+  weight_decay: 0.0005
+dist:
+  world_size: 2
+  master_addr: 10.10.1.1
+  master_port: 29500
+  semirdma_port: 32055
+transport_cfg:
+  dev_name: mlx5_2
+  gid_index: 3
+  buffer_bytes: 268435456
+  chunk_bytes: 4096
+  sq_depth: 8
+  rq_depth: 16384
+  ratio: 0.95
+  timeout_ms: 200
+  loss_safety_margin: 0.005
+  calibration_alpha: 0.05
+  calibration_window: 50
+  calibration_bootstrap_buckets: 20
+  t_max_jitter_k: 5
+  t_max_min_ms: 5
+loss_tolerance_default: 0.1
+
+[2026-04-26 11:24:10,549][semirdma.layer_aware.registry][INFO] - LossToleranceRegistry bound: 68 named modules, 62 parameters mapped
+[2026-04-26 11:24:10,840][semirdma._bootstrap][INFO] - bootstrap: listening on 0.0.0.0:32055
+[2026-04-26 11:24:10,849][semirdma._bootstrap][INFO] - bootstrap: peer ('10.10.1.3', 55412) connected
+[2026-04-26 11:24:10,850][semirdma.transport][INFO] - SemiRDMATransport up: local qpn=838 -> remote qpn=777, remote rkey=0xae97
+[2026-04-26 11:24:10,852][semirdma._bootstrap][INFO] - bootstrap: connected to 10.10.1.3:32056
+[2026-04-26 11:24:10,853][semirdma.transport][INFO] - SemiRDMATransport up: local qpn=839 -> remote qpn=776, remote rkey=0x9d7c
+[2026-04-26 11:24:10,853][semirdma.hooks][INFO] - SemiRDMAHookState up: rank=0, tx qpn=838, rx qpn=839
+[2026-04-26 11:24:11,134][semirdma._bootstrap][INFO] - bootstrap: listening on 0.0.0.0:32057
+[2026-04-26 11:24:11,332][semirdma._bootstrap][INFO] - bootstrap: peer ('10.10.1.3', 50686) connected
+[2026-04-26 11:24:11,334][semirdma.baselines.rc_rdma_transport][INFO] - ReliableRDMATransport up: local qpn=840 -> remote qpn=779, remote rkey=0xeace (qp_type=rc, timeout=14, retry_cnt=7)
+[2026-04-26 11:24:11,335][semirdma._bootstrap][INFO] - bootstrap: connected to 10.10.1.3:32058
+[2026-04-26 11:24:11,335][semirdma.baselines.rc_rdma_transport][INFO] - ReliableRDMATransport up: local qpn=841 -> remote qpn=778, remote rkey=0xd0ae (qp_type=rc, timeout=14, retry_cnt=7)
+[2026-04-26 11:24:11,335][semirdma.baselines.rc_rdma_hook][INFO] - RCRDMAHookState up: rank=0 tx qpn=840 rx qpn=841 (rc_timeout=14, rc_retry_cnt=7)
+[2026-04-26 11:24:11,335][semirdma.layer_aware.state][INFO] - LayerAwareHookState up: rank=0, registry=0 entries, bootstrap_buckets=20 safety_margin=0.0050
+[2026-04-26 11:24:13,058][semirdma.transport][INFO] - post_gradient DIAG: n_posted=10913 all CQEs drained
+[2026-04-26 11:24:13,260][semirdma.transport][INFO] - await_gradient DIAG: completed=6635/10913 outstanding_recv_pre=9749 ok=False timed_out=True latency_ms=200.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 unique_imm=0
+[2026-04-26 11:24:13,263][semirdma.layer_aware.dispatcher][INFO] - dispatch[1]: SEMI p_bucket=0.1000 ratio=0.9500 t_max=200ms completed=6635/10913 (pre_drain=6635) timed_out=True eps_ema=0.0196 sigma_ms=0.00 bw_mbps=23.0
+[2026-04-26 11:24:13,312][__main__][INFO] - step=0 loss=2.2914 iter_ms=1120.3
+[2026-04-26 11:24:14,085][semirdma.transport][INFO] - post_gradient DIAG: n_posted=10913 all CQEs drained
+[2026-04-26 11:24:14,287][semirdma.transport][INFO] - await_gradient DIAG: completed=6735/10913 outstanding_recv_pre=9649 ok=False timed_out=True latency_ms=200.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 unique_imm=0
+[2026-04-26 11:24:14,290][semirdma.layer_aware.dispatcher][INFO] - dispatch[2]: SEMI p_bucket=0.1000 ratio=0.9500 t_max=200ms completed=6735/10913 (pre_drain=6735) timed_out=True eps_ema=0.0378 sigma_ms=0.00 bw_mbps=33.1
+[2026-04-26 11:24:15,066][semirdma.transport][INFO] - post_gradient DIAG: n_posted=10913 all CQEs drained
+[2026-04-26 11:24:15,267][semirdma.transport][INFO] - await_gradient DIAG: completed=6744/10913 outstanding_recv_pre=9640 ok=False timed_out=True latency_ms=200.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 unique_imm=0
+[2026-04-26 11:24:15,270][semirdma.layer_aware.dispatcher][INFO] - dispatch[3]: SEMI p_bucket=0.1000 ratio=0.9500 t_max=200ms completed=6744/10913 (pre_drain=6744) timed_out=True eps_ema=0.0550 sigma_ms=0.00 bw_mbps=42.6
+[2026-04-26 11:24:16,059][semirdma.transport][INFO] - post_gradient DIAG: n_posted=10913 all CQEs drained
+[2026-04-26 11:24:16,261][semirdma.transport][INFO] - await_gradient DIAG: completed=6682/10913 outstanding_recv_pre=9702 ok=False timed_out=True latency_ms=200.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 unique_imm=0
+[2026-04-26 11:24:16,263][semirdma.layer_aware.dispatcher][INFO] - dispatch[4]: SEMI p_bucket=0.1000 ratio=0.9500 t_max=200ms completed=6682/10913 (pre_drain=6682) timed_out=True eps_ema=0.0716 sigma_ms=0.00 bw_mbps=51.6
+[2026-04-26 11:24:17,002][semirdma.transport][INFO] - post_gradient DIAG: n_posted=10913 all CQEs drained
+[2026-04-26 11:24:17,203][semirdma.transport][INFO] - await_gradient DIAG: completed=6825/10913 outstanding_recv_pre=9559 ok=False timed_out=True latency_ms=200.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 unique_imm=0
+[2026-04-26 11:24:17,206][semirdma.layer_aware.dispatcher][INFO] - dispatch[5]: SEMI p_bucket=0.1000 ratio=0.9500 t_max=200ms completed=6825/10913 (pre_drain=6825) timed_out=True eps_ema=0.0868 sigma_ms=0.00 bw_mbps=60.2
+[2026-04-26 11:24:17,966][semirdma.transport][INFO] - post_gradient DIAG: n_posted=10913 all CQEs drained
+[2026-04-26 11:24:18,167][semirdma.transport][INFO] - await_gradient DIAG: completed=6810/10913 outstanding_recv_pre=9574 ok=False timed_out=True latency_ms=200.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 unique_imm=0

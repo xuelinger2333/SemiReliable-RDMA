@@ -1,0 +1,2 @@
+idx,drop_rate,transport,timeout_ms,rc,final_loss,mean_iter_ms,cell_dir
+0,0,semirdma,200,0,1.039300,790.74,/tmp/p0_repro_seed7_073032/run2/cell_00_drop0_semirdma_t200

@@ -235,3 +235,100 @@ These should be scheduled after the in-flight P0 (SEED=42) completes.
 - Any "per-WR pacing is required" methodology claim.
 
 The path_mtu fix (Hypothesis C) and the chunk_bytes ablation (Hypothesis D) are confirmed and **safe to use in the paper as design choices** ("on CX-5 we set chunk_bytes = active_mtu so each chunk rides as one IB packet"), without claiming a hardware mechanism.
+
+---
+
+## PR-A / PR-B: layer-aware mode bugs
+
+Two bugs surfaced during the PR-B real-NIC validation matrix and were fixed
+in-band. Both are documented here so the post-mortem record stays in one
+place.
+
+### Hypothesis M: dispatcher uses LOCAL eps_ema → cross-rank routing divergence → RC await deadlock [CONFIRMED, FIXED]
+
+**Discovered**: 2026-04-26, PR-B v1 first run on amd203/amd196.
+
+**Symptom**: cell crashed after bucket 7 with
+`RuntimeError: await_bucket: recv deadline exceeded (30000 ms); received 0/10913 chunks`.
+Per-bucket DIAG showed buckets 1–7 dispatching SemiRDMA (route=SEMI), then a
+silent transition where rank 0 chose RC while rank 1 still chose SemiRDMA.
+Rank 0's RC `await_bucket` blocked on the RC QP while rank 1's chunks went
+to the UC QP — RC await timed out at the 30 s hardware deadline.
+
+**Mechanism**:
+- `LayerAwareHookState.calibrator.epsilon_ema` is a per-rank value, fed only
+  by that rank's local observed loss
+- The dispatcher's safety check `p_bucket < eps + margin` compares against
+  this LOCAL eps
+- If rank 0 sees a transient loss spike that pushes its eps above
+  `p_bucket - margin` while rank 1's eps stays below, ranks decide
+  differently for the same bucket
+- They post to different QPs but the receiver awaits on the chosen-locally
+  QP → the OTHER rank's chunks never satisfy the await
+
+**Predictions if true**:
+1. Replacing the local eps with a cross-rank-synchronized eps eliminates the
+   deadlock.
+2. Both ranks make identical per-bucket routing decisions after the fix.
+
+**Fix** (commit `967703e`): one-float gloo `dist.all_reduce` of
+`epsilon_ema` at the start of every dispatch, dividing by `world_size` to
+get the global mean. Cost: ~µs over gloo TCP per bucket.
+
+**Status**: CONFIRMED. PR-B v3 18-cell matrix completed with cross-rank
+routing always identical across ranks; no more deadlocks.
+
+### Hypothesis N: calibrator fed pre-drain `stats["completed"]` → eps_ema converges to ratio threshold not wire loss → safety check trips on every bucket [CONFIRMED, FIXED]
+
+**Discovered**: 2026-04-26, PR-B v2 (post-M fix) at drop=0.01 cell 3.
+
+**Symptom**: dispatcher logs at bucket 100 showed `eps_ema=0.0951` with
+configured drop=0.01 — wire loss should be ~1%, observed ~9.5%. Safety
+check `p_bucket=0.10 < eps + margin = 0.0951 + 0.005 = 0.1001` tripped on
+every bucket → all buckets routed to RC → RC retry storms grew iter_ms
+from 800 ms to 3200 ms.
+
+**Mechanism**:
+- `RatioController::wait_for_ratio` exits as soon as `cs.completion_ratio()
+  >= ratio`. With `ratio = 1 - p_bucket`, the controller exits at exactly
+  the threshold by construction — `stats["completed"]` reads ~ratio×n_total.
+- The leftover drain (`for _ in range(64)`) catches late CQEs and marks them
+  on `cs` AFTER `wait_for_ratio` returns — but that count was never
+  surfaced to the dispatcher.
+- Calibrator update used `stats["completed"]` (pre-drain), so `eps_ema`
+  converged to ~p_bucket regardless of actual wire health. Trade-off:
+  ratio-truncation looks like wire loss to the calibrator.
+
+**Predictions if true**:
+1. Surfacing the post-drain `cs.num_completed()` to the dispatcher (and using
+   that for the calibrator update) makes `eps_ema` converge to actual wire
+   loss (~drop_rate).
+2. Safety check should then NOT trip when `p_bucket > drop_rate + margin`.
+
+**Fix** (commit `9e18230`): added `stats["completed_post_drain"] =
+int(cs.num_completed())` in `transport.await_gradient`; dispatcher reads
+that field instead of `stats["completed"]`. Logger also dumps both pre and
+post drain counts for debugging.
+
+**Status**: CONFIRMED. Post-fix smoke at drop=0.01: `pre_drain=10368
+(~95%, threshold)` vs `post_drain=10808 (~99%, wire)`. eps_ema converged
+to ~0.03 (matches drop=0.01 + NIC tail variance). 6/6 logged dispatches
+chose SemiRDMA (no false RC fallback). PR-B v3 matrix completed end-to-end.
+
+### Side note: SEED=123 drop=0.05 layer_aware cell 5 transient crash [TRANSIENT, NOT root-caused]
+
+The PR-B v3 matrix had one bad cell: SEED=123, drop=0.05, layer_aware.
+Bucket 1 reported `completed=6635/10913` (39% loss vs configured 5% wire),
+all subsequent buckets stuck around 6700, eventually triggered RC fallback
+which timed out → cell crash.
+
+3 isolated reruns of the same configuration on the same nodes succeeded
+cleanly (rc=0, final_loss ∈ {1.39, 1.51, 1.45}). Run 1 was substituted into
+the v3 matrix layout; the crashed cell is preserved at
+`cell_05_*.crashed_orig/`.
+
+The root cause is **not isolated** — could be matrix-sequence dependent
+(bucket-state from prior cells), NIC tail pathology, or dispatcher race
+when eps approaches p. PR-C should retest after the bucket_id-in-imm
+protocol fix lands; if the failure mode persists, deeper investigation is
+needed.

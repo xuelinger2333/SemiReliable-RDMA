@@ -1,0 +1,10 @@
+idx,drop_rate,transport,timeout_ms,rc,final_loss,mean_iter_ms,cell_dir
+0,0,rc_rdma,200,0,1.034479,938.33,/tmp/p0_3seed_ref_20260425_110928/seed7/cell_00_drop0_rc_rdma_t200
+1,0,rc_lossy,200,0,1.034479,826.33,/tmp/p0_3seed_ref_20260425_110928/seed7/cell_01_drop0_rc_lossy_t200
+2,0,semirdma,200,0,1.033701,809.50,/tmp/p0_3seed_ref_20260425_110928/seed7/cell_02_drop0_semirdma_t200
+3,0.01,rc_rdma,200,124,2599.23,,/tmp/p0_3seed_ref_20260425_110928/seed7/cell_03_drop0.01_rc_rdma_t200
+4,0.01,rc_lossy,200,0,1.040481,764.38,/tmp/p0_3seed_ref_20260425_110928/seed7/cell_04_drop0.01_rc_lossy_t200
+5,0.01,semirdma,200,0,1.070958,1000.84,/tmp/p0_3seed_ref_20260425_110928/seed7/cell_05_drop0.01_semirdma_t200
+6,0.05,rc_rdma,200,1,loss,?,/tmp/p0_3seed_ref_20260425_110928/seed7/cell_06_drop0.05_rc_rdma_t200
+7,0.05,rc_lossy,200,0,0.912711,748.15,/tmp/p0_3seed_ref_20260425_110928/seed7/cell_07_drop0.05_rc_lossy_t200
+8,0.05,semirdma,200,0,1.160673,1000.24,/tmp/p0_3seed_ref_20260425_110928/seed7/cell_08_drop0.05_semirdma_t200

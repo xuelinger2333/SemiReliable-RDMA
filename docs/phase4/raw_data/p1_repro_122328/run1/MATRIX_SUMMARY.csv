@@ -1,0 +1,2 @@
+idx,drop_rate,transport,timeout_ms,rc,final_loss,mean_iter_ms,cell_dir
+0,0.05,semirdma_layer_aware,200,0,1.389849,812.58,/tmp/p1_repro_122328/run1/cell_00_drop0.05_semirdma_layer_aware_t200

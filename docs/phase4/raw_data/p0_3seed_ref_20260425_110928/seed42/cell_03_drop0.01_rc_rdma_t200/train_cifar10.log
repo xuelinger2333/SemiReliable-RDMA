@@ -1,0 +1,50 @@
+[2026-04-25 11:31:43,239][__main__][INFO] - Stage A config:
+transport: rc_rdma
+loss_rate: 0.0
+seed: 42
+steps: 500
+warmup_steps: 10
+data:
+  root: ~/data/cifar10
+  download: false
+  batch_size: 128
+  num_workers: 2
+  pin_memory: false
+model:
+  name: resnet18
+  num_classes: 10
+optim:
+  name: sgd
+  lr: 0.1
+  momentum: 0.9
+  weight_decay: 0.0005
+dist:
+  world_size: 2
+  master_addr: 10.10.1.1
+  master_port: 29500
+  semirdma_port: 32035
+transport_cfg:
+  dev_name: mlx5_2
+  gid_index: 3
+  buffer_bytes: 268435456
+  chunk_bytes: 4096
+  sq_depth: 8
+  rq_depth: 16384
+  ratio: 0.95
+  timeout_ms: 200
+  rc_timeout: 14
+  rc_retry_cnt: 7
+
+[2026-04-25 11:31:44,280][semirdma._bootstrap][INFO] - bootstrap: listening on 0.0.0.0:32035
+[2026-04-25 11:31:44,480][semirdma._bootstrap][INFO] - bootstrap: peer ('10.10.1.3', 45696) connected
+[2026-04-25 11:31:44,482][semirdma.baselines.rc_rdma_transport][INFO] - ReliableRDMATransport up: local qpn=682 -> remote qpn=669, remote rkey=0x1451e (qp_type=rc, timeout=14, retry_cnt=7)
+[2026-04-25 11:31:44,483][semirdma._bootstrap][INFO] - bootstrap: connected to 10.10.1.3:32036
+[2026-04-25 11:31:44,484][semirdma.baselines.rc_rdma_transport][INFO] - ReliableRDMATransport up: local qpn=683 -> remote qpn=668, remote rkey=0x113f1 (qp_type=rc, timeout=14, retry_cnt=7)
+[2026-04-25 11:31:44,484][semirdma.baselines.rc_rdma_hook][INFO] - RCRDMAHookState up: rank=0 tx qpn=682 rx qpn=683 (rc_timeout=14, rc_retry_cnt=7)
+[2026-04-25 11:31:48,942][__main__][INFO] - step=0 loss=2.4233 iter_ms=3948.1
+[2026-04-25 11:33:53,992][__main__][INFO] - step=50 loss=1.9529 iter_ms=2154.9
+[2026-04-25 11:35:55,810][__main__][INFO] - step=100 loss=1.7454 iter_ms=3162.5
+[2026-04-25 11:38:08,418][__main__][INFO] - step=150 loss=1.7501 iter_ms=3162.7
+[2026-04-25 11:40:20,063][__main__][INFO] - step=200 loss=1.4590 iter_ms=3835.4
+[2026-04-25 11:42:28,337][__main__][INFO] - step=250 loss=1.4375 iter_ms=1672.4
+[2026-04-25 11:44:32,827][__main__][INFO] - step=300 loss=1.4690 iter_ms=2668.9

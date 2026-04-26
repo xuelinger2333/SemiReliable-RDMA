@@ -1,0 +1,73 @@
+ROOT=/tmp/p0_repro_seed7_073032
+
+########## run=1 ##########
+Sun Apr 26 07:30:32 AM MDT 2026
+[07:30:32] === P1 matrix start (ts=20260426_073032  cells=1  steps=500) ===
+[07:30:32]     transports=[semirdma]  timeouts=[200]  drop_rates=[0]  seed=7
+[07:30:32]     middlebox=chen123@amd186.utah.cloudlab.us  (XDP dropbox — wire-level Bernoulli drop on UDP:4791)
+[07:30:32]     gid_index=3 (IPv4-mapped RoCE v2 — required for ARP-spoof steering)
+[07:30:32]     root=/tmp/p0_repro_seed7_073032/run1
+[07:30:32] 
+[07:30:32] ########## DROP_RATE=0 block ##########
+[07:30:33] set-rate 0 → 0 ppm
+[07:30:35] === cell #0/1: cell_00_drop0_semirdma_t200 (t+3s) ===
+[07:37:30]     this=0 peer=0  final_loss=1.010303  mean_iter_ms=802.99
+[07:37:30] set-rate 0 → 0 ppm
+[07:37:32] 
+[07:37:32] === P1 matrix done.  total elapsed: 420s  cells: 1 ===
+[07:37:32] 
+[07:37:32] === summary ===
+idx  drop_rate  transport  timeout_ms  rc  final_loss  mean_iter_ms  cell_dir
+0    0          semirdma   200         0   1.010303    802.99        /tmp/p0_repro_seed7_073032/run1/cell_00_drop0_semirdma_t200
+[07:37:32] 
+[07:37:32] === output tree ===
+/tmp/p0_repro_seed7_073032/run1/cell_00_drop0_semirdma_t200/
+
+########## run=2 ##########
+Sun Apr 26 07:37:32 AM MDT 2026
+[07:37:32] === P1 matrix start (ts=20260426_073732  cells=1  steps=500) ===
+[07:37:32]     transports=[semirdma]  timeouts=[200]  drop_rates=[0]  seed=7
+[07:37:32]     middlebox=chen123@amd186.utah.cloudlab.us  (XDP dropbox — wire-level Bernoulli drop on UDP:4791)
+[07:37:32]     gid_index=3 (IPv4-mapped RoCE v2 — required for ARP-spoof steering)
+[07:37:32]     root=/tmp/p0_repro_seed7_073032/run2
+[07:37:32] 
+[07:37:32] ########## DROP_RATE=0 block ##########
+[07:37:32] set-rate 0 → 0 ppm
+[07:37:34] === cell #0/1: cell_00_drop0_semirdma_t200 (t+2s) ===
+[07:44:24]     this=0 peer=0  final_loss=1.039300  mean_iter_ms=790.74
+[07:44:24] set-rate 0 → 0 ppm
+[07:44:26] 
+[07:44:27] === P1 matrix done.  total elapsed: 414s  cells: 1 ===
+[07:44:27] 
+[07:44:27] === summary ===
+idx  drop_rate  transport  timeout_ms  rc  final_loss  mean_iter_ms  cell_dir
+0    0          semirdma   200         0   1.039300    790.74        /tmp/p0_repro_seed7_073032/run2/cell_00_drop0_semirdma_t200
+[07:44:27] 
+[07:44:27] === output tree ===
+/tmp/p0_repro_seed7_073032/run2/cell_00_drop0_semirdma_t200/
+
+########## run=3 ##########
+Sun Apr 26 07:44:27 AM MDT 2026
+[07:44:27] === P1 matrix start (ts=20260426_074427  cells=1  steps=500) ===
+[07:44:27]     transports=[semirdma]  timeouts=[200]  drop_rates=[0]  seed=7
+[07:44:27]     middlebox=chen123@amd186.utah.cloudlab.us  (XDP dropbox — wire-level Bernoulli drop on UDP:4791)
+[07:44:27]     gid_index=3 (IPv4-mapped RoCE v2 — required for ARP-spoof steering)
+[07:44:27]     root=/tmp/p0_repro_seed7_073032/run3
+[07:44:27] 
+[07:44:27] ########## DROP_RATE=0 block ##########
+[07:44:27] set-rate 0 → 0 ppm
+[07:44:29] === cell #0/1: cell_00_drop0_semirdma_t200 (t+2s) ===
+[07:51:03]     this=0 peer=0  final_loss=1.122887  mean_iter_ms=763.24
+[07:51:04] set-rate 0 → 0 ppm
+[07:51:06] 
+[07:51:06] === P1 matrix done.  total elapsed: 399s  cells: 1 ===
+[07:51:06] 
+[07:51:06] === summary ===
+idx  drop_rate  transport  timeout_ms  rc  final_loss  mean_iter_ms  cell_dir
+0    0          semirdma   200         0   1.122887    763.24        /tmp/p0_repro_seed7_073032/run3/cell_00_drop0_semirdma_t200
+[07:51:06] 
+[07:51:06] === output tree ===
+/tmp/p0_repro_seed7_073032/run3/cell_00_drop0_semirdma_t200/
+
+=== repro done.  total elapsed: 1234s ===
+Sun Apr 26 07:51:06 AM MDT 2026

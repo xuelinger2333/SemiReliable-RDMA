@@ -1,0 +1,43 @@
+[2026-04-25 14:19:43,492][__main__][INFO] - Stage A config:
+transport: rc_rdma
+loss_rate: 0.0
+seed: 7
+steps: 500
+warmup_steps: 10
+data:
+  root: ~/data/cifar10
+  download: false
+  batch_size: 128
+  num_workers: 2
+  pin_memory: false
+model:
+  name: resnet18
+  num_classes: 10
+optim:
+  name: sgd
+  lr: 0.1
+  momentum: 0.9
+  weight_decay: 0.0005
+dist:
+  world_size: 2
+  master_addr: 10.10.1.1
+  master_port: 29500
+  semirdma_port: 32065
+transport_cfg:
+  dev_name: mlx5_2
+  gid_index: 3
+  buffer_bytes: 268435456
+  chunk_bytes: 4096
+  sq_depth: 8
+  rq_depth: 16384
+  ratio: 0.95
+  timeout_ms: 200
+  rc_timeout: 14
+  rc_retry_cnt: 7
+
+[2026-04-25 14:19:44,533][semirdma._bootstrap][INFO] - bootstrap: listening on 0.0.0.0:32065
+[2026-04-25 14:19:44,734][semirdma._bootstrap][INFO] - bootstrap: peer ('10.10.1.3', 37148) connected
+[2026-04-25 14:19:44,736][semirdma.baselines.rc_rdma_transport][INFO] - ReliableRDMATransport up: local qpn=710 -> remote qpn=697, remote rkey=0xae97 (qp_type=rc, timeout=14, retry_cnt=7)
+[2026-04-25 14:19:44,737][semirdma._bootstrap][INFO] - bootstrap: connected to 10.10.1.3:32066
+[2026-04-25 14:19:44,738][semirdma.baselines.rc_rdma_transport][INFO] - ReliableRDMATransport up: local qpn=711 -> remote qpn=696, remote rkey=0x9d7c (qp_type=rc, timeout=14, retry_cnt=7)
+[2026-04-25 14:19:44,738][semirdma.baselines.rc_rdma_hook][INFO] - RCRDMAHookState up: rank=0 tx qpn=710 rx qpn=711 (rc_timeout=14, rc_retry_cnt=7)
