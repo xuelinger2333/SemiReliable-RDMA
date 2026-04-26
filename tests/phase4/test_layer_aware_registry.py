@@ -28,7 +28,46 @@ class _FakeBucket:
 def test_default_p_is_zero_when_unregistered():
     reg = LossToleranceRegistry()
     assert reg.get("anything") == 0.0
-    assert LossToleranceRegistry.DEFAULT_P_L == 0.0
+    assert reg.default_p == 0.0
+
+
+def test_default_p_can_be_overridden_at_construction():
+    """Pass default_p=0.05 → every unregistered module / param resolves
+    to 0.05 instead of 0.0. Used for uniform-budget PR-B validation."""
+    reg = LossToleranceRegistry(default_p=0.05)
+    assert reg.get("anything") == 0.05
+
+    model = _make_toy_model()
+    reg.bind(model)
+    # No explicit registrations → every param should resolve to 0.05
+    for _, p in model.named_parameters():
+        assert reg.p_for_param(p) == 0.05
+
+    # And resolve_for_bucket on a bucket with all default-p params
+    # should return 0.05, not 0.0
+    bucket = _FakeBucket(list(model.parameters()))
+    assert reg.resolve_for_bucket(bucket) == 0.05
+
+
+def test_explicit_register_overrides_default_p():
+    """Registering a specific module with a different p should win."""
+    reg = LossToleranceRegistry(default_p=0.05)
+    reg.register("1", 0.0)   # this BN layer keeps p=0 even with non-zero default
+    model = _make_toy_model()
+    reg.bind(model)
+
+    # Conv (module "0") and Linear (module "4") use the default 0.05
+    bn_params = list(model[1].parameters())
+    conv_params = list(model[0].parameters())
+    assert reg.p_for_param(bn_params[0]) == 0.0
+    assert reg.p_for_param(conv_params[0]) == 0.05
+
+
+def test_default_p_rejects_out_of_range():
+    with pytest.raises(ValueError):
+        LossToleranceRegistry(default_p=-0.01)
+    with pytest.raises(ValueError):
+        LossToleranceRegistry(default_p=1.0)
 
 
 def test_register_then_get_roundtrips():

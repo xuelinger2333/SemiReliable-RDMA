@@ -108,9 +108,16 @@ transport_cfg:
   t_max_min_ms: 5
 
 # --- Layer-aware loss-tolerance registry ------------------------------
-# Optional: only consumed when transport=semirdma_layer_aware. Keys are
-# module names as in ``model.named_modules()``. Anything not listed here
-# defaults to p_L = 0 (forces RC routing). Supply via Hydra override:
+# Optional: only consumed when transport=semirdma_layer_aware.
+#
+# loss_tolerance_default: global p_L for any module not listed in
+# loss_tolerance below. Default 0.0 routes unregistered layers to RC.
+# PR-B uniform-budget validation cells set this to 0.05 to give every
+# layer the same lossy-friendly budget without a per-module list.
+loss_tolerance_default: 0.0
+#
+# loss_tolerance: per-module overrides. Keys are module names as in
+# ``model.named_modules()``. Supply via Hydra override:
 #   loss_tolerance.layer1.0.bn1=0.0 loss_tolerance.layer1.0.conv1=0.05
 # or pre-populate a YAML node here. Example for ResNet-18 conv body:
 # loss_tolerance:
@@ -118,7 +125,7 @@ transport_cfg:
 #   layer1.0.conv2: 0.05
 #   layer1.1.conv1: 0.05
 #   layer1.1.conv2: 0.05
-#   # BN / FC / embeddings left unregistered → p_L = 0 → RC
+#   # BN / FC / embeddings left unregistered → use loss_tolerance_default
 
 # --- Hydra output layout -----------------------------------------------
 hydra:

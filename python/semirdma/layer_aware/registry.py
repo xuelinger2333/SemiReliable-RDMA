@@ -40,15 +40,30 @@ class LossToleranceRegistry:
         reg.register("conv1", 0.05)
         reg.register("layer1.0.conv1", 0.05)
         reg.register("layer1.0.bn1", 0.0)        # explicit RC route
-        # any module not registered also defaults to 0.0
+        # any module not registered also defaults to 0.0 (= RC)
         reg.bind(model)
         p_bucket = reg.resolve_for_bucket(ddp_bucket)
+
+    To set a non-zero global default — e.g. "the whole model tolerates 5%
+    unless I explicitly say otherwise" — pass ``default_p`` at construction
+    time. Useful for PR-B uniform-budget validation runs and as a quick
+    knob in YAML when per-layer registration is more friction than value.
     """
 
+    default_p: float = 0.0
     _module_p: Dict[str, float] = field(default_factory=dict)
     _param_p: Optional[Dict[int, float]] = field(default=None, init=False)
 
+    # Class-level default kept for backward compatibility with code that
+    # reads ``LossToleranceRegistry.DEFAULT_P_L`` (e.g. existing tests).
+    # Instance-level ``self.default_p`` is what bind/resolve actually use.
     DEFAULT_P_L: float = 0.0
+
+    def __post_init__(self) -> None:
+        if not (0.0 <= self.default_p < 1.0):
+            raise ValueError(
+                f"default_p must lie in [0, 1), got {self.default_p!r}"
+            )
 
     # ---- registration ----
 
@@ -67,9 +82,13 @@ class LossToleranceRegistry:
             self.register(name, p)
 
     def get(self, module_name: str, default: Optional[float] = None) -> float:
-        """Return p_L for a registered module name; default if missing."""
+        """Return p_L for a registered module name; default if missing.
+
+        ``default=None`` (the typical caller) falls back to the
+        instance-level ``self.default_p``.
+        """
         if default is None:
-            default = self.DEFAULT_P_L
+            default = self.default_p
         return self._module_p.get(module_name, default)
 
     def names(self) -> Iterable[str]:
@@ -122,7 +141,7 @@ class LossToleranceRegistry:
             raise RuntimeError(
                 "LossToleranceRegistry.p_for_param called before bind(model)"
             )
-        return self._param_p.get(id(param), self.DEFAULT_P_L)
+        return self._param_p.get(id(param), self.default_p)
 
     # ---- bucket resolution ----
 
@@ -138,7 +157,7 @@ class LossToleranceRegistry:
             )
         params = bucket.parameters()
         if not params:
-            return self.DEFAULT_P_L
+            return self.default_p
         return min(self.p_for_param(p) for p in params)
 
 

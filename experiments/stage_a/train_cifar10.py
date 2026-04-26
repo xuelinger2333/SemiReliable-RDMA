@@ -215,8 +215,13 @@ def _install_hook(ddp_model: DDP, cfg: DictConfig, rank: int) -> object:
             t_max_min_ms=cfg.transport_cfg.get("t_max_min_ms", 5),
         )
         # Build the registry from a Hydra dict node (module-name → p_L).
-        # Missing nodes default to p_L = 0 → those layers route to RC.
-        registry = LossToleranceRegistry()
+        # Missing nodes default to p_L = ``loss_tolerance_default`` (which
+        # itself defaults to 0.0 → those layers route to RC). Set
+        # ``loss_tolerance_default=0.05`` in the YAML or via Hydra
+        # override to give every layer a uniform non-zero budget — used
+        # by PR-B uniform-budget validation cells.
+        default_p = float(cfg.get("loss_tolerance_default", 0.0))
+        registry = LossToleranceRegistry(default_p=default_p)
         registry_node = cfg.get("loss_tolerance")
         if registry_node is not None:
             for module_name, p in dict(registry_node).items():
