@@ -129,22 +129,29 @@ def test_t_max_floors_at_t_max_min_ms():
 
 
 def test_t_max_includes_jitter_term():
-    """K * sigma_jitter must show up in T_max."""
-    cal, cfg = _make_calibrator(t_max_jitter_k=10)
-    # Bootstrap with constant latency to fix bandwidth
-    for _ in range(20):
-        cal.update(n_completed=1000, n_total=1000, latency_ms=10.0,
-                   n_bytes=10_000_000)
-    t_max_no_jitter = cal.t_max_for_bucket(n_chunks=100, chunk_bytes=4096)
-    # Inject jitter
-    for _ in range(10):
-        cal.update(n_completed=1000, n_total=1000, latency_ms=20.0,
-                   n_bytes=10_000_000)
-    for _ in range(10):
-        cal.update(n_completed=1000, n_total=1000, latency_ms=5.0,
-                   n_bytes=10_000_000)
-    t_max_with_jitter = cal.t_max_for_bucket(n_chunks=100, chunk_bytes=4096)
-    assert t_max_with_jitter > t_max_no_jitter
+    """K * sigma_jitter must show up in T_max.
+
+    Two separate calibrators with the same mean latency but different
+    intra-window variance: the jittery one's T_max should be strictly
+    greater because sigma_jitter_ms > 0 contributes K*sigma to T_max.
+    """
+    cal_flat, _ = _make_calibrator(t_max_jitter_k=10)
+    cal_jit, _ = _make_calibrator(t_max_jitter_k=10)
+    # Both: same mean latency (~10 ms) and same n_bytes per call → same B_ema.
+    # cal_flat sees constant 10 ms; cal_jit alternates 5 / 15 ms within
+    # the rolling window so sigma_jitter_ms > 0.
+    for i in range(20):
+        cal_flat.update(n_completed=1000, n_total=1000, latency_ms=10.0,
+                        n_bytes=1_000_000)
+        lat = 5.0 if i % 2 == 0 else 15.0
+        cal_jit.update(n_completed=1000, n_total=1000, latency_ms=lat,
+                       n_bytes=1_000_000)
+    assert cal_flat.sigma_jitter_ms == 0.0
+    assert cal_jit.sigma_jitter_ms > 1.0
+    # Use a large bucket so T_min isn't dwarfed by t_max_min_ms floor.
+    t_max_flat = cal_flat.t_max_for_bucket(n_chunks=10_000, chunk_bytes=4096)
+    t_max_jit = cal_jit.t_max_for_bucket(n_chunks=10_000, chunk_bytes=4096)
+    assert t_max_jit > t_max_flat
 
 
 # ---- snapshot serializes cleanly ----
