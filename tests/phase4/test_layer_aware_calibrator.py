@@ -137,15 +137,18 @@ def test_t_max_includes_jitter_term():
     """
     cal_flat, _ = _make_calibrator(t_max_jitter_k=10)
     cal_jit, _ = _make_calibrator(t_max_jitter_k=10)
-    # Both: same mean latency (~10 ms) and same n_bytes per call → same B_ema.
-    # cal_flat sees constant 10 ms; cal_jit alternates 5 / 15 ms within
-    # the rolling window so sigma_jitter_ms > 0.
+    # Both calibrators must converge to the same B_ema so the difference
+    # in T_max comes purely from sigma_jitter. We hold per-call B fixed
+    # by scaling n_bytes proportionally to latency_ms (B = 1e8 B/s every
+    # update). cal_flat: latency=10ms, n_bytes=1MB. cal_jit: alternates
+    # latency 5ms (n_bytes=0.5MB) and 15ms (n_bytes=1.5MB) → still
+    # B = 1e8 per call, sigma_jitter ≈ 5 ms in the window.
     for i in range(20):
         cal_flat.update(n_completed=1000, n_total=1000, latency_ms=10.0,
                         n_bytes=1_000_000)
         lat = 5.0 if i % 2 == 0 else 15.0
         cal_jit.update(n_completed=1000, n_total=1000, latency_ms=lat,
-                       n_bytes=1_000_000)
+                       n_bytes=int(lat * 1e5))
     assert cal_flat.sigma_jitter_ms == 0.0
     assert cal_jit.sigma_jitter_ms > 1.0
     # Use a large bucket so T_min isn't dwarfed by t_max_min_ms floor.
