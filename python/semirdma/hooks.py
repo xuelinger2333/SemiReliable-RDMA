@@ -150,18 +150,19 @@ class SemiRDMAHookState:
 _HOOK_LOCK = threading.Lock()
 
 
-def semirdma_allreduce_hook(
+def _run_semirdma_bucket(
     state: SemiRDMAHookState,
     bucket: dist.GradBucket,
-) -> futures.Future[torch.Tensor]:
-    """DDP communication hook: SemiRDMA-backed 2-worker all-reduce.
+    *,
+    ratio: Optional[float] = None,
+    timeout_ms: Optional[int] = None,
+) -> "tuple[futures.Future[torch.Tensor], dict]":
+    """Core SemiRDMA bucket exchange. Returns (future, await stats).
 
-    Semantics: produces (local + remote) / world_size, matching what
-    ``allreduce_hook`` would return.  If the receiver times out before all
-    chunks arrive, the missing chunks have been zeroed by ``GhostMask``;
-    the averaged result is therefore biased slightly toward the sender for
-    missed regions — this is the Phase 2 semi-reliability trade-off,
-    deliberately exposed to the training loop.
+    The dispatcher in the layer-aware hook calls this directly with
+    per-bucket ratio / timeout overrides; the legacy
+    ``semirdma_allreduce_hook`` calls it with no overrides (defaults to
+    cfg.ratio / cfg.timeout_ms).
     """
     flat = bucket.buffer()  # torch.Tensor, 1-D, usually float32
     if flat.device.type != "cpu":
@@ -209,7 +210,7 @@ def semirdma_allreduce_hook(
             byte_view, base_offset=base, remote_base_offset=base
         )
         cs_recv = ChunkSet(base, nbytes, state.cfg.chunk_bytes)
-        stats = state.rx.await_gradient(cs_recv)
+        stats = state.rx.await_gradient(cs_recv, ratio=ratio, timeout_ms=timeout_ms)
 
         # Peer's bytes are now in state.rx.buffer_view()[base:base+nbytes].
         # Build a torch view that shares memory with the MR so averaging is
@@ -235,10 +236,28 @@ def semirdma_allreduce_hook(
         bucket_id, nbytes, stats,
     )
     fut.set_result(flat)
+    return fut, stats
+
+
+def semirdma_allreduce_hook(
+    state: SemiRDMAHookState,
+    bucket: dist.GradBucket,
+) -> futures.Future[torch.Tensor]:
+    """DDP communication hook: SemiRDMA-backed 2-worker all-reduce.
+
+    Semantics: produces (local + remote) / world_size, matching what
+    ``allreduce_hook`` would return.  If the receiver times out before all
+    chunks arrive, the missing chunks have been zeroed by ``GhostMask``;
+    the averaged result is therefore biased slightly toward the sender for
+    missed regions — this is the Phase 2 semi-reliability trade-off,
+    deliberately exposed to the training loop.
+    """
+    fut, _stats = _run_semirdma_bucket(state, bucket)
     return fut
 
 
 __all__ = [
     "SemiRDMAHookState",
     "semirdma_allreduce_hook",
+    "_run_semirdma_bucket",
 ]

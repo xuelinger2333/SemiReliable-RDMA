@@ -18,6 +18,14 @@
 #               Exposes real "RC崩" at training layer.
 #   semirdma    Your method: UC QP + semi-reliable ghost mask.  Wire
 #               loss from the middlebox.
+#   semirdma_layer_aware
+#               Layer-aware variant: each model layer registers p_L via
+#               the YAML ``loss_tolerance:`` block; the dispatcher routes
+#               each bucket to RC (if p_bucket < eps_ema + safety_margin)
+#               or SemiRDMA UC (with ratio = 1 - p_bucket and T_max
+#               derived from continuous wire calibration).  See
+#               python/semirdma/layer_aware/.  loss_rate must be 0
+#               (wire drop comes from the middlebox).
 #
 #   timeout_ms ∈ {5, 50, 500}     # meaningful for UC only; RC has its
 #                                 # own internal 30s deadline + rc_timeout
@@ -26,8 +34,8 @@
 #   steps = 500
 #
 # Per-transport loss_rate wiring (per $drop_rate iteration):
-#   gloo / rc_rdma / semirdma:    loss_rate=0
-#   rc_lossy:                     loss_rate=$drop_rate
+#   gloo / rc_rdma / semirdma / semirdma_layer_aware:  loss_rate=0
+#   rc_lossy:                                          loss_rate=$drop_rate
 #
 # Total cells = |DROP_RATES| × |TRANSPORTS| × |TIMEOUTS_MS|.
 # Default DROP_RATES="0" → sanity cells only (no middlebox hook).
@@ -274,9 +282,10 @@ for drop_rate in $DROP_RATES; do
         # Per-transport loss_rate wiring:
         #   rc_lossy uses cfg.loss_rate for its shared-seed app-level
         #     chunk mask (no RDMA involvement, no middlebox effect on it).
-        #   gloo / rc_rdma / semirdma leave loss_rate=0 because wire drops
-        #     arrive via the XDP middlebox (or, for gloo, aren't injected
-        #     at all — that's exactly gloo's baseline-of-baselines role).
+        #   gloo / rc_rdma / semirdma / semirdma_layer_aware leave loss_rate=0
+        #     because wire drops arrive via the XDP middlebox (or, for gloo,
+        #     aren't injected at all — that's exactly gloo's baseline-of-
+        #     baselines role).
         case "$transport" in
           rc_lossy) cell_loss_rate="$drop_rate" ;;
           *)        cell_loss_rate=0.0 ;;

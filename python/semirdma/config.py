@@ -119,6 +119,33 @@ class TransportConfig:
     rc_min_rnr_timer: int = 12
     rc_max_rd_atomic: int = 1
 
+    # ---- Layer-aware mode (opt-in; off by default). ----
+    # When True, the application registers per-layer p_L via
+    # LossToleranceRegistry; the dispatcher hook computes per-bucket
+    # ratio = 1 - min(p_L) and per-bucket T_max from a continuous EMA
+    # calibrator fed by training traffic.  When False, the legacy flat
+    # cfg.ratio + cfg.timeout_ms path is used.
+    layer_aware: bool = False
+
+    # Routing safety margin: bucket goes through RC if
+    # min(p_L) < epsilon_ema + loss_safety_margin.  Keeps SemiRDMA from
+    # being asked to tolerate a budget barely exceeded by current wire
+    # loss, which would routinely trip ghost mask on ~50% of buckets.
+    loss_safety_margin: float = 0.005
+
+    # Continuous EMA constants for the calibrator.
+    #   alpha:                weight on each new sample (~ 1/half-life)
+    #   window:               rolling-window size for sigma_jitter (steps)
+    #   bootstrap_buckets:    first N buckets fall back to cfg.ratio /
+    #                         cfg.timeout_ms while the EMA warms up
+    calibration_alpha: float = 0.05
+    calibration_window: int = 50
+    calibration_bootstrap_buckets: int = 20
+
+    # T_max(L) derivation: T_min + K * sigma_jitter, with a sanity floor.
+    t_max_jitter_k: int = 5
+    t_max_min_ms: int = 5
+
     def __post_init__(self) -> None:
         if self.buffer_bytes <= 0:
             raise ValueError(f"buffer_bytes must be > 0, got {self.buffer_bytes}")
@@ -154,6 +181,31 @@ class TransportConfig:
             raise ValueError(f"rc_timeout must lie in [0, 31], got {self.rc_timeout}")
         if not (0 <= self.rc_retry_cnt <= 7):
             raise ValueError(f"rc_retry_cnt must lie in [0, 7], got {self.rc_retry_cnt}")
+        if not (0.0 <= self.loss_safety_margin < 1.0):
+            raise ValueError(
+                f"loss_safety_margin must lie in [0, 1), got {self.loss_safety_margin}"
+            )
+        if not (0.0 < self.calibration_alpha <= 1.0):
+            raise ValueError(
+                f"calibration_alpha must lie in (0, 1], got {self.calibration_alpha}"
+            )
+        if self.calibration_window < 2:
+            raise ValueError(
+                f"calibration_window must be >= 2, got {self.calibration_window}"
+            )
+        if self.calibration_bootstrap_buckets < 0:
+            raise ValueError(
+                f"calibration_bootstrap_buckets must be >= 0, got "
+                f"{self.calibration_bootstrap_buckets}"
+            )
+        if self.t_max_jitter_k < 1:
+            raise ValueError(
+                f"t_max_jitter_k must be >= 1, got {self.t_max_jitter_k}"
+            )
+        if self.t_max_min_ms < 1:
+            raise ValueError(
+                f"t_max_min_ms must be >= 1, got {self.t_max_min_ms}"
+            )
 
 
 __all__ = ["TransportConfig"]

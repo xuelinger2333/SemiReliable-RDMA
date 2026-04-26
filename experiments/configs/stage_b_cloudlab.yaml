@@ -98,6 +98,28 @@ transport_cfg:
   ratio: 0.95                   # Phase 2 RQ4 sweet spot, holds on real NIC
   timeout_ms: 200
 
+  # ---- Layer-aware mode (only consumed when transport=semirdma_layer_aware) ----
+  # Calibrator + per-bucket dispatcher tuning; see python/semirdma/layer_aware/.
+  loss_safety_margin: 0.005
+  calibration_alpha: 0.05
+  calibration_window: 50
+  calibration_bootstrap_buckets: 20
+  t_max_jitter_k: 5
+  t_max_min_ms: 5
+
+# --- Layer-aware loss-tolerance registry ------------------------------
+# Optional: only consumed when transport=semirdma_layer_aware. Keys are
+# module names as in ``model.named_modules()``. Anything not listed here
+# defaults to p_L = 0 (forces RC routing). Supply via Hydra override:
+#   loss_tolerance.layer1.0.bn1=0.0 loss_tolerance.layer1.0.conv1=0.05
+# or pre-populate a YAML node here. Example for ResNet-18 conv body:
+# loss_tolerance:
+#   layer1.0.conv1: 0.05
+#   layer1.0.conv2: 0.05
+#   layer1.1.conv1: 0.05
+#   layer1.1.conv2: 0.05
+#   # BN / FC / embeddings left unregistered → p_L = 0 → RC
+
 # --- Hydra output layout -----------------------------------------------
 hydra:
   run:

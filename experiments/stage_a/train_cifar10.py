@@ -177,6 +177,65 @@ def _install_hook(ddp_model: DDP, cfg: DictConfig, rank: int) -> object:
         ddp_model.register_comm_hook(state, rc_rdma_allreduce_hook)
         return state
 
+    if cfg.transport == "semirdma_layer_aware":
+        # Opt-in layer-aware mode: per-layer p_L, continuous wire calibration,
+        # per-bucket routing between RC (tight budget) and SemiRDMA UC.
+        # See docs/PLAN.md and the layer_aware module docstring.
+        #
+        # bucket_cap_mb is left to caller via cfg.bucket_cap_mb (forced 512 by
+        # _train below). With a single bucket, "per-bucket" reduces to one
+        # global routing decision per step — fine for first-pass validation;
+        # finer per-layer granularity needs imm_data to encode bucket_id (out
+        # of scope for this PR).
+        from semirdma.layer_aware import (
+            LayerAwareHookState,
+            LossToleranceRegistry,
+            layer_aware_dispatcher_hook,
+        )
+        tcfg = TransportConfig(
+            dev_name=cfg.transport_cfg.dev_name,
+            gid_index=cfg.transport_cfg.get("gid_index", -1),
+            buffer_bytes=cfg.transport_cfg.buffer_bytes,
+            chunk_bytes=cfg.transport_cfg.chunk_bytes,
+            sq_depth=cfg.transport_cfg.sq_depth,
+            rq_depth=cfg.transport_cfg.rq_depth,
+            ratio=cfg.transport_cfg.ratio,
+            timeout_ms=cfg.transport_cfg.timeout_ms,
+            loss_rate=cfg.loss_rate,
+            loss_seed=cfg.seed * 31 + 7,
+            qp_type="uc",   # base UC; LayerAwareHookState builds the RC variant internally
+            layer_aware=True,
+            loss_safety_margin=cfg.transport_cfg.get("loss_safety_margin", 0.005),
+            calibration_alpha=cfg.transport_cfg.get("calibration_alpha", 0.05),
+            calibration_window=cfg.transport_cfg.get("calibration_window", 50),
+            calibration_bootstrap_buckets=cfg.transport_cfg.get(
+                "calibration_bootstrap_buckets", 20
+            ),
+            t_max_jitter_k=cfg.transport_cfg.get("t_max_jitter_k", 5),
+            t_max_min_ms=cfg.transport_cfg.get("t_max_min_ms", 5),
+        )
+        # Build the registry from a Hydra dict node (module-name → p_L).
+        # Missing nodes default to p_L = 0 → those layers route to RC.
+        registry = LossToleranceRegistry()
+        registry_node = cfg.get("loss_tolerance")
+        if registry_node is not None:
+            for module_name, p in dict(registry_node).items():
+                registry.register(str(module_name), float(p))
+        peer_host = os.environ.get("SEMIRDMA_PEER_HOST", cfg.dist.master_addr)
+        # The underlying model wrapped by DDP.
+        underlying_model = ddp_model.module
+        state = LayerAwareHookState.for_rank_layer_aware(
+            rank=rank,
+            world_size=cfg.dist.world_size,
+            peer_host=peer_host,
+            port=cfg.dist.semirdma_port,
+            cfg=tcfg,
+            model=underlying_model,
+            registry=registry,
+        )
+        ddp_model.register_comm_hook(state, layer_aware_dispatcher_hook)
+        return state
+
     raise ValueError(f"transport={cfg.transport!r}")
 
 
