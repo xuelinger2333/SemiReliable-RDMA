@@ -4,10 +4,15 @@ For each DDP bucket:
 
 1. Resolve ``p_bucket = min(p_L for p in bucket.parameters())`` from the
    bound ``LossToleranceRegistry``.
-2. If ``p_bucket < epsilon_ema + cfg.loss_safety_margin``: route via the
-   reliable RC sub-hook. The bucket's loss budget is too tight to risk
-   the wire's currently-observed loss rate.
-3. Otherwise: route via the SemiRDMA UC sub-hook with overrides
+2. Synchronize ``epsilon_ema`` across ranks via gloo all-reduce so
+   every rank makes the same routing decision for the same bucket.
+   Without this step, two ranks with slightly different local eps can
+   route the same bucket to different transports (one RC, one UC) and
+   the receiving rank's await blocks on the wrong QP until timeout.
+3. If ``p_bucket < epsilon_global + cfg.loss_safety_margin``: route via
+   the reliable RC sub-hook. The bucket's loss budget is too tight to
+   risk the wire's currently-observed loss rate.
+4. Otherwise: route via the SemiRDMA UC sub-hook with overrides
      ratio = 1 - p_bucket   (counter-driven exit at the layer's budget)
      timeout_ms = T_max(L)  (derived from B_ema + K * sigma_jitter)
    Update the calibrator with ``(n_completed, n_total, latency_ms,
@@ -39,13 +44,34 @@ from semirdma.layer_aware.state import LayerAwareHookState
 logger = logging.getLogger(__name__)
 
 
+def _synchronized_eps(local_eps: float, world_size: int) -> float:
+    """All-reduce ``local_eps`` to a global mean across ranks.
+
+    Routing must be deterministic across ranks: if rank 0 routes a
+    bucket to RC and rank 1 routes the same bucket to UC, rank 0's RC
+    rx awaits on the RC QP while rank 1's UC tx writes to the UC QP →
+    rank 0 hits the 30 s RC await deadline. Synchronizing ``eps_ema``
+    via a one-float all-reduce (gloo TCP, ~µs cost) collapses both
+    ranks to the same routing decision per bucket.
+
+    Falls back to local_eps if torch.distributed isn't initialized
+    (single-process unit tests).
+    """
+    if not dist.is_initialized() or world_size <= 1:
+        return local_eps
+    t = torch.tensor([local_eps], dtype=torch.float64)
+    dist.all_reduce(t, op=dist.ReduceOp.SUM)
+    return float(t.item()) / world_size
+
+
 def layer_aware_dispatcher_hook(
     state: LayerAwareHookState,
     bucket: dist.GradBucket,
 ) -> futures.Future[torch.Tensor]:
     """Per-bucket dispatcher for the layer-aware transport mode."""
     p_bucket = state.registry.resolve_for_bucket(bucket)
-    eps = state.calibrator.epsilon_ema
+    # Cross-rank synchronized epsilon to keep routing decisions identical.
+    eps = _synchronized_eps(state.calibrator.epsilon_ema, state.world_size)
     margin = state.cfg.loss_safety_margin
     state.n_buckets += 1
 

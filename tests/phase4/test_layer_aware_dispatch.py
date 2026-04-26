@@ -42,6 +42,7 @@ class _FakeState:
     calibrator: WireCalibrator
     semi_substate: object   # opaque — mocked
     rc_substate: object     # opaque — mocked
+    world_size: int = 1     # 1 = no all-reduce in dispatcher
     n_buckets: int = 0
     n_routed_rc: int = 0
     n_routed_semi: int = 0
