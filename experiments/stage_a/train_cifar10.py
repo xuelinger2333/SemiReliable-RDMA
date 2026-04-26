@@ -187,6 +187,7 @@ def _install_hook(ddp_model: DDP, cfg: DictConfig, rank: int) -> object:
         # global routing decision per step — fine for first-pass validation;
         # finer per-layer granularity needs imm_data to encode bucket_id (out
         # of scope for this PR).
+        from semirdma import TransportConfig
         from semirdma.layer_aware import (
             LayerAwareHookState,
             LossToleranceRegistry,
