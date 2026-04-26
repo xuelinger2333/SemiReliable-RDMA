@@ -16,9 +16,14 @@ For each DDP bucket:
 During the bootstrap window (before ``calibrator.is_bootstrapped()``) the
 calibrator returns the legacy flat ``cfg.ratio`` / ``cfg.timeout_ms`` so
 behavior matches the existing transport while the EMAs warm up.
-"""
 
-from __future__ import annotations
+Note: this file intentionally does NOT do ``from __future__ import
+annotations``. PyTorch's ``DDP.register_comm_hook`` identity-checks the
+``bucket`` type annotation against ``torch.distributed.GradBucket``;
+PEP-563 stringification makes that check fail with "bucket annotation
+should be dist.GradBucket". ``semirdma.hooks`` and
+``semirdma.baselines.rc_rdma_hook`` avoid the same trap the same way.
+"""
 
 import logging
 import math
