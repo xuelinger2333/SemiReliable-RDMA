@@ -100,10 +100,17 @@ def layer_aware_dispatcher_hook(
         state.semi_substate, bucket, ratio=ratio, timeout_ms=t_max,
     )
 
-    # Feed the calibrator from this bucket's stats. ``stats`` has the
-    # wait_for_ratio fields (ok, latency_ms, completed, timed_out) plus
-    # ``chunks_total`` added by transport.await_gradient.
-    n_completed = stats.get("completed", 0)
+    # Feed the calibrator from this bucket's stats. We use the
+    # POST-drain completion count (``completed_post_drain``) rather than
+    # ``stats["completed"]`` because the latter is captured at the
+    # ratio-threshold exit moment, before the leftover drain catches the
+    # late CQEs. With ratio = 1 - p_bucket, stats["completed"]/n_total
+    # ≈ 1 - p_bucket regardless of wire health, which would converge
+    # eps_ema to ~p_bucket and trip the safety check on every bucket.
+    # ``completed_post_drain`` is the closest proxy for actual wire
+    # delivery available without extending the wait beyond timeout_ms.
+    n_completed = stats.get("completed_post_drain",
+                            stats.get("completed", 0))
     n_total = stats.get("chunks_total", n_chunks)
     latency_ms = stats.get("latency_ms", 0.0)
     state.calibrator.update(
@@ -116,11 +123,14 @@ def layer_aware_dispatcher_hook(
         state.n_t_max_trips += 1
 
     if state.n_buckets <= 5 or state.n_buckets % 100 == 0:
+        completed_pre = stats.get("completed", 0)
         logger.info(
             "dispatch[%d]: SEMI p_bucket=%.4f ratio=%.4f t_max=%dms "
-            "completed=%d/%d timed_out=%s eps_ema=%.4f sigma_ms=%.2f bw_mbps=%.1f",
+            "completed=%d/%d (pre_drain=%d) timed_out=%s "
+            "eps_ema=%.4f sigma_ms=%.2f bw_mbps=%.1f",
             state.n_buckets, p_bucket, ratio, t_max,
-            n_completed, n_total, stats.get("timed_out", False),
+            n_completed, n_total, completed_pre,
+            stats.get("timed_out", False),
             state.calibrator.epsilon_ema,
             state.calibrator.sigma_jitter_ms,
             state.calibrator.bandwidth_bps / 1e6,

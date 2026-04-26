@@ -356,6 +356,15 @@ class SemiRDMATransport:
         n_expected = cs.size()
         out_recv_pre = self._engine.outstanding_recv()
 
+        # Surface the post-drain count so callers (the layer-aware
+        # dispatcher's calibrator) can update epsilon_ema from a metric
+        # that reflects WIRE loss, not the ratio-threshold truncation
+        # baked into stats["completed"]. With a 90% threshold and a 1%
+        # wire, stats["completed"] reads ~90% but n_completed_post_drain
+        # reads ~99% — only the latter is the right input to
+        # "is the wire actually losing more than the bucket can tolerate".
+        stats["completed_post_drain"] = int(n_completed)
+
         # Step 3: ghost-mask only the chunks that truly never arrived.
         # On a benign wire this should now zero zero chunks; ratio threshold
         # + leftover drain together capture the full delivery.
