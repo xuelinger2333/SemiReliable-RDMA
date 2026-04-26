@@ -141,6 +141,16 @@ SQ_DEPTH="${SQ_DEPTH:-}"
 # loss kills the whole chunk.
 CHUNK_BYTES="${CHUNK_BYTES:-}"
 
+# LOSS_TOLERANCE_DEFAULT override.  Only consumed by transport=
+# semirdma_layer_aware (other transports ignore the field).  Sets the
+# global p_L for every layer not explicitly registered via a
+# loss_tolerance:<name>=p Hydra override.  Use 0.10 for PR-B uniform-
+# budget validation cells (keeps every drop rate on the SemiRDMA route
+# given safety_margin=0.005 and drop=0.05).  Default empty = use YAML
+# value (0.0 → all layers route to RC; useful for sanity bit-equal
+# tests vs rc_rdma).
+LOSS_TOLERANCE_DEFAULT="${LOSS_TOLERANCE_DEFAULT:-}"
+
 NODE0_IP="${NODE0_IP:-10.10.1.1}"       # rank 0 + experiment receiver (amd203)
 NODE1_IP="${NODE1_IP:-10.10.1.3}"       # rank 1 + experiment sender (amd196)
 NODE_PEER_HOST="${NODE_PEER_HOST:-chen123@$NODE1_IP}"
@@ -311,6 +321,13 @@ for drop_rate in $DROP_RATES; do
         fi
         if [ -n "$CHUNK_BYTES" ]; then
             rq_args="$rq_args transport_cfg.chunk_bytes=$CHUNK_BYTES"
+        fi
+        # Layer-aware uniform default p_L.  Only meaningful for
+        # transport=semirdma_layer_aware; emitting it for other
+        # transports is harmless (Hydra accepts the override on
+        # the top-level YAML key).
+        if [ -n "$LOSS_TOLERANCE_DEFAULT" ]; then
+            rq_args="$rq_args loss_tolerance_default=$LOSS_TOLERANCE_DEFAULT"
         fi
 
         # ---- start peer (amd196, rank 1) in background via ssh ----
