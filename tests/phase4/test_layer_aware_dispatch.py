@@ -151,9 +151,15 @@ def test_high_p_bucket_routes_to_semi(monkeypatch):
 
 def test_dispatcher_updates_calibrator_from_semi_stats(monkeypatch):
     """Each SemiRDMA call should fold its (n_completed, n_total, latency,
-    n_bytes) into the calibrator EMAs."""
+    n_bytes) into the calibrator EMAs.
+
+    Use p_bucket=0.15 so the dispatcher's safety check stays comfortably
+    on the SemiRDMA side as eps_ema climbs to ~0.05; otherwise eps would
+    overtake p - margin and route the bucket to RC, starving the
+    calibrator of SemiRDMA samples.
+    """
     model = _make_toy_model()
-    state = _make_state(model, {"0": 0.05, "1": 0.05, "2": 0.05}, bootstrap=0)
+    state = _make_state(model, {"0": 0.15, "1": 0.15, "2": 0.15}, bootstrap=0)
 
     def fake_semi(semi_state, bucket, *, ratio=None, timeout_ms=None):
         f = futures.Future()
@@ -163,23 +169,35 @@ def test_dispatcher_updates_calibrator_from_semi_stats(monkeypatch):
     monkeypatch.setattr(dispatcher_mod, "_run_semirdma_bucket", fake_semi)
 
     bucket = _FakeBucket(list(model.parameters()), n_bytes=4_000_000)
-    for _ in range(15):
+    for _ in range(30):
         dispatcher_mod.layer_aware_dispatcher_hook(state, bucket)
 
     # 5% loss every call → epsilon_ema should converge near 0.05
     assert 0.03 < state.calibrator.epsilon_ema < 0.07
     # Sigma is 0 (constant latency), bandwidth converged
     assert state.calibrator.sigma_jitter_ms == 0.0
+    # Confirm the test actually exercised the SemiRDMA path, not RC.
+    assert state.n_routed_semi == 30
+    assert state.n_routed_rc == 0
 
 
 def test_timeout_increments_t_max_trips(monkeypatch):
+    """timed_out=True from each SemiRDMA call should increment n_t_max_trips.
+
+    We need the dispatcher to keep using the SemiRDMA path, so the
+    fake_semi reports a tiny observed loss (so eps_ema stays well below
+    p_bucket - margin) but still flags timed_out=True. The two flags are
+    independent in stats.
+    """
     model = _make_toy_model()
-    state = _make_state(model, {"0": 0.05, "1": 0.05, "2": 0.05})
+    state = _make_state(model, {"0": 0.10, "1": 0.10, "2": 0.10})
 
     def fake_semi(semi_state, bucket, *, ratio=None, timeout_ms=None):
         f = futures.Future()
         f.set_result(bucket.buffer())
-        return f, {"ok": False, "completed": 800, "chunks_total": 1000,
+        # Tiny observed loss (0.1%) so eps stays below p - margin →
+        # dispatcher keeps routing to SemiRDMA. timed_out=True still set.
+        return f, {"ok": False, "completed": 999, "chunks_total": 1000,
                    "latency_ms": 200.0, "timed_out": True}
     monkeypatch.setattr(dispatcher_mod, "_run_semirdma_bucket", fake_semi)
 
@@ -187,6 +205,7 @@ def test_timeout_increments_t_max_trips(monkeypatch):
     for _ in range(3):
         dispatcher_mod.layer_aware_dispatcher_hook(state, bucket)
     assert state.n_t_max_trips == 3
+    assert state.n_routed_semi == 3
 
 
 def test_safety_margin_kicks_in_when_eps_climbs(monkeypatch):

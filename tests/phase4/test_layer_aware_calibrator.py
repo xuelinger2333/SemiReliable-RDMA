@@ -14,7 +14,7 @@ from semirdma.layer_aware.calibrator import WireCalibrator
 
 def _make_calibrator(**overrides):
     """Construct a calibrator with TransportConfig defaults plus overrides."""
-    cfg = TransportConfig(
+    base = dict(
         layer_aware=True,
         # Fast bootstrap so tests can verify both phases quickly.
         calibration_alpha=0.2,
@@ -24,8 +24,9 @@ def _make_calibrator(**overrides):
         t_max_min_ms=5,
         ratio=0.95,
         timeout_ms=200,
-        **overrides,
     )
+    base.update(overrides)
+    cfg = TransportConfig(**base)
     return WireCalibrator.from_config(cfg), cfg
 
 
@@ -107,13 +108,13 @@ def test_ratio_for_p_clamps_at_extremes():
 
 def test_t_max_post_bootstrap_uses_physics():
     cal, cfg = _make_calibrator()
-    # Drive bandwidth to a known value: 10 MB in 10 ms = 1 Gbps
+    # Drive bandwidth to a known value: 10 MB in 80 ms → 1.25e8 B/s ≈ 1 Gbps
     for _ in range(20):
-        cal.update(n_completed=1000, n_total=1000, latency_ms=10.0,
+        cal.update(n_completed=1000, n_total=1000, latency_ms=80.0,
                    n_bytes=10_000_000)
-    # 1000-chunk bucket of 4096B = 4 MB. 4 MB / 1 Gbps ≈ 32 ms
+    # 1000-chunk bucket of 4096B ≈ 4 MB. 4 MB / 1.25e8 B/s ≈ 32 ms
     t_max = cal.t_max_for_bucket(n_chunks=1000, chunk_bytes=4096)
-    # No jitter (all same latency) → T_max == ceil(T_min)
+    # No jitter (all same latency) → T_max ≈ ceil(T_min)
     assert 30 <= t_max <= 35
 
 
