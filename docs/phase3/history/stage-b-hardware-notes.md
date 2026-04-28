@@ -425,3 +425,108 @@ ssh chen123@amd196 'ssh-keyscan -H 10.10.1.1 >> ~/.ssh/known_hosts'
 | C.2 Phase 2 RQ1/RQ2/RQ4 resweep | C++ tests | ~30 min | `results-cx5-amd203-amd196/stage-b-phase2-resweep/` |
 | C.1 M1-M5 microbench | benchmarks/* | ~15 min | `results-cx5-amd203-amd196/stage-b-microbench/` |
 
+
+## 10. 2026-04-28 · amd247/amd245/amd264 CX-5 平台启用（当前运行节点）
+
+amd203/amd196 已归档（数据落 `docs/phase3/results-cx5-amd203-amd196/`）。新分配的
+amd247/amd245/amd264 上线，2026-04-28 起作为 Phase 4 主运行集群。本节记录硬件
+事实、与 §9 旧节点的差异，以及哪些参数因 100 GbE 期望落空而**不再需要重测**。
+
+### 10.1 节点角色
+
+| 节点 | 角色 | 实验 LAN IP | 实验 LAN MAC (eno34np1) |
+|---|---|---|---|
+| amd247.utah.cloudlab.us | rank 0（接收方，驱动 run_p1_matrix） | 10.10.1.1 | 04:3f:72:ac:ca:77 |
+| amd245.utah.cloudlab.us | rank 1（发送方） | 10.10.1.2 | 04:3f:72:ac:ca:57 |
+| amd264.utah.cloudlab.us | XDP 中间盒 | 10.10.1.3 | 04:3f:72:b2:c2:09 |
+| amd259.utah.cloudlab.us | 备用，不参与本轮 | — | — |
+
+详细 IP/MAC/dev 速查表：[cluster-amd247-amd245-amd264.md](../cluster-amd247-amd245-amd264.md)。
+
+### 10.2 硬件事实（与 §9 amd203/amd196 对照）
+
+| 项 | amd203/amd196 (旧, §9) | amd247/amd245/amd264 (新) |
+|---|---|---|
+| NIC 型号 | ConnectX-5 (MT27800) | **同**（eno34np1 = mlx5_1）+ 额外 ConnectX-5 Ex (MT28800, mlx5_2/3) |
+| Firmware | 16.28.4512 | **同** 16.28.4512 |
+| 实验 LAN 速率 | 25 GbE | **同** 25 GbE |
+| 实验 LAN netdev | enp65s0f0np0 | **不同：eno34np1**（CloudLab amd-class 把实验口放在 onboard NIC #34） |
+| 实验 LAN 设备名 | mlx5_2 | **不同：mlx5_1** |
+| 管理 LAN | enp65s0f1 / 128.110.x | eno33np0 / 128.110.x |
+| Path MTU | 4096 | **同** 4096 |
+| RoCEv2 GID idx | 1（直连）/ 3（中间盒） | **同** |
+| CPU | AMD EPYC 7402P 24c/48t | **同** |
+| OS / kernel | Ubuntu 22.04 / 5.15 | **同** Ubuntu 22.04.2 / 5.15.0-168 |
+
+### 10.3 100 GbE QSFP28 端口实测
+
+每个节点的 ConnectX-5 Ex 卡（PCIe 0000:41:00.x）配有两个 QSFP28 笼子：
+
+```
+enp65s0f0np0  (mlx5_2)  QSFP28 模块插入：100G Base-CR4 / 25G Base-CR CA-L，2 m 铜缆
+enp65s0f1np1  (mlx5_3)  empty (No cable)
+```
+
+`sudo ip link set enp65s0f0np0 up` 后 `ethtool` 仍报：
+
+```
+Speed: Unknown!
+Link detected: no (Autoneg, No partner detected)
+```
+
+→ **CloudLab 当前 profile 没有把 100 GbE 数据面接通**。三节点的 enp65s0f0np0
+QSFP28 模块是单端的，对端没有连到任何交换机/对端节点。
+
+**决定（2026-04-28，与用户当面同步后）**：本轮全部走 25 GbE eno34np1，不浪费时间
+排查 100 GbE 布线。等未来 profile 更新或换 d7525/d6515 类节点再做 100 GbE 重标定。
+
+### 10.4 自动检测脚本扩展
+
+amd-class 节点的实验口走 `eno<X>np<Y>` 命名，与 §8/§9 假设的 `enp<bus>s<slot>f<func>np<port>`
+不同。三个脚本统一改成「优先选 RFC1918 (10.x / 192.168.x) 私网 IPv4 的 UP iface」：
+
+- `scripts/cloudlab/link_setup.sh`
+- `scripts/cloudlab/day0_check.sh`
+- `scripts/cloudlab/detect_rdma_dev.sh`
+
+旧 `enp...np...` 正则保留为 fallback，amd203/amd196 仍可工作。
+
+### 10.5 day-0 baseline（与 §9.2 amd203 对照）
+
+| 测试 | amd247 ↔ amd245 (新) | amd203 ↔ amd196 (§9.2) |
+|---|---|---|
+| `ib_write_bw -s 65536 -d mlx5_1` | **24.39 Gbps** (97.6% 线速) | 24.39 Gbps |
+| `ib_write_lat -s 8 -d mlx5_1` t_typical | 2.13 µs | ~2.10 µs |
+| `ib_write_lat -s 8 -d mlx5_1` p99 | **2.19 µs** | 2.20 µs |
+| `ib_write_lat -s 8 -d mlx5_1` p99.9 | 3.17 µs | ~3.2 µs |
+
+→ 与 §9.2 在噪声内重合，硬件天花板等价 → §9 之后所有 post-fix 调参 (chunk_bytes=4096,
+sq_depth=8, timeout_ms=200, ratio=0.95, rq_depth=16384) 直接复用，**不需要 RQ1 / RQ4
+重新扫**。
+
+### 10.6 不需要做的事（vs §9 amd203/amd196 走过的路）
+
+由于硬件等价，下面的 §9 子任务在 amd247/amd245 上**跳过**：
+
+- ❌ path_mtu=1024 调试（mlx5 自动协商成 4096，与 §9.3 一致）
+- ❌ MTU-fix 后的 sq_depth bursty-post 重扫（§9.4 已确定 sq_depth=8 是 wave-throttle 拐点）
+- ❌ timeout_ms 的 CPU jitter margin 重测（§9.4 的 200 ms 仍合适，CPU 同款）
+- ❌ Phase 2 RQ1 chunk-size 重扫（§9 + stage-b-phase2-resweep 已确认 4096 == path_mtu 是最优）
+- ❌ RQ4 ratio × timeout 重扫（§9 sweet spot 0.95 × 200 ms 仍适用）
+
+### 10.7 下次 100 GbE 启用时需要做的事（deferred recalibration punch list）
+
+如果未来换到 d7525/d6515（真 100 GbE）或当前 profile 接通 enp65s0f0np0，需要按
+顺序重做：
+
+1. RQ1 chunk-size 扫描 `{1, 2, 4, 8, 16, 32, 64, 128, 256} KiB` —— 100 GbE 的
+   WQE-rate 上限会让 chunk_bytes 显著上移（estimate 16–64 KiB）
+2. RQ4 ratio × timeout 重扫 —— CQE arrival 分布不同，timeout_ms=200 大概率过保守
+3. BDP-driven rq_depth 重算（带宽 ×4 → 同样 RTT 下 BDP ×4）
+4. Path MTU 验证 + jumbo 升级
+5. M1–M5 microbench 刷新（poll_cq 在 CQE 速率提高 4× 后的 CPU 占用）
+
+### 10.8 矩阵目录
+
+新 CSV 落盘 `~/SemiRDMA/experiments/results/stage_b/<date>/...`；分析完成后归档到
+`docs/phase3/results-cx5-amd247-amd245/` 的对应子目录（沿用 §9.7 的命名规则）。

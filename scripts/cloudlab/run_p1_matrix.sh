@@ -59,7 +59,7 @@
 #     NODE0 (rank 0 + receiver)  ←─ switch ─→  NODE1 (rank 1)
 #
 #   With XDP middlebox (ARP-spoof "bump in the wire"):
-#     NODE1 (sender) ─→ MIDDLEBOX (XDP/eBPF on amd186) ─→ NODE0 (receiver)
+#     NODE1 (sender) ─→ MIDDLEBOX (XDP/eBPF on amd264; was amd186) ─→ NODE0 (receiver)
 #     MIDDLEBOX_HOST env var points to middlebox's management address; drop rate is
 #     set via ssh + scripts/cloudlab/middlebox_setup.sh set-rate <rate> at the top
 #     of each outer iteration.
@@ -68,8 +68,8 @@
 #       transport_cfg.gid_index=3
 #     because GID idx 1 (IPv6 link-local) has its dst MAC derived by mlx5 HW
 #     directly from the GID (no kernel ARP lookup), so the ARP spoof doesn't
-#     steer RoCE traffic through amd186.  Idx 3 is RoCE v2 IPv4-mapped and
-#     DOES consult kernel ARP.  The matrix auto-appends gid_index=3 to the
+#     steer RoCE traffic through the middlebox.  Idx 3 is RoCE v2 IPv4-mapped
+#     and DOES consult kernel ARP.  The matrix auto-appends gid_index=3 to the
 #     torchrun args when MIDDLEBOX_HOST is non-empty.
 #
 # Per-cell output:
@@ -84,18 +84,18 @@
 #   $P1_ROOT/MATRIX_SUMMARY.csv    idx,drop_rate,transport,timeout_ms,rc,final_loss,mean_iter_ms
 #   $P1_ROOT/MATRIX.log            chronological progress
 #
-# Usage (on receiver node, e.g. amd203):
+# Usage (on receiver node, e.g. amd247):
 #   # Benign wire (no middlebox) — 6 cells, sanity check only:
 #   bash scripts/cloudlab/run_p1_matrix.sh
 #
 #   # Paper main matrix with XDP middlebox (36 cells, ~9 h):
 #   DROP_RATES="0 0.001 0.005 0.01 0.02 0.05" \
-#     MIDDLEBOX_HOST=chen123@amd186.utah.cloudlab.us \
+#     MIDDLEBOX_HOST=chen123@amd264.utah.cloudlab.us \
 #     bash scripts/cloudlab/run_p1_matrix.sh
 #
 #   # Quick smoke (2 drop × 2 transports × 1 timeout = 4 cells, ~6 min):
 #   DROP_RATES="0 0.01" TIMEOUTS_MS=50 STEPS=100 \
-#     MIDDLEBOX_HOST=chen123@amd186.utah.cloudlab.us \
+#     MIDDLEBOX_HOST=chen123@amd264.utah.cloudlab.us \
 #     bash scripts/cloudlab/run_p1_matrix.sh
 #
 # Recover from failure:
@@ -151,8 +151,8 @@ CHUNK_BYTES="${CHUNK_BYTES:-}"
 # tests vs rc_rdma).
 LOSS_TOLERANCE_DEFAULT="${LOSS_TOLERANCE_DEFAULT:-}"
 
-NODE0_IP="${NODE0_IP:-10.10.1.1}"       # rank 0 + experiment receiver (amd203)
-NODE1_IP="${NODE1_IP:-10.10.1.3}"       # rank 1 + experiment sender (amd196)
+NODE0_IP="${NODE0_IP:-10.10.1.1}"       # rank 0 + experiment receiver (amd247; was amd203)
+NODE1_IP="${NODE1_IP:-10.10.1.2}"       # rank 1 + experiment sender   (amd245; was amd196 @ 10.10.1.3)
 NODE_PEER_HOST="${NODE_PEER_HOST:-chen123@$NODE1_IP}"
 
 # Middlebox control — empty MIDDLEBOX_HOST disables the hook entirely so the script

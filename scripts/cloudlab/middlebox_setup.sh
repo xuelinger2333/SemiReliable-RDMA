@@ -3,27 +3,30 @@
 #
 # Why XDP instead of DPDK
 # -----------------------
-# amd186 has a single experiment-LAN CX-5 port (enp65s0f0np0).  A full DPDK
-# forwarder on this node would need hugepages + VFIO bind + ~300 lines of C,
-# with no measurable benefit for training's ~30 Kpps AllReduce rate or
-# uc_blaster's ~1 Mpps calibration.  XDP in generic mode on mlx5 gives us
-# ~600 Kpps with ~100 lines of eBPF C, no hugepages, no VFIO, no library
-# install beyond clang + libbpf-dev + bpftool (all in Ubuntu 22.04).
+# Middlebox node (amd264 since 2026-04-28; amd186 prior) has a single
+# experiment-LAN CX-5 port (eno34np1 on amd-class; enp65s0f0np0 on
+# d7525/d6515).  A full DPDK forwarder on this node would need hugepages +
+# VFIO bind + ~300 lines of C, with no measurable benefit for training's
+# ~30 Kpps AllReduce rate or uc_blaster's ~1 Mpps calibration.  XDP in
+# generic mode on mlx5 gives us ~600 Kpps with ~100 lines of eBPF C, no
+# hugepages, no VFIO, no library install beyond clang + libbpf-dev +
+# bpftool (all in Ubuntu 22.04).
 #
 # Design: ARP-spoof-based "bump in the wire"
 # ------------------------------------------
-# 1. amd196 and amd203 are both on 10.10.1.0/24 via a shared CloudLab switch,
-#    so traffic between them normally bypasses amd186.
-# 2. We populate static ARP entries on amd196 and amd203 (see
-#    arp_spoof_setup.sh) that map each peer's IP → amd186's MAC.  Now every
-#    amd196↔amd203 IPv4 packet lands on amd186's NIC at L2.
-# 3. XDP program on amd186 inspects each packet; drops UDP:4791 (RoCE v2)
+# 1. amd247 (receiver) and amd245 (sender) are both on 10.10.1.0/24 via a
+#    shared CloudLab switch, so traffic between them normally bypasses
+#    amd264.
+# 2. We populate static ARP entries on amd247 and amd245 (see
+#    arp_spoof_setup.sh) that map each peer's IP → amd264's MAC.  Now every
+#    amd247↔amd245 IPv4 packet lands on amd264's NIC at L2.
+# 3. XDP program on amd264 inspects each packet; drops UDP:4791 (RoCE v2)
 #    with configured Bernoulli probability, rewrites dst_mac to the real
 #    peer MAC, XDP_TX back out the same port.  Non-RoCE (ARP, ICMP, non-UDP,
 #    UDP on other ports) returns XDP_PASS — kernel keeps handling.
 # 4. src_mac is REWRITTEN to the middlebox's own MAC so the upstream switch's
 #    MAC-learning table stays coherent (otherwise the switch sees e.g.
-#    amd196's MAC sourced from both amd196's port and amd186's port and
+#    amd245's MAC sourced from both amd245's port and amd264's port and
 #    treats it as a MAC-flap, suppressing traffic).
 #
 # Four prerequisites discovered during first-light smoke (all handled by
@@ -63,10 +66,12 @@
 #   logs               kernel dmesg related to bpf (rare)
 #
 # Usage:
-#   # Once per fresh middlebox node:
-#   IFACE=enp65s0f0np0 PEER_A_IP=10.10.1.1 PEER_A_MAC=... \
-#     PEER_B_IP=10.10.1.3 PEER_B_MAC=... \
+#   # Once per fresh middlebox node (amd264 / amd-class):
+#   IFACE=eno34np1 PEER_A_IP=10.10.1.1 PEER_A_MAC=04:3f:72:ac:ca:77 \
+#     PEER_B_IP=10.10.1.2 PEER_B_MAC=04:3f:72:ac:ca:57 \
 #     sudo bash scripts/cloudlab/middlebox_setup.sh bootstrap
+#
+#   # On older d7525/d6515 hardware override IFACE to enp65s0f0np0.
 #
 #   # Start forwarder with 0% drop (transparent):
 #   sudo bash scripts/cloudlab/middlebox_setup.sh start 0
@@ -89,8 +94,9 @@ REPO="${REPO:-$HOME/SemiRDMA}"
 XDP_DIR="${XDP_DIR:-$REPO/scripts/cloudlab/xdp_dropbox}"
 BPF_OBJ="${BPF_OBJ:-$XDP_DIR/xdp_dropbox.bpf.o}"
 
-# The interface we attach XDP to.  On amd186 this is enp65s0f0np0.
-IFACE="${IFACE:-enp65s0f0np0}"
+# The interface we attach XDP to.  On amd264 (amd-class) this is eno34np1;
+# on older d7525/d6515 nodes (e.g. amd186) it was enp65s0f0np0.
+IFACE="${IFACE:-eno34np1}"
 
 # XDP attach mode.  drv = NIC driver (fast path on mlx5); skb = generic
 # (kernel receive path, slower but works on any driver).  Default drv;
@@ -110,11 +116,11 @@ MAP_PIN_STATS="${MAP_PIN_STATS:-/sys/fs/bpf/stats_map}"
 MAP_PIN_SELF="${MAP_PIN_SELF:-/sys/fs/bpf/self_mac}"
 
 # Peer table: IP → MAC.  Used by `start` to populate peer_macs map.
-# Typically amd196 + amd203, overridable at bootstrap or start time.
-PEER_A_IP="${PEER_A_IP:-10.10.1.1}"   # amd203
-PEER_A_MAC="${PEER_A_MAC:-}"          # must be set by caller
-PEER_B_IP="${PEER_B_IP:-10.10.1.3}"   # amd196
-PEER_B_MAC="${PEER_B_MAC:-}"          # must be set by caller
+# Typically amd247 + amd245, overridable at bootstrap or start time.
+PEER_A_IP="${PEER_A_IP:-10.10.1.1}"   # amd247 (receiver)
+PEER_A_MAC="${PEER_A_MAC:-}"          # must be set by caller (e.g. 04:3f:72:ac:ca:77)
+PEER_B_IP="${PEER_B_IP:-10.10.1.2}"   # amd245 (sender)
+PEER_B_MAC="${PEER_B_MAC:-}"          # must be set by caller (e.g. 04:3f:72:ac:ca:57)
 
 LOGDIR="${LOGDIR:-/tmp/xdp_dropbox_logs}"
 mkdir -p "$LOGDIR"

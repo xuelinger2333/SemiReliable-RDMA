@@ -3,34 +3,37 @@
 #
 # Why
 # ---
-# amd186 (middlebox) lives on the same 10.10.1.0/24 L2 subnet as the two
-# training nodes (amd196 + amd203).  Normal switching means amd196↔amd203
-# packets bypass amd186 entirely.  To force them through the middlebox at L2
-# without reprovisioning the CloudLab profile, we populate static ARP entries
-# on the two peers such that each peer's ARP table claims the OTHER peer's
-# IP lives at amd186's MAC.
+# Middlebox (amd264 since 2026-04-28; amd186 prior) lives on the same
+# 10.10.1.0/24 L2 subnet as the two training nodes (amd247 receiver +
+# amd245 sender; amd203 + amd196 prior).  Normal switching means peer↔peer
+# packets bypass the middlebox entirely.  To force them through the middlebox
+# at L2 without reprovisioning the CloudLab profile, we populate static ARP
+# entries on the two peers such that each peer's ARP table claims the OTHER
+# peer's IP lives at the middlebox's MAC.
 #
-# After setup:
-#   amd196 ARP table:   10.10.1.1  → amd186's experiment-NIC MAC
-#   amd203 ARP table:   10.10.1.3  → amd186's experiment-NIC MAC
+# After setup (amd247/amd245/amd264 cluster):
+#   amd247 (receiver) ARP table:  10.10.1.2  → amd264's eno34np1 MAC
+#   amd245 (sender)   ARP table:  10.10.1.1  → amd264's eno34np1 MAC
 #
-# Packets from amd196 to 10.10.1.1 now physically land on amd186's NIC.
+# Packets from amd245 to 10.10.1.1 now physically land on amd264's NIC.
 # The XDP program there (see middlebox_setup.sh + xdp_dropbox/) rewrites
-# dst_mac to the real amd203 MAC and XDP_TX's it back out the same port.
-# amd203 receives it as if it came from amd196 directly.  Reverse path
+# dst_mac to the real amd247 MAC and XDP_TX's it back out the same port.
+# amd247 receives it as if it came from amd245 directly.  Reverse path
 # symmetric.
 #
-# This script is driven from the receiver node (amd203) — the same node
+# This script is driven from the receiver node (amd247) — the same node
 # run_p1_matrix.sh uses — so the SSH identity chain is the same.
 #
-# Usage (from amd203):
-#   MIDDLEBOX_MAC=0c:42:a1:e2:a6:a8 \
+# Usage (from amd247):
+#   MIDDLEBOX_MAC=04:3f:72:b2:c2:09 \
 #     bash scripts/cloudlab/arp_spoof_setup.sh apply
 #   bash scripts/cloudlab/arp_spoof_setup.sh status
 #   bash scripts/cloudlab/arp_spoof_setup.sh restore
 #
 # The middlebox MAC is printed by middlebox_setup.sh bootstrap and also
-# visible via `ip -br link show enp65s0f0np0` on amd186.
+# visible via `ip -br link show eno34np1` on amd264 (amd-class CloudLab
+# nodes use eno34np1 as the experiment-LAN port; older d7525/d6515 used
+# enp65s0f0np0).
 #
 # IPv4 vs IPv6 note
 # -----------------
@@ -56,13 +59,14 @@ shift || true
 # Config
 # -------------------------------------------------------------------------
 # The two training peers on the experiment LAN.
-PEER_A_HOST="${PEER_A_HOST:-}"           # e.g. chen123@amd203 (receiver).  Empty = self.
-PEER_A_IP="${PEER_A_IP:-10.10.1.1}"
-PEER_B_HOST="${PEER_B_HOST:-chen123@10.10.1.3}"   # amd196 (sender)
-PEER_B_IP="${PEER_B_IP:-10.10.1.3}"
-PEER_IFACE="${PEER_IFACE:-enp65s0f0np0}" # experiment-NIC name on peers
+PEER_A_HOST="${PEER_A_HOST:-}"                    # e.g. chen123@amd247 (receiver). Empty = self.
+PEER_A_IP="${PEER_A_IP:-10.10.1.1}"               # amd247 (receiver)
+PEER_B_HOST="${PEER_B_HOST:-chen123@10.10.1.2}"   # amd245 (sender)
+PEER_B_IP="${PEER_B_IP:-10.10.1.2}"               # amd245 (sender)
+PEER_IFACE="${PEER_IFACE:-eno34np1}"              # experiment-NIC name on amd-class nodes
+                                                  # (override to enp65s0f0np0 for old d7525/d6515)
 
-# The middlebox (amd186) MAC that both peers will point to.
+# The middlebox MAC (amd264 eno34np1: 04:3f:72:b2:c2:09) that both peers will point to.
 MIDDLEBOX_MAC="${MIDDLEBOX_MAC:-}"
 
 info() { printf '[%s] %s\n' "$(date +%H:%M:%S)" "$*"; }
@@ -201,9 +205,9 @@ Usage: $0 {apply | apply-v6 | status | restore}
   restore    remove the static entries, let normal ARP/ND take over
 
 Env overrides:
-  PEER_A_HOST, PEER_A_IP (default: self, 10.10.1.1 — receiver)
-  PEER_B_HOST, PEER_B_IP (default: chen123@10.10.1.3, 10.10.1.3 — sender)
-  PEER_IFACE             (default: enp65s0f0np0)
+  PEER_A_HOST, PEER_A_IP (default: self, 10.10.1.1 — amd247 receiver)
+  PEER_B_HOST, PEER_B_IP (default: chen123@10.10.1.2, 10.10.1.2 — amd245 sender)
+  PEER_IFACE             (default: eno34np1 — amd-class; override to enp65s0f0np0 for d7525)
   MIDDLEBOX_MAC          (required for apply and apply-v6)
 USAGE
         exit 2

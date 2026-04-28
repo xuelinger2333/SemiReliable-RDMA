@@ -74,12 +74,19 @@ hdr "Network interfaces"
 ip -br link show | awk '$1 !~ /^(lo|docker|virbr)/ {print "  " $0}'
 
 # Auto-detect experiment link iface if not given.
-# Policy matches link_setup.sh + detect_rdma_dev.sh: prefer the Mellanox
-# PCI-stable naming ``enp<bus>s<slot>f<func>np<port>`` (the experiment-LAN
-# NIC on multi-port hosts like amd203/amd196), then fall back to any UP
-# non-control iface. This avoids reporting the public management NIC
-# (``eno*`` on CloudLab d7525/d6515 class) as the experiment link, which
-# would otherwise mis-populate downstream MTU/speed/PFC readouts.
+# Policy (matches link_setup.sh + detect_rdma_dev.sh):
+#   1. Prefer UP enp/eno iface whose IPv4 is RFC1918 (10.x / 192.168.x) —
+#      that's the experiment LAN on multi-NIC hosts (amd247/amd245/amd264
+#      have eno34np1 on 10.10.1.x as experiment LAN AND eno33np0 on
+#      128.110.x as public mgmt; amd203/amd196 had enp65s0f0np0 on
+#      10.10.1.x). The private-IP filter disambiguates without naming guesses.
+#   2. Fall back to ``enp<bus>s<slot>f<func>np<port>`` UP (legacy single-NIC
+#      d7525/c240g5).
+#   3. Fall back to any UP non-control iface.
+if [ -z "${IFACE:-}" ]; then
+    IFACE=$(ip -br addr show \
+        | awk '$2=="UP" && $1 ~ /^(enp|eno)[0-9]+/ && $3 ~ /^(10\.|192\.168\.)/ {print $1; exit}')
+fi
 if [ -z "${IFACE:-}" ]; then
     IFACE=$(ip -br link show \
         | awk '$1 ~ /^enp[0-9]+s[0-9]+f[0-9]+np[0-9]+$/ && $2=="UP" {print $1; exit}')

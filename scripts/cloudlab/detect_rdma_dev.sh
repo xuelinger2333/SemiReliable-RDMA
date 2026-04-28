@@ -31,16 +31,27 @@ fi
 #   link <dev>/<port> state ACTIVE physical_state LINK_UP netdev <iface>
 #
 # Selection policy when ``want_netdev`` is unset:
-#   1. prefer ACTIVE devices whose netdev matches the CloudLab experiment-LAN
-#      Mellanox kernel naming ``enp<bus>s<slot>f<func>np<port>`` (same filter
-#      link_setup.sh uses). This avoids picking the management-LAN port
-#      (``eno*``) on multi-port hosts like amd203/amd196 (Utah d7525/d6515
-#      class) where both the public and experiment NICs report ACTIVE.
-#   2. otherwise, fall back to the first ACTIVE row (legacy single-port path,
-#      kept so single-NIC nodes like c240g5/d7525-wisc still work).
+#   1. prefer ACTIVE devices whose netdev has an RFC1918 (10.x / 192.168.x)
+#      IPv4 — that's the experiment LAN on multi-NIC hosts. Works for both
+#      amd203/amd196 (enp65s0f0np0 @ 10.10.1.x) and amd247/amd245/amd264
+#      (eno34np1 @ 10.10.1.x).
+#   2. otherwise, prefer ``enp<bus>s<slot>f<func>np<port>`` ACTIVE (legacy
+#      single-NIC path, kept so c240g5/d7525-wisc still work without an IP).
+#   3. otherwise, fall back to the first ACTIVE row.
 # When ``want_netdev`` is set, match it exactly (no preference logic).
+
+# Build a lookup of "iface -> private?" for the IP-preference rule.
+declare -A IS_PRIVATE
+while read -r ifname state ipv4 _; do
+    [ "$state" = "UP" ] || continue
+    case "$ipv4" in
+        10.*|192.168.*) IS_PRIVATE["$ifname"]=1 ;;
+    esac
+done < <(ip -br addr show)
+
 line=$(rdma link show 2>/dev/null \
-    | awk -v want="$want_netdev" '
+    | awk -v want="$want_netdev" -v privates="${!IS_PRIVATE[*]}" '
+        BEGIN { n=split(privates, arr, " "); for (i=1; i<=n; i++) priv[arr[i]]=1 }
         function iface_of(    i, v) {
             for (i=1; i<=NF; i++) if ($i=="netdev") { v=$(i+1); return v }
             return ""
@@ -51,14 +62,20 @@ line=$(rdma link show 2>/dev/null \
                 if (iface == want) { print $0; found=1; exit }
                 next
             }
-            # No explicit want: capture first preferred (enp*s*f*np*) ASAP,
-            # and remember first ACTIVE as a legacy fallback.
-            if (iface ~ /^enp[0-9]+s[0-9]+f[0-9]+np[0-9]+$/) {
-                print $0; found=1; exit
+            # Prefer private-IP iface (experiment LAN). Otherwise prefer
+            # enp<bus>s<slot>f<func>np<port>. Otherwise remember as fallback.
+            if (iface in priv) { print $0; found=1; exit }
+            if (enp_pick == "" && iface ~ /^enp[0-9]+s[0-9]+f[0-9]+np[0-9]+$/) {
+                enp_pick = $0
             }
             if (fallback == "") fallback = $0
         }
-        END { if (!found && fallback != "") print fallback }')
+        END {
+            if (!found) {
+                if (enp_pick != "") print enp_pick
+                else if (fallback != "") print fallback
+            }
+        }')
 
 if [ -z "$line" ]; then
     echo "ERR: no ACTIVE RDMA device${want_netdev:+ on netdev $want_netdev}" >&2

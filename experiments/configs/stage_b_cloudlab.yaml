@@ -1,10 +1,19 @@
 # Stage B · CloudLab real-NIC · ResNet-18 / CIFAR-10 / 2 nodes × 1 worker
 #
+# Cluster history (newest last):
+#   - 2026-04-21  d7525 Wisc        — CX-6  100 GbE, dev=mlx5_0, single-port
+#   - 2026-04-23  c240g5 Wisc       — CX-6 Lx 25 GbE, dev=mlx5_2/mlx5_1 (asymm)
+#   - 2026-04-25  amd203/amd196 Utah — CX-5 25 GbE, dev=mlx5_2 on enp65s0f0np0
+#   - 2026-04-28  amd247/amd245 Utah — CX-5 25 GbE, dev=mlx5_1 on eno34np1
+#                 (amd-class nodes; ConnectX-5 Ex 100 GbE QSFP28 ports
+#                 enp65s0f0np0 are present but not wired by the profile —
+#                 confirmed via ethtool "no partner detected" 2026-04-28.)
+#
 # Derived from stage_a_baseline.yaml.  Diffs vs Stage A:
-#   - dev_name:   per-node detection — c240g5: mlx5_2 on node0 / mlx5_1 on node1
-#                 (asymmetric NIC slot; auto-detect via:
-#                  rdma link show | awk '$3=="state" && $4=="ACTIVE" {print $2}'
-#                  | cut -d/ -f1).  Earlier d7525 nodes used mlx5_0.
+#   - dev_name:   per-node detection.  Always override per-host using
+#                 `bash scripts/cloudlab/detect_rdma_dev.sh` — the helper
+#                 picks the ACTIVE Mellanox iface on the experiment LAN
+#                 (10.10.1.x) regardless of naming (eno34np1 vs enp65s0f0np0).
 #   - dist.master_addr:       node1 experiment-LAN IP (set per-run)
 #   - dist.world_size:  2     but one process per node (not same-host MP)
 #   - chunk_bytes:      16384 — re-sweep on c240g5 CX-6 Lx 25 GbE confirmed
@@ -66,11 +75,20 @@ dist:
 
 # --- SemiRDMA transport (real NIC) ------------------------------------
 transport_cfg:
-  dev_name: mlx5_2              # c240g5 node0 default; override per-host (see header)
+  # dev_name: ALWAYS override per-host with the output of
+  # `bash scripts/cloudlab/detect_rdma_dev.sh`. Defaults below are starting
+  # points only:
+  #   mlx5_1 — amd247/amd245/amd264 (eno34np1 is the experiment LAN)
+  #   mlx5_2 — c240g5 / amd203/amd196 (enp65s0f0np0 is the experiment LAN)
+  #   mlx5_0 — d7525 single-port
+  dev_name: mlx5_1
   gid_index: 1                  # RoCEv2 GID, verified via day0_check.sh
   buffer_bytes: 268435456       # 256 MiB per slot × n_slots=2 → 512 MiB MR
   # 2026-04-25: re-tuned on CX-5 amd203/amd196 after fixing path_mtu=1024
   # hardcode (commit 094e0cc) and discovering bursty-post loss.
+  # 2026-04-28: amd247/amd245 (CX-5 same fw 16.28.4512, same 25 GbE,
+  # same path_mtu=4096) confirmed identical baselines (ib_write_bw 24.39 Gbps,
+  # ib_write_lat 8B p99 2.19 µs) — values below carry over without re-sweep.
   #
   # chunk_bytes=4096 == path_mtu — exactly 1 IB packet per chunk, so no
   # multi-packet PSN-gap can kill a chunk in UC.  Pre-fix (chunk=16K /
