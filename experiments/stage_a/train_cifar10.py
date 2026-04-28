@@ -182,11 +182,12 @@ def _install_hook(ddp_model: DDP, cfg: DictConfig, rank: int) -> object:
         # per-bucket routing between RC (tight budget) and SemiRDMA UC.
         # See docs/PLAN.md and the layer_aware module docstring.
         #
-        # bucket_cap_mb is left to caller via cfg.bucket_cap_mb (forced 512 by
-        # _train below). With a single bucket, "per-bucket" reduces to one
-        # global routing decision per step — fine for first-pass validation;
-        # finer per-layer granularity needs imm_data to encode bucket_id (out
-        # of scope for this PR).
+        # bucket_cap_mb is now a YAML knob (PR-C, 2026-04-28: imm_data
+        # encodes (bucket_id_mod256, chunk_id) so concurrent buckets no
+        # longer alias).  Default 512 keeps PR-B-style single-bucket
+        # behavior for backwards-compat; set bucket_cap_mb=1 in the YAML
+        # to get ~50 buckets/step on ResNet-18 and let the dispatcher
+        # actually exercise per-layer p_L routing.
         from semirdma import TransportConfig
         from semirdma.layer_aware import (
             LayerAwareHookState,
@@ -258,15 +259,23 @@ def _train(cfg: DictConfig, rank: int, world_size: int) -> None:
 
     loader = _build_loaders(cfg, rank, world_size)
     model = _build_model(cfg)
-    # Force a single DDP bucket per step.  SemiRDMA uses Write-with-Imm's
-    # imm_data (just the chunk index within a ChunkSet) as the only chunk
-    # identifier.  Two concurrent buckets would share imm=0..min(N0,N1),
-    # causing bucket 1's CQEs to be consumed by bucket 0's await (and
-    # vice-versa) and bucket 1 then times out to all-zero gradient.
-    # ResNet-18 fp32 is ~47 MiB, so 512 MB cap comfortably fits the whole
-    # model in one bucket.  Gloo sees the same setting so A1 comparison is
-    # apples-to-apples.
-    ddp_model = DDP(model, bucket_cap_mb=512)
+    # DDP bucket cap.
+    #
+    # Pre-PR-C: forced 512 MB so SemiRDMA's per-step cs got a single bucket.
+    # Reason was that imm_data only carried the chunk_id (24 bits), so
+    # concurrent buckets aliased on imm=0..min(N0,N1) and the receiver's
+    # await for bucket 0 would consume bucket 1's CQEs.
+    #
+    # PR-C (2026-04-28): imm_data now encodes both bucket_id (high 8 bits)
+    # and chunk_id (low 24 bits), so concurrent buckets are routed by the
+    # receiver's RatioController.  bucket_cap_mb is now a YAML knob:
+    #
+    #   bucket_cap_mb: 512  → legacy single-bucket-per-step (paper PR-A/B)
+    #   bucket_cap_mb: 1    → ~50 buckets/step on ResNet-18 (PR-C/D)
+    #
+    # Default to 512 in the YAML so existing experiments are bit-equivalent.
+    bucket_cap_mb = int(cfg.get("bucket_cap_mb", 512))
+    ddp_model = DDP(model, bucket_cap_mb=bucket_cap_mb)
     _hook_state = _install_hook(ddp_model, cfg, rank)  # keep-alive
 
     opt = torch.optim.SGD(

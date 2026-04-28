@@ -65,6 +65,18 @@ optim:
   momentum: 0.9
   weight_decay: 5.0e-4
 
+# --- DDP bucket sizing -------------------------------------------------
+# PR-C (2026-04-28): bucket_cap_mb controls how DDP packs gradients into
+# per-step buckets.  The receiver decodes ``imm_data`` into
+# ``(bucket_id_mod256, chunk_id)`` so multiple concurrent buckets in the
+# same step no longer alias on the chunk_id range.  Choose:
+#   512 — legacy single-bucket-per-step (used by Phase-2/3/4 PR-B baselines).
+#         All ~12 K chunks of ResNet-18 fp32 fit in one bucket.  Bit-
+#         equivalent to pre-PR-C wire encoding (high 8 bits zero).
+#   1   — fine-grained ~50 buckets/step on ResNet-18.  Required for PR-C/D
+#         heterogeneous-p_L (BN/conv/fc routed differently per layer).
+bucket_cap_mb: 512
+
 # --- distributed -------------------------------------------------------
 dist:
   world_size: 2

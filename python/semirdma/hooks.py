@@ -206,11 +206,23 @@ def _run_semirdma_bucket(
             )
 
         # ------------------ send local, receive remote ----------------
+        # PR-C (2026-04-28): bucket_id is the per-step monotonic counter
+        # mod 256. Sender and receiver thread it through so concurrent
+        # buckets' CQEs (e.g. when bucket_cap_mb=1 produces ~50
+        # buckets/step) are routed to the right ChunkSet on the receiver
+        # by RatioController's per-bucket pending queue. With
+        # bucket_cap_mb=512 (legacy single-bucket-per-step), bucket_id
+        # rolls over every 256 steps and behavior is wire-identical to
+        # pre-PR-C since chunk_id stays in the low 24 bits.
         cs_send = state.tx.post_gradient(
-            byte_view, base_offset=base, remote_base_offset=base
+            byte_view, base_offset=base, remote_base_offset=base,
+            bucket_id=bucket_id,
         )
         cs_recv = ChunkSet(base, nbytes, state.cfg.chunk_bytes)
-        stats = state.rx.await_gradient(cs_recv, ratio=ratio, timeout_ms=timeout_ms)
+        stats = state.rx.await_gradient(
+            cs_recv, ratio=ratio, timeout_ms=timeout_ms,
+            bucket_id=bucket_id,
+        )
 
         # Peer's bytes are now in state.rx.buffer_view()[base:base+nbytes].
         # Build a torch view that shares memory with the MR so averaging is

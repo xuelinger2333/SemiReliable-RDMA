@@ -255,13 +255,15 @@ PYBIND11_MODULE(_semirdma_ext, m) {
         .def(py::init<UCQPEngine&>(), py::arg("engine"), py::keep_alive<1, 2>())
         .def("wait_for_ratio",
              [](RatioController& self,
-                ChunkSet& cs, double ratio, int timeout_ms)
+                ChunkSet& cs, double ratio, int timeout_ms,
+                uint8_t expected_bucket_id)
              {
                  WaitStats stats;
                  bool ok;
                  {
                      py::gil_scoped_release release;
-                     ok = self.wait_for_ratio(cs, ratio, timeout_ms, &stats);
+                     ok = self.wait_for_ratio(cs, ratio, timeout_ms,
+                                              expected_bucket_id, &stats);
                  }
                  py::dict s;
                  s["ok"]         = ok;
@@ -271,7 +273,16 @@ PYBIND11_MODULE(_semirdma_ext, m) {
                  s["timed_out"]  = stats.timed_out;
                  return s;
              },
-             py::arg("cs"), py::arg("ratio"), py::arg("timeout_ms"));
+             py::arg("cs"), py::arg("ratio"), py::arg("timeout_ms"),
+             py::arg("expected_bucket_id") = static_cast<uint8_t>(0))
+        .def("drain_pending", &RatioController::drain_pending,
+             py::arg("cs"), py::arg("expected_bucket_id"))
+        .def("stash_foreign", &RatioController::stash_foreign,
+             py::arg("bucket_id"), py::arg("chunk_id"))
+        .def("pending_size", &RatioController::pending_size)
+        .def("pending_size_for", &RatioController::pending_size_for,
+             py::arg("bucket_id"))
+        .def("clear_pending", &RatioController::clear_pending);
 
     // ---- Free function: apply_ghost_mask --------------------------------
     m.def("apply_ghost_mask",

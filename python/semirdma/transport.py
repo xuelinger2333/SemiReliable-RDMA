@@ -145,6 +145,7 @@ class SemiRDMATransport:
         *,
         base_offset: int = 0,
         remote_base_offset: int = 0,
+        bucket_id: int = 0,
     ) -> ChunkSet:
         """Copy ``data`` into the local MR and Write it to the peer in chunks.
 
@@ -156,6 +157,11 @@ class SemiRDMATransport:
             remote_base_offset: byte offset in the peer's MR.  Kept distinct
                 from base_offset so Stage B can map multiple layers into one
                 MR.
+            bucket_id: per-bucket identifier (PR-C, 2026-04-28). Encoded
+                mod 256 into the high 8 bits of imm_data so the receiver
+                can route concurrent buckets' CQEs to the right ChunkSet.
+                Default 0 keeps wire encoding bit-identical to pre-PR-C
+                (imm_data == chunk_id) for legacy single-bucket callers.
 
         Returns:
             ``ChunkSet`` describing the post; pass it to ``await_gradient`` on
@@ -210,6 +216,11 @@ class SemiRDMATransport:
         capacity = max(1, self._cfg.sq_depth - 1)
         inflight = 0
         n_posted = 0
+        # PR-C imm_data encoding: high 8 bits = bucket_id mod 256,
+        # low 24 bits = chunk_id.  Backwards compat: bucket_id=0 yields
+        # imm_data == chunk_id (high bits zero).
+        bid8 = bucket_id & 0xFF
+        bid_shifted = bid8 << 24
         for i in range(n_chunks):
             chunk = cs.chunk(i)
             # Software loss path (cfg.loss_rate > 0) — used by Phase-2
@@ -222,6 +233,7 @@ class SemiRDMATransport:
                 inflight = max(0, inflight - len(cqes))
             self._wr_seq += 1
             remote_off = remote_base_offset + (chunk["local_offset"] - base_offset)
+            imm = bid_shifted | (chunk["chunk_id"] & 0xFFFFFF)
             self._engine.post_write(
                 wr_id=self._wr_seq,
                 local_offset=chunk["local_offset"],
@@ -229,7 +241,7 @@ class SemiRDMATransport:
                 length=chunk["length"],
                 remote=self._remote_mr,
                 with_imm=True,
-                imm_data=chunk["chunk_id"],
+                imm_data=imm,
             )
             inflight += 1
             n_posted += 1
@@ -271,6 +283,7 @@ class SemiRDMATransport:
         *,
         ratio: Optional[float] = None,
         timeout_ms: Optional[int] = None,
+        bucket_id: int = 0,
     ) -> dict:
         """Wait for at least ``ratio`` of ``cs``'s chunks to arrive, then
         apply the ghost mask to the receiver-side buffer.
@@ -282,6 +295,12 @@ class SemiRDMATransport:
                 by the RatioController as RECV_RDMA_WITH_IMM CQEs arrive.
             ratio: override cfg.ratio for this single call.
             timeout_ms: override cfg.timeout_ms for this single call.
+            bucket_id: per-bucket identifier matching the sender's
+                ``post_gradient(bucket_id=...)``. PR-C (2026-04-28): the
+                receiver decodes ``imm_data`` into ``(bucket_id_mod256,
+                chunk_id)`` and routes foreign-bucket CQEs to a per-bucket
+                pending queue. Default 0 matches legacy single-bucket
+                behavior.
 
         Returns:
             stats dict from ``RatioController.wait_for_ratio`` with one extra
@@ -290,6 +309,7 @@ class SemiRDMATransport:
         """
         if not self._brought_up:
             raise RuntimeError("await_gradient called before bring_up")
+        bid8 = bucket_id & 0xFF
 
         # Receive target is dynamic: the sender skipped ``loss_rate`` of the
         # chunks, so we should wait for ``1 - loss_rate - jitter_slack`` of
@@ -307,7 +327,7 @@ class SemiRDMATransport:
         else:
             r = ratio
         t = self._cfg.timeout_ms if timeout_ms is None else timeout_ms
-        stats = self._ratio.wait_for_ratio(cs, r, t)
+        stats = self._ratio.wait_for_ratio(cs, r, t, expected_bucket_id=bid8)
         stats["chunks_total"] = cs.size()
 
         # CRITICAL ORDERING FIX (2026-04-25, DEBUG_LOG.md hypothesis L):
@@ -333,6 +353,7 @@ class SemiRDMATransport:
         leftover_recv_ok = 0
         leftover_recv_err = 0
         leftover_other = 0
+        leftover_foreign = 0
         leftover_imm_unique = set()
         for _ in range(64):  # up to 64 batches × 16384 = 1M CQEs (cap)
             cqes = self._engine.poll_cq(16384, 0)
@@ -343,9 +364,20 @@ class SemiRDMATransport:
                 st = c.get("status")
                 if op == "RECV_RDMA_WITH_IMM" and st == 0:
                     imm = int(c.get("imm_data", 0))
-                    cs.mark_completed(imm)             # ← THE FIX
-                    leftover_recv_ok += 1
-                    leftover_imm_unique.add(imm)
+                    # PR-C: decode imm into (bucket_id, chunk_id) and only
+                    # mark CQEs whose bucket_id matches this await call.
+                    # Foreign-bucket CQEs are stashed in the controller's
+                    # pending queue so a later await_gradient(bucket_id=K')
+                    # can drain them.
+                    cqe_bid = (imm >> 24) & 0xFF
+                    cid = imm & 0xFFFFFF
+                    if cqe_bid == bid8:
+                        cs.mark_completed(cid)
+                        leftover_recv_ok += 1
+                        leftover_imm_unique.add(cid)
+                    else:
+                        self._ratio.stash_foreign(cqe_bid, cid)
+                        leftover_foreign += 1
                 elif op in ("RECV", "RECV_RDMA_WITH_IMM"):
                     leftover_recv_err += 1
                 else:
@@ -372,14 +404,17 @@ class SemiRDMATransport:
         apply_ghost_mask(buf, cs)
 
         logger.info(
-            "await_gradient DIAG: completed=%d/%d outstanding_recv_pre=%d "
+            "await_gradient DIAG: bucket_id=%d completed=%d/%d "
+            "outstanding_recv_pre=%d "
             "ok=%s timed_out=%s latency_ms=%.2f "
-            "LEFTOVER_after_wait: recv_ok=%d recv_err=%d other=%d unique_imm=%d",
-            n_completed, n_expected, out_recv_pre,
+            "LEFTOVER_after_wait: recv_ok=%d recv_err=%d other=%d "
+            "foreign_stashed=%d unique_imm=%d pending_total=%d",
+            bid8, n_completed, n_expected, out_recv_pre,
             stats.get("ok"), stats.get("timed_out"),
             stats.get("latency_ms", 0.0),
             leftover_recv_ok, leftover_recv_err, leftover_other,
-            len(leftover_imm_unique),
+            leftover_foreign, len(leftover_imm_unique),
+            self._ratio.pending_size(),
         )
 
         # DIAG3: positional histogram of MISSING chunk_ids — answers
