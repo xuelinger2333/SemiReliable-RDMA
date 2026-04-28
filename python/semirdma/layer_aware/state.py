@@ -17,6 +17,20 @@ import logging
 from dataclasses import dataclass, field
 from typing import Optional
 
+# How often to all_reduce ``epsilon_ema`` across ranks. Pre-2026-04-28 the
+# dispatcher sync'd per bucket; on the amd247/amd245/amd264 cluster this
+# turned out to be the dominant cause of LA-through-middlebox 50% delivery
+# regression (DEBUG_LOG.md 2026-04-28: gloo TCP via ARP-spoofed
+# experiment LAN routes through amd264's kernel ip_forward, adding
+# 50-150 ms per bucket → both ranks unblock with sigma jitter that
+# consumes most of the 200 ms `t_max` window).
+#
+# Both ranks see the same wire so each rank's local ``epsilon_ema``
+# converges to nearly the same value naturally; explicit sync every
+# 50 buckets keeps routing decisions aligned without paying gloo RTT
+# per bucket. 50 ≈ 2.5× the calibrator's EMA window (alpha=0.05).
+DEFAULT_EPS_SYNC_PERIOD = 50
+
 import torch
 
 from semirdma.baselines.rc_rdma_hook import RCRDMAHookState
@@ -49,6 +63,17 @@ class LayerAwareHookState:
     n_routed_rc: int = 0
     n_routed_semi: int = 0
     n_t_max_trips: int = 0
+
+    # Amortized cross-rank ``eps_ema`` sync (PR-C debug 2026-04-28).
+    # ``eps_sync_period`` = N → call gloo all_reduce on ``epsilon_ema``
+    # once every N buckets and cache the result for the in-between
+    # buckets.  ``cached_eps`` holds the last sync output;
+    # ``last_eps_sync_at`` is the ``n_buckets`` value at the last sync,
+    # or ``None`` before the first sync (forces a sync on bucket #1).
+    eps_sync_period: int = DEFAULT_EPS_SYNC_PERIOD
+    cached_eps: float = 0.0
+    last_eps_sync_at: Optional[int] = None
+    n_eps_syncs: int = 0   # diagnostic counter
 
     @classmethod
     def for_rank_layer_aware(

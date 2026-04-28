@@ -48,6 +48,7 @@ class WireCalibrator:
     bootstrap_buckets: int
     t_max_jitter_k: int
     t_max_min_ms: int
+    t_max_max_ms: int   # Ceiling on T_max; resolved at construction.
 
     # Fallback values used during bootstrap (mirror cfg.ratio / cfg.timeout_ms).
     fallback_ratio: float
@@ -122,7 +123,13 @@ class WireCalibrator:
         bw = max(self.bandwidth_bps, _MIN_BANDWIDTH_BPS)
         t_min_ms = (n_chunks * chunk_bytes) / bw * 1e3
         t_max_ms = t_min_ms + self.t_max_jitter_k * self.sigma_jitter_ms
-        return max(self.t_max_min_ms, int(math.ceil(t_max_ms)))
+        # Clamp to [t_max_min_ms, t_max_max_ms]. The ceiling prevents the
+        # bimodal-latency runaway documented in DEBUG_LOG.md 2026-04-28
+        # (sigma estimator amplifies tail timeouts → T_max balloons →
+        # more timeouts → more sigma → multi-second per-bucket awaits).
+        t_max_int = int(math.ceil(t_max_ms))
+        t_max_int = min(t_max_int, self.t_max_max_ms)
+        return max(self.t_max_min_ms, t_max_int)
 
     def ratio_for_p(self, p_bucket: float) -> float:
         """Return the wait_for_ratio threshold for a given bucket budget.
@@ -153,12 +160,18 @@ class WireCalibrator:
     @classmethod
     def from_config(cls, cfg) -> "WireCalibrator":
         """Construct from a TransportConfig instance."""
+        # Resolve t_max_max_ms: 0 = "auto" = 2 * timeout_ms.
+        t_max_max = (
+            cfg.t_max_max_ms if cfg.t_max_max_ms > 0
+            else 2 * cfg.timeout_ms
+        )
         return cls(
             alpha=cfg.calibration_alpha,
             window_size=cfg.calibration_window,
             bootstrap_buckets=cfg.calibration_bootstrap_buckets,
             t_max_jitter_k=cfg.t_max_jitter_k,
             t_max_min_ms=cfg.t_max_min_ms,
+            t_max_max_ms=t_max_max,
             fallback_ratio=cfg.ratio,
             fallback_timeout_ms=cfg.timeout_ms,
         )

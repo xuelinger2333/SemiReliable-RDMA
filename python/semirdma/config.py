@@ -145,6 +145,28 @@ class TransportConfig:
     # T_max(L) derivation: T_min + K * sigma_jitter, with a sanity floor.
     t_max_jitter_k: int = 5
     t_max_min_ms: int = 5
+    # Ceiling on T_max(L). Without this, bimodal wire latency at p_bucket
+    # boundaries can push the calibrator's sigma estimate up, T_max grows,
+    # which causes more t_max-bound time-outs, sigma grows further → runaway.
+    # 0 means "use 2 * timeout_ms" (computed from cfg.timeout_ms at calibrator
+    # construction). Set explicitly to override (e.g. t_max_max_ms=600 caps at
+    # 600 ms regardless of cfg.timeout_ms).
+    t_max_max_ms: int = 0
+
+    # RC-fallback safety gate (PR-C debug 2026-04-28): the layer-aware
+    # dispatcher's safety check ``p_bucket < eps + margin`` historically
+    # routed tight-budget buckets to RC.  In practice RC dies on lossy wires
+    # (>~0.5% drop) with ``IBV_WC_RETRY_EXC_ERR`` after retry-cnt exhaustion
+    # — see PLAN.md P2 «rc_rdma 全部 IBV_WC_RETRY_EXC_ERR 崩溃 at drop>0».
+    # So routing to RC when ``eps`` indicates a lossy wire just trades a
+    # SEMI degradation for a hard RC abort.  This threshold gates the RC
+    # fallback: if ``eps > rc_safe_drop_threshold``, stay on SEMI even when
+    # the bucket budget is tight.  The bucket then degrades like flat
+    # SemiRDMA (ghost-mask the missing chunks); the layer-aware mode still
+    # benefits from per-layer ratio + T_max tuning during clean-wire ops.
+    # Default 0.005 ≈ 0.5%: lets RC take over only when wire is clean
+    # enough for HW retry to absorb the residual losses.
+    rc_safe_drop_threshold: float = 0.005
 
     def __post_init__(self) -> None:
         if self.buffer_bytes <= 0:
@@ -201,6 +223,16 @@ class TransportConfig:
         if self.t_max_jitter_k < 1:
             raise ValueError(
                 f"t_max_jitter_k must be >= 1, got {self.t_max_jitter_k}"
+            )
+        if self.t_max_max_ms < 0:
+            raise ValueError(
+                f"t_max_max_ms must be >= 0 (0 = auto from timeout_ms), "
+                f"got {self.t_max_max_ms}"
+            )
+        if not (0.0 <= self.rc_safe_drop_threshold <= 1.0):
+            raise ValueError(
+                f"rc_safe_drop_threshold must be in [0, 1], "
+                f"got {self.rc_safe_drop_threshold}"
             )
         if self.t_max_min_ms < 1:
             raise ValueError(

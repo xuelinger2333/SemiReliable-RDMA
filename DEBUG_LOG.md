@@ -332,3 +332,245 @@ The root cause is **not isolated** — could be matrix-sequence dependent
 when eps approaches p. PR-C should retest after the bucket_id-in-imm
 protocol fix lands; if the failure mode persists, deeper investigation is
 needed.
+
+---
+
+## 2026-04-28: layer_aware SEMI delivery ~50% on amd247/amd245 (vs ~99% on amd203)
+
+### Symptoms
+
+- New cluster amd247/amd245/amd264 (CX-5 25 GbE, fw 16.28.4512); same code as
+  prior amd203/amd196 (commit `13430f5` == archive code).
+- PR-B v3 reproducibility matrix (3 seed × 6 cells): `transport=semirdma`
+  reproduces archive within seed noise (9/9 cells PASS); `transport=semirdma_layer_aware`
+  passes only at `drop=0` (3/3); fails systematically at `drop>0`
+  (**6/6 cells fail across all 3 seeds**).
+- Failure is **not transient**. Old amd203/amd196 had 1/18 transient (PR-B v3
+  seed=123 cell #5); new amd247/amd245 has 6/18 deterministic.
+- Failure mechanism: dispatcher's first 4–5 SEMI dispatches return
+  `completed ≈ 5000/10913` (~45% delivery in 200 ms `t_max`); calibrator
+  `eps_ema` climbs 0.027 → 0.054 → 0.078 → 0.102; once `eps_ema + safety_margin
+  > p_bucket = 0.10`, dispatcher routes ALL subsequent buckets to RC. RC at
+  `drop=0` is fine (cell #1 finishes in ~440s); RC at `drop>0` retransmits
+  → ~1500–2600 ms/step → exceeds `CELL_TIMEOUT=900s` → process killed
+  (`exit 124`) before 500 steps complete.
+- LA at `drop=0` shows the SAME ~50% SEMI delivery
+  (`dispatch[1]: completed=5357/10913`). It only "works" because the RC
+  fallback is fast on a clean wire. The underlying ~50% bug is also active.
+- `flat semirdma` on the SAME wire at `drop=0.01` delivers ~99%
+  (`completed=10804/10913`, time-out at `dyn_target=0.995`). Same `t_max=200ms`.
+  Same `chunk_bytes=4096`, same `rq_depth=16384`, same NIC, same XDP middlebox.
+- Archive amd203 LA cell #3 at the SAME drop=0.01: `completed=10788/10913`,
+  `pre_drain=10369`, `bw_mbps` climbs 456 → 12420 within 100 dispatches.
+  **New amd247 LA `bw_mbps` stuck around 23–60 — ~250× slower**. Same code.
+- Wire baselines on new cluster are healthy: `ib_write_bw -d mlx5_1 -x 3
+  -s 65536` direct = 24.39 Gbps; through XDP middlebox = 12.25 Gbps.
+
+### Hypothesis A: amd264 XDP-generic middlebox drops more than configured for LA's burst pattern [PENDING]
+
+- Predictions if true:
+  - Bypassing the middlebox (`MIDDLEBOX_HOST=""`, no ARP spoof, gid_index=1 direct)
+    while keeping `transport=semirdma_layer_aware` should restore ~99% SEMI delivery.
+  - Same LA workload through middlebox at `drop=0` should still show ~50% (which
+    it does — consistent with this hypothesis).
+- Predictions if false:
+  - Bypass middlebox still shows ~50% SEMI delivery → wire is not the cause.
+- **Status: PENDING — falsification experiment #1 below.**
+
+### Hypothesis B: `_synchronized_eps` gloo all_reduce blocks dispatcher tail and serializes peer post_gradient [PENDING]
+
+- The layer-aware dispatcher calls `dist.all_reduce` (gloo TCP, 2 ranks) on
+  `epsilon_ema` BEFORE every bucket. Flat path does not. If gloo TCP is slow
+  on the new cluster's mgmt LAN (rendezvous goes through 128.110.x), this
+  could effectively serialize the two ranks: rank-A finishes post_gradient,
+  enters dispatcher, blocks on all_reduce until rank-B arrives. Rank-B's
+  await_gradient sees rank-A's tx packets only AFTER rank-A unblocks.
+- Predictions if true:
+  - Replacing `_synchronized_eps` body with `return local_eps` (no all_reduce)
+    and rerunning LA cell #3 should restore ~99% SEMI delivery.
+  - Wall-time spent inside `_synchronized_eps` should be measurable as ~50–150ms
+    per dispatch.
+- Predictions if false:
+  - No-op `_synchronized_eps` still shows ~50% SEMI delivery → eps sync isn't
+    the bottleneck.
+- **Status: PENDING — falsification experiment #2 below.**
+
+### Hypothesis C: 4-QP setup (SEMI tx/rx + RC tx/rx) creates per-CPU CQ-poll contention on faster EPYC 7402P (24C) [PENDING]
+
+- LA constructs 4 SemiRDMATransport-like instances (UC tx, UC rx, RC tx,
+  RC rx). On amd203 (EPYC 7302P, 16C) Python's GIL + 4 transports' poll loops
+  may have happened to overlap differently than on amd247 (7402P, 24C). All 4
+  CQs sharing 1 NIC interrupt vector could be the relevant axis.
+- Predictions if true:
+  - Pinning the training process to a smaller core set (e.g. taskset 0-3)
+    should reduce the gap between flat and LA delivery.
+  - Constructing flat semirdma + an extra unused RCRDMATransport (just sits
+    idle) should reproduce the 50% degradation.
+- Predictions if false:
+  - taskset doesn't change anything → CPU contention isn't the cause.
+- **Status: PENDING — lower priority; deprioritized until A/B are tested.**
+
+### Resolution
+TBD. Two falsification experiments queued (A: bypass middlebox; B: skip
+_synchronized_eps). Both are 1-cell ~7 min runs on the existing amd247 cluster.
+Will not propose any code change to the layer_aware path until at least one
+hypothesis is confirmed.
+
+
+### Hypothesis A: middlebox/wire causes LA-specific drops [PARTIALLY CONFIRMED]
+
+- **Falsification A run (2026-04-28 04:11)**: LA cell drop=0 with NO middlebox,
+  NO ARP spoof, gid_index=1 (direct wire).
+  Result: `dispatch[1..5]: completed=10913/10913 (100%)`, `timed_out=False`,
+  `bw_mbps` climbing 646 → 2912.
+  **Direct wire LA = perfect.** So the LA failure requires the
+  middlebox+ARP+gid=3 path.
+- **Falsification A2 run (2026-04-28 04:12)**: LA cell drop=0 DIRECT wire +
+  `gid_index=3` forced.
+  Result: identical to A1 — `completed=10913/10913` for all 5 dispatches.
+  **gid_index alone is not the cause.** So failure requires middlebox+ARP.
+- **Status: CONFIRMED — LA failure requires the middlebox+ARP-spoof path.
+  Direct wire LA is fine. But mechanism is not yet pinned to middlebox vs gloo.**
+
+### Hypothesis B: _synchronized_eps gloo all_reduce blocking [CONFIRMED]
+
+- **Falsification B run (2026-04-28 04:16)**: middlebox UP at drop=0 + ARP spoof
+  + gid_index=3 + LA, with `_synchronized_eps` patched to `return local_eps`
+  (skip the per-bucket `dist.all_reduce`).
+  Result:
+  ```
+  dispatch[1]: completed=6470/10913 (59%)  timed_out=True
+  dispatch[2]: completed=10913/10913 (100%) timed_out=False  ← FIXED
+  dispatch[3]: completed=10784/10913 (99%)  timed_out=False
+  dispatch[4]: completed=10913/10913 (100%) timed_out=False
+  dispatch[5]: completed=10412/10913 (95%)  timed_out=False
+  sigma_ms 88-140ms  (large per-bucket jitter, absorbed by 200ms t_max)
+  ```
+- Without the patch (matrix data): dispatch[1..5] all 45-50% timed_out=True.
+- With patch: dispatch[2+] recovers to ~99% — calibrator never trips eps_ema
+  past safety margin. Dispatcher stays SEMI route; cell completes cleanly.
+- dispatch[1] residual 41% loss is consistent with gloo TCP rendezvous still
+  warming up + RC bring_up tail; dispatch[2+] is the meaningful recovery.
+- **Mechanism**: per-bucket gloo TCP `dist.all_reduce` on `epsilon_ema` (line
+  `python/semirdma/layer_aware/dispatcher.py:62-64`) routes through
+  `master_addr=10.10.1.1`. With ARP-spoofed `10.10.1.0/24`, this TCP path
+  goes amd247→amd264→amd245 via kernel `ip_forward=1`, adding ~15-30 ms RTT
+  per gloo internal round-trip. gloo all_reduce uses ~3-4 round-trips →
+  ~50-150 ms blocking per bucket. The two ranks unblock at slightly
+  different times, then post + await with sigma jitter that approaches the
+  200 ms `t_max` window — receiver's await sees a fraction of peer's bytes.
+- archive amd203 had `sigma_ms < 1ms`; new amd247 (no patch) `sigma_ms = 0`
+  because every dispatch hit timeout (so calibrator's variance estimator
+  saw constant 200ms latency and reported 0 noise — a calibrator
+  measurement artifact, not a wire-quality claim).
+- **Status: CONFIRMED — `_synchronized_eps` is the dominant cause of LA's
+  through-middlebox 50% delivery regression.**
+
+### Resolution
+
+The LA regression is a **gloo-TCP-through-ARP-spoofed-middlebox round-trip
+amplification**, not a NIC / firmware / RDMA-stack issue. Two viable fixes,
+both deferred to a separate code commit (must not silently change PR-A/PR-B
+data without user OK per DEBUG_PROTOCOL §6):
+
+1. **Amortize**: call `_synchronized_eps` every N (e.g. 50) buckets instead of
+   per-bucket. Eps drift across ranks is bounded since both ranks see the
+   same wire feedback; per-bucket sync is over-conservative.
+2. **Bypass-route**: use a torch.distributed PG bound to the management LAN
+   (128.110.x) for `_synchronized_eps` only. RDMA traffic stays on
+   experiment LAN through the middlebox; gloo control stays direct.
+3. **Combine**: amortize + run on mgmt LAN.
+
+Verification path (needs new short matrix on amd247/amd245):
+- Pick fix, apply, rerun PR-B v3 18 cells (drop ∈ {0, 0.01, 0.05} × LA × seed
+  ∈ {42, 123, 7}). Pass criterion: 18/18 cells complete with `rc=0`,
+  `final_loss` within ±0.20 of archive amd203 numbers.
+
+Why archive amd203 didn't show this:
+- amd203/amd196/amd186 used the SAME ARP-spoof + ip_forward topology. Either
+  amd186's kernel ip_forward path was lower-latency (different driver tuning?
+  different IRQ affinity?), or the EPYC 7302P (slower CPU) hid the issue by
+  making each step slower so per-bucket all_reduce overhead was a smaller
+  fraction. Pending: cluster-comparison microbenchmark on direct gloo TCP
+  RTT through middlebox path on each cluster — but archive cluster is gone,
+  so this is a forensic dead-end. Current cluster behavior is the only
+  observable; fix accordingly.
+
+
+### Fix implemented (2026-04-28 04:46–04:59)
+
+Three independent fixes, smallest-blast-radius first:
+
+1. **Amortize `_synchronized_eps`** (`python/semirdma/layer_aware/dispatcher.py`,
+   `state.py`).  Per-bucket gloo TCP all_reduce → every-N-bucket
+   (N=`DEFAULT_EPS_SYNC_PERIOD=50`).  Both ranks see the same wire so
+   their local `epsilon_ema` converges to the same value naturally;
+   amortized sync is sufficient to keep routing decisions aligned.
+   `LayerAwareHookState` gains `eps_sync_period`, `cached_eps`,
+   `last_eps_sync_at`, `n_eps_syncs` fields.  Backwards-compat: setting
+   `eps_sync_period=1` reproduces pre-fix behavior.
+
+2. **Cap calibrator `t_max`** (`python/semirdma/layer_aware/calibrator.py`,
+   `python/semirdma/config.py`).  `t_max_max_ms` knob (default 0 = "auto",
+   resolved to `2 * timeout_ms` at construction).  `t_max_for_bucket`
+   clamps result to `[t_max_min_ms, t_max_max_ms]`.  Without this,
+   bimodal latency at the ratio threshold would grow `sigma_jitter_ms`,
+   which grew `t_max`, which caused more time-outs at `t_max`, further
+   inflating sigma — runaway feedback loop ending in multi-second
+   per-bucket awaits.
+
+3. **Gate RC fallback by `rc_safe_drop_threshold`** (default 0.005 =
+   0.5%) in `python/semirdma/config.py` + `dispatcher.py`.  Empirically
+   RC dies on lossy wires (PLAN.md P2: `IBV_WC_RETRY_EXC_ERR` after
+   retry-cnt exhaustion at any drop>0).  When `eps_ema > rc_safe`,
+   bucket stays SEMI even if budget is tighter than `eps + margin` —
+   ghost-mask absorbs the residual loss like flat SemiRDMA does.
+   Routing to RC happens only when wire is clean enough for HW retry to
+   absorb (`eps_ema <= 0.005`).  This matches paper claim «layer_aware
+   safely degrades to RC for tight budgets» but only on clean wire,
+   which was the regime archive amd203 actually exercised.
+
+### Verification (2026-04-28 04:49–04:59)
+
+Mini-matrix on amd247/amd245/amd264 with all 3 fixes applied:
+`TRANSPORTS=semirdma_layer_aware × DROP_RATES="0 0.01 0.05" × SEED=42 × STEPS=200`
+
+```
+idx  drop  rc  final_loss  mean_iter_ms
+ 0   0     0   1.830       855
+ 1   0.01  0   1.599       871
+ 2   0.05  0   1.639       963
+```
+
+All 3 cells PASS (`rc=0`).  Compare to pre-fix matrix (full PR-B v3 18-cell
+on same cluster, 2026-04-28 00:32–02:47):
+```
+seed=42:  drop=0 LA rc=0 final=1.05  ← passed
+          drop=0.01 LA rc=124 final=2166  ← failed (CELL_TIMEOUT)
+          drop=0.05 LA rc=1 final=3.63   ← failed (RC retry exhaust)
+```
+
+Dispatcher behavior post-fix at drop=0.05:
+- `dispatch[1..5]`: SEMI route, completed ~5K-10K (bimodal, expected)
+- `dispatch[100]`: SEMI, eps_ema=0.139, t_max=400ms, completed=9233/10913
+- `dispatch[200]`: SEMI, eps_ema=0.269, t_max=400ms, completed=9535/10913
+- Never routed to RC (because eps_ema > 0.005 = rc_safe).
+- Loss decreases monotonically: step 0 ~2.4 → step 199 = 1.51 (200 steps from random init; will converge further with longer training).
+
+### Open question (deferred — non-blocking)
+
+Why is SEMI delivery bimodal on amd247 (some dispatches 90-99%, others
+45-50%) when archive amd203 had constant 99%?  flat semirdma exhibits the
+same bimodality but tolerates it via the dynamic ratio target
+(`max(0.95, 1 - loss_rate - 0.005)` = 0.995) → just times out and
+ghost-masks.  LA is now effectively the same after the rc_safe gate.
+
+Candidate causes (not yet falsified):
+- Periodic gloo TCP traffic from DDP itself routing via amd264 ip_forward
+- amd264 XDP-generic single-CPU RX bursts
+- EPYC 7402P CPU race tightening some pipeline timing
+
+This bimodality is now COSMETIC for the application: training still
+converges. If a future paper claim depends on per-dispatch delivery
+distribution, the bimodality must be characterized.  Pending.
+

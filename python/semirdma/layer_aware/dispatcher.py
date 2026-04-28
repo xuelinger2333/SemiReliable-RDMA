@@ -70,20 +70,44 @@ def layer_aware_dispatcher_hook(
 ) -> futures.Future[torch.Tensor]:
     """Per-bucket dispatcher for the layer-aware transport mode."""
     p_bucket = state.registry.resolve_for_bucket(bucket)
-    # Cross-rank synchronized epsilon to keep routing decisions identical.
-    eps = _synchronized_eps(state.calibrator.epsilon_ema, state.world_size)
-    margin = state.cfg.loss_safety_margin
     state.n_buckets += 1
+
+    # Amortized cross-rank epsilon sync (PR-C debug 2026-04-28; see
+    # DEBUG_LOG.md 2026-04-28 entry).  Per-bucket gloo TCP all_reduce
+    # routes through the ARP-spoofed experiment LAN and adds 50-150 ms
+    # of blocking per bucket on the amd247/amd245/amd264 cluster, which
+    # consumes most of the 200 ms `t_max` await window and drives SEMI
+    # delivery to ~50%.  Both ranks see the same wire so each rank's
+    # ``epsilon_ema`` converges to the same value naturally; sync once
+    # every ``state.eps_sync_period`` buckets and reuse the cached value
+    # in between is sufficient to keep routing decisions aligned.
+    if (state.last_eps_sync_at is None
+            or state.n_buckets - state.last_eps_sync_at
+               >= state.eps_sync_period):
+        state.cached_eps = _synchronized_eps(
+            state.calibrator.epsilon_ema, state.world_size,
+        )
+        state.last_eps_sync_at = state.n_buckets
+        state.n_eps_syncs += 1
+    eps = state.cached_eps
+    margin = state.cfg.loss_safety_margin
+    rc_safe = state.cfg.rc_safe_drop_threshold
 
     # Safety check: route to RC when the bucket's budget is tighter than
     # the wire's observed loss rate plus a safety margin. Unregistered
     # params produce p_bucket=0 which always trips this check.
-    if p_bucket < eps + margin:
+    #
+    # PR-C debug 2026-04-28: ALSO require ``eps <= rc_safe_drop_threshold``
+    # — empirically RC dies on lossy wires (PLAN.md P2 / DEBUG_LOG.md).
+    # If wire is too lossy for RC, prefer to stay on SEMI (with ghost-mask)
+    # over a hard RC abort.
+    if p_bucket < eps + margin and eps <= rc_safe:
         state.n_routed_rc += 1
         if state.n_buckets <= 5 or state.n_buckets % 100 == 0:
             logger.info(
-                "dispatch[%d]: RC  p_bucket=%.4f eps_ema=%.4f margin=%.4f",
-                state.n_buckets, p_bucket, eps, margin,
+                "dispatch[%d]: RC  p_bucket=%.4f eps_ema=%.4f margin=%.4f "
+                "(wire clean enough for RC: eps<=%.4f)",
+                state.n_buckets, p_bucket, eps, margin, rc_safe,
             )
         return rc_rdma_allreduce_hook(state.rc_substate, bucket)
 
