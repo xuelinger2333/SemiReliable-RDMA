@@ -77,7 +77,10 @@ def apply_finalize(
         bytes_written        — total bytes mutated
         decision             — echoed
     """
-    decision = FinalizeDecision(decision)
+    # Accept either the Python IntEnum (clear.policy.FinalizeDecision) or
+    # the pybind11 C++ enum (semirdma._semirdma_ext.clear.FinalizeDecision).
+    # Coerce via int() so both work uniformly.
+    decision = FinalizeDecision(int(decision))
     flat_view = _as_uint8_view(flat, writable=True)
     if flat_view.size < n_chunks * chunk_bytes:
         # The last chunk may legitimately be shorter than chunk_bytes (DDP
