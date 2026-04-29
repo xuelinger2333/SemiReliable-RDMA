@@ -372,10 +372,17 @@ def _run_clear_bucket(
 
     # Recv WRs were pre-posted on each rx engine during bring_up_data
     # (pre_post_recv pool sized at cfg.rq_depth - 16). Top up if the pool
-    # has drained below 2× this bucket's chunk count.
-    if state.rx.engine.outstanding_recv() < 2 * n_chunks:
-        rx_wr_base = (state.step_seq * 0x100000) | (bucket_seq & 0xFFFF)
-        state.rx.engine.post_recv_batch(n_chunks * 4, base_wr_id=rx_wr_base)
+    # has drained below 2× this bucket's chunk count, but never exceed
+    # the QP's RQ capacity (rq_depth - outstanding) — otherwise
+    # ibv_post_recv aborts with ENOMEM.
+    outstanding = state.rx.engine.outstanding_recv()
+    if outstanding < 2 * n_chunks:
+        rq_depth = state.cfg.rq_depth
+        headroom = max(0, rq_depth - outstanding - 8)  # safety margin
+        want = min(n_chunks * 4, headroom)
+        if want > 0:
+            rx_wr_base = (state.step_seq * 0x100000) | (bucket_seq & 0xFFFF)
+            state.rx.engine.post_recv_batch(want, base_wr_id=rx_wr_base)
 
     # Stage local bucket bytes into tx data MR.
     tx_buf = np.frombuffer(state.tx.engine.local_buf_view(), dtype=np.uint8)
