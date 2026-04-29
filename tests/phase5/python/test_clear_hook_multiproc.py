@@ -89,8 +89,11 @@ def _worker(rank: int, port_base: int, dev: str, gid: int,
             try:
                 rx_recv_outstanding = state.rx.engine.outstanding_recv()
                 tx_recv_outstanding = state.tx.engine.outstanding_recv()
-                cp_rx_stats = dict(state.rx.cp.stats())
-                cp_tx_stats = dict(state.tx.cp.stats())
+                def _stat(s):
+                    return {k: getattr(s, k) for k in dir(s)
+                            if not k.startswith("_") and isinstance(getattr(s, k), int)}
+                cp_rx_stats = _stat(state.rx.cp.stats)
+                cp_tx_stats = _stat(state.tx.cp.stats)
                 rx_lease_pressure = state.rx.receiver_leases.size()
                 tx_lease_pressure = state.tx.sender_leases.pressure().in_use
                 sync_keys = list(state._sync.keys())
