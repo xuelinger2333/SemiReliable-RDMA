@@ -22,10 +22,27 @@
  * Backwards compat: ``expected_bucket_id`` defaults to 0; when neither
  * sender nor receiver passes a bucket_id, imm_data == chunk_id (high 8
  * bits zero) — wire encoding is bit-identical to pre-PR-C.
+ *
+ * Phase 5 W2.1 — CLEAR mode (additive)
+ * ------------------------------------
+ *   imm_data = (slot_id << 24) | (chunk_idx << 4) | gen
+ *               8 bits             20 bits           4 bits
+ *
+ * For CLEAR transfers, callers use ``wait_for_ratio_clear`` with
+ * (slot_id, gen). Foreign (slot, gen) CQEs are stashed into a separate
+ * pending map keyed by ``lease_key(slot, gen)``. The PR-C bucket_id
+ * pending map is untouched; CLEAR and PR-C transfers can coexist on the
+ * same engine, but a single bucket transfer must use one mode end-to-end.
+ *
+ * The CLEAR-mode methods do not finalize the ChunkSet themselves: they
+ * mark received chunks and report the exit reason via RatioExitReason
+ * so the higher-level finalizer (Phase 5 W2.2) decides between
+ * deliver/repair/mask. See docs/phase5/clear-design.md §3.
  */
 
 #pragma once
 
+#include "transport/clear/imm_codec.h"
 #include "transport/uc_qp_engine.h"
 #include "transport/chunk_manager.h"
 
@@ -40,6 +57,19 @@ struct WaitStats {
     uint32_t poll_count  = 0;     // Number of ibv_poll_cq calls
     uint32_t completed   = 0;     // Chunks completed at return time
     bool     timed_out   = false;
+};
+
+// Phase 5 CLEAR-mode exit classification. Reported by wait_for_ratio_clear
+// alongside WaitStats so the finalizer can choose the right policy:
+//   DELIVERED — every chunk arrived (recv_count == n_chunks).
+//   RATIO_MET — ratio threshold reached but some chunks still missing;
+//               the missing chunks become candidates for WITNESS / repair.
+//   DEADLINE  — timeout fired before ratio was met; usual path on a
+//               lossy wire.
+enum class RatioExitReason : uint8_t {
+    DELIVERED = 0,
+    RATIO_MET = 1,
+    DEADLINE  = 2,
 };
 
 class RatioController {
@@ -102,12 +132,46 @@ public:
     // Drop all pending entries (e.g. for clean shutdown / test teardown).
     void clear_pending();
 
+    // ----- Phase 5 CLEAR-mode API (additive) ---------------------------
+    // wait_for_ratio_clear: block until cs.completion_ratio() >= ratio
+    // OR every chunk arrived (DELIVERED) OR timeout_ms expires (DEADLINE).
+    // CQEs decoded with the CLEAR imm_data layout (slot:8|chunk:20|gen:4).
+    // CQEs whose (slot, gen) does not match the expected pair are stashed
+    // in clr_pending_cqes_ for a later wait_for_ratio_clear with that
+    // pair, or for an external clr_drain_pending call.
+    //
+    // out_reason is required (the finalizer needs it to choose between
+    // DELIVERED / WITNESS+repair / WITNESS+mask). stats is optional.
+    bool wait_for_ratio_clear(ChunkSet&         cs,
+                              double            ratio,
+                              int               timeout_ms,
+                              uint8_t           expected_slot_id,
+                              uint8_t           expected_gen,
+                              RatioExitReason*  out_reason,
+                              WaitStats*        stats = nullptr);
+
+    // Drain pending CQEs for (slot, gen) onto cs. Returns count drained.
+    size_t clr_drain_pending(ChunkSet& cs, uint8_t slot_id, uint8_t gen);
+
+    // Stash a (slot, gen, chunk_idx) seen by an external poller.
+    void clr_stash_foreign(uint8_t slot_id, uint8_t gen, uint32_t chunk_idx);
+
+    size_t clr_pending_size() const;
+    size_t clr_pending_size_for(uint8_t slot_id, uint8_t gen) const;
+    void   clr_clear_pending();
+
 private:
     UCQPEngine& engine_;
-    // bucket_id (mod 256) → list of LOCAL chunk_ids (24-bit) seen but not
-    // yet claimed.  std::unordered_map keeps insertion fast; per-bucket
-    // vectors are append-only until drained, then the entry is erased.
+    // PR-C: bucket_id (mod 256) → list of LOCAL chunk_ids (24-bit) seen
+    // but not yet claimed.  std::unordered_map keeps insertion fast;
+    // per-bucket vectors are append-only until drained, then the entry
+    // is erased.
     std::unordered_map<uint8_t, std::vector<uint32_t>> pending_cqes_;
+
+    // CLEAR (W2.1): (slot, gen) lease_key → list of LOCAL chunk_idx
+    // (20-bit) seen but not yet claimed. Separate map so PR-C and CLEAR
+    // pending entries cannot alias.
+    std::unordered_map<uint16_t, std::vector<uint32_t>> clr_pending_cqes_;
 };
 
 } // namespace semirdma
