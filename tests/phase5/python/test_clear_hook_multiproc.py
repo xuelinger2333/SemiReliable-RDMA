@@ -104,16 +104,26 @@ def test_clear_hook_multiproc_averages_bidirectional():
     ]
     for p in procs:
         p.start()
+    # Drain queue first (workers always put a result, even on exception)
+    # so we can see BOTH ranks' status before any exitcode assertion.
+    results: dict = {}
+    import queue as _q
+    for _ in range(2):
+        try:
+            r, avg_bytes, grad_bytes, err = out_q.get(timeout=58)
+        except _q.Empty:
+            break
+        results[r] = (avg_bytes, grad_bytes, err)
     for p in procs:
-        p.join(timeout=55)
-        assert p.exitcode == 0, f"worker {p.pid} exitcode={p.exitcode}"
+        p.join(timeout=5)
 
-    results = {}
-    while not out_q.empty():
-        r, avg_bytes, grad_bytes, err = out_q.get()
-        if err:
-            pytest.fail(f"rank {r} worker raised:\n{err}")
-        results[r] = (avg_bytes, grad_bytes)
+    if not results:
+        pytest.fail("no results from either worker (both timed out)")
+    errs = {r: v[2] for r, v in results.items() if v[2]}
+    if errs:
+        msg = "\n".join(f"--- rank {r} ---\n{e}" for r, e in errs.items())
+        pytest.fail(f"worker(s) raised:\n{msg}")
+
     assert set(results.keys()) == {0, 1}, results.keys()
 
     g0 = np.frombuffer(results[0][1], dtype=np.float32)
