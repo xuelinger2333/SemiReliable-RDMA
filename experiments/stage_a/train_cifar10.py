@@ -390,7 +390,8 @@ def _train(cfg: DictConfig, rank: int, world_size: int) -> None:
         if (cfg.transport == "clear_t1" and _hook_state is not None and
             getattr(_hook_state, "perf_log", None)):
             perf = _hook_state.perf_log
-            keys = ["step_seq", "bucket_seq", "n_chunks", "nbytes",
+            keys = ["step_seq", "bucket_seq", "n_chunks", "recv_count",
+                    "decision", "nbytes",
                     "to_bytes_ms", "stage_ms", "threads_ms",
                     "send_ms", "recv_ms", "finalize_ms",
                     "average_ms", "from_numpy_ms",

@@ -531,10 +531,14 @@ def _run_clear_bucket(
     _t_avg_end = _time.perf_counter()
 
     if state.perf_log is not None:
+        # Count actually-received chunks for diagnosis (1 bit per chunk).
+        recv_count = sum(bin(b).count("1") for b in recv_bitmap)
         state.perf_log.append({
             "step_seq": state.step_seq,
             "bucket_seq": bucket_seq,
             "n_chunks": n_chunks,
+            "recv_count": recv_count,
+            "decision": int(decision),
             "nbytes": nbytes,
             "stage_ms": (_t_threads_start - _t_enter) * 1000.0,
             "threads_ms": (_t_threads_end - _t_threads_start) * 1000.0,
@@ -591,6 +595,8 @@ def clear_allreduce_hook(state, bucket):
             state,
             bucket_bytes=bucket_bytes,
             bucket_seq=bucket_id,
+            timeout_ms=5000,         # ratio_clear deadline per bucket
+            drain_timeout_ms=10000,  # SQ-drain + FINALIZE/BEGIN waits
         )
         # Auto-advance step after each bucket so consecutive hook calls
         # never reuse a uid. With bucket_cap_mb=512 (1 bucket/step) this
