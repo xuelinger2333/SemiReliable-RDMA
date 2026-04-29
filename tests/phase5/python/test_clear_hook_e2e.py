@@ -143,7 +143,16 @@ def test_clear_hook_multi_step_advances_uid():
             step_advance(a)
             step_advance(b)
 
-        # After 3 steps, lease tables should be empty.
+        # After 3 steps, lease tables should drain to empty. RETIRE
+        # arrives async via the bg poll thread, so spin briefly for
+        # the last in-flight slot to be released.
+        import time
+        deadline = time.time() + 2.0
+        while time.time() < deadline:
+            if (a.tx.sender_leases.pressure().in_use == 0 and
+                b.tx.sender_leases.pressure().in_use == 0):
+                break
+            time.sleep(0.005)
         assert a.tx.sender_leases.pressure().in_use == 0
         assert b.tx.sender_leases.pressure().in_use == 0
     finally:
