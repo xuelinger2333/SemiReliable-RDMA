@@ -44,16 +44,20 @@ TEST(SenderLeaseTable, ReleaseClearsBinding) {
     EXPECT_FALSE(t.peek(7).has_value());
 }
 
-TEST(SenderLeaseTable, ReuseBumpsGenUnderQuarantine) {
-    // quarantine=0 lets us reuse immediately so we can isolate the gen bump.
+TEST(SenderLeaseTable, ReuseBumpsGen) {
+    // Round-robin allocation otherwise picks the next free slot (which is
+    // never-used → gen 0). To isolate the gen-bump-on-reuse behavior we
+    // pin both acquires to the same slot via slot_pref.
     sc::SenderLeaseTable t(/*quarantine_ticks=*/0);
-    auto r1 = t.acquire(/*uid=*/1);
+    auto r1 = t.acquire(/*uid=*/1, /*slot_pref=*/42);
     ASSERT_TRUE(r1.ok);
+    EXPECT_EQ(r1.slot_id, 42u);
+    EXPECT_EQ(r1.gen, 0u);
     EXPECT_TRUE(t.release(1));
-    auto r2 = t.acquire(/*uid=*/2);
+    auto r2 = t.acquire(/*uid=*/2, /*slot_pref=*/42);
     ASSERT_TRUE(r2.ok);
-    EXPECT_EQ(r2.slot_id, r1.slot_id);
-    EXPECT_EQ(r2.gen, static_cast<uint8_t>((r1.gen + 1) & sc::kGenMask));
+    EXPECT_EQ(r2.slot_id, 42u);
+    EXPECT_EQ(r2.gen, 1u);
 }
 
 TEST(SenderLeaseTable, QuarantineSkipsRecentSlot) {
