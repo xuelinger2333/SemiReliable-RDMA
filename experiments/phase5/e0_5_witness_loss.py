@@ -78,9 +78,16 @@ def run_cell(*, n_buckets: int, buckets_per_step: int,
     bulk-decision path then falls back to MASKED/REPAIRED based on
     policy, which the receiver applies to its peer-buffer copy.
     """
-    from semirdma.clear.hook import (
-        ClearHookState, _run_clear_bucket, step_advance,
+    from semirdma._semirdma_ext import ChunkSet
+    from semirdma._semirdma_ext.clear import (
+        BeginPayload, Policy, encode_imm,
     )
+    from semirdma.clear.hook import ClearHookState, step_advance
+    from semirdma.clear.protocol import (
+        chunkset_to_recv_bitmap, drain_send_completions,
+    )
+    from semirdma.clear.runtime import apply_finalize as py_apply_finalize
+    from semirdma.clear.manifest import uid_hash
     from semirdma.clear.transport import ClearTransportConfig
 
     dev, gid = _env()
@@ -97,28 +104,6 @@ def run_cell(*, n_buckets: int, buckets_per_step: int,
     drop_lock = threading.Lock()
     n_witness_dropped = [0]
 
-    # Wrap each rank's rx Finalizer.on_witness to randomly drop.
-    # When dropped, we still need a FINALIZE/RETIRE to be sent so the
-    # peer's send_thread doesn't block forever. We invoke
-    # on_witness with a full-zeros bitmap (the all-missing case) which
-    # forces the Finalizer onto FALLBACK_RC under MASK_FIRST policy.
-    for state in (a, b):
-        orig = state.rx.finalizer.on_witness
-
-        def make_wrapper(orig_fn):
-            def wrapped(*, uid, recv_bitmap):
-                with drop_lock:
-                    drop = drop_rng.random() < witness_drop_rate
-                if drop:
-                    n_witness_dropped[0] += 1
-                    # Pretend nothing arrived — bitmap of zeros.
-                    fake = bytes(len(recv_bitmap))
-                    return orig_fn(uid=uid, recv_bitmap=fake)
-                return orig_fn(uid=uid, recv_bitmap=recv_bitmap)
-            return wrapped
-
-        state.rx.finalizer.on_witness = make_wrapper(orig)
-
     nbytes = n_floats * 4
     n_chunks_per_bucket = (nbytes + chunk_bytes - 1) // chunk_bytes
     grad_rng = np.random.default_rng(seed=seed ^ 0xC1EA9)
@@ -127,25 +112,126 @@ def run_cell(*, n_buckets: int, buckets_per_step: int,
     iter_ms_samples: list[float] = []
     t0 = time.monotonic()
 
+    def _send_normal(state, *, uid, bucket_seq, base_offset, nbytes_):
+        n_chunks = (nbytes_ + chunk_bytes - 1) // chunk_bytes
+        r = state.tx.sender_leases.acquire(uid)
+        if not r["ok"]:
+            raise RuntimeError("sender_leases.acquire failed")
+        slot, gen = r["slot_id"], r["gen"]
+        bp = BeginPayload(slot_id=slot, gen=gen, phase_id=0,
+                          policy=Policy.MASK_FIRST, peer_edge=0,
+                          step_seq=state.step_seq, bucket_seq=bucket_seq,
+                          n_chunks=n_chunks, deadline_us=200_000,
+                          chunk_bytes=chunk_bytes, checksum_seed=0)
+        if not state.tx.cp.send_begin(uid=uid, payload=bp):
+            raise RuntimeError("send_begin failed")
+        for ci in range(n_chunks):
+            offset = ci * chunk_bytes
+            length = min(chunk_bytes, nbytes_ - offset)
+            imm = encode_imm(slot_id=slot, chunk_idx=ci, gen=gen)
+            state.tx.engine.post_write(
+                wr_id=ci, local_offset=base_offset + offset,
+                remote_offset=base_offset + offset, length=length,
+                remote=state.tx._peer_data_mr,
+                with_imm=True, imm_data=imm)
+        drain_send_completions(state.tx.engine, expected=n_chunks,
+                               timeout_ms=2000)
+        sync = state._get_sync(uid)
+        sync.finalize_event.wait(timeout=10.0)
+
+    def _recv_with_witness_drop(state, *, uid, base_offset, nbytes_):
+        n_chunks = (nbytes_ + chunk_bytes - 1) // chunk_bytes
+        sync = state._get_sync(uid)
+        if not sync.begin_event.wait(timeout=10.0):
+            raise TimeoutError(f"BEGIN not received uid={uid:x}")
+        slot, gen = sync.begin_slot, sync.begin_gen
+        cs = ChunkSet(base_offset, n_chunks * chunk_bytes, chunk_bytes)
+        state.rx.finalizer.track(uid=uid, slot=slot, gen=gen,
+                                 n_chunks=n_chunks,
+                                 chunk_bytes=chunk_bytes,
+                                 policy=Policy.MASK_FIRST)
+        state.rx.ratio.wait_for_ratio_clear(
+            cs, ratio=1.0, timeout_ms=2000, slot_id=slot, gen=gen)
+        recv_bitmap = chunkset_to_recv_bitmap(cs)
+
+        # Inject witness loss: with prob witness_drop_rate, replace
+        # the bitmap with all-zeros so the finalizer thinks nothing
+        # arrived.
+        with drop_lock:
+            drop = drop_rng.random() < witness_drop_rate
+        if drop:
+            n_witness_dropped[0] += 1
+            recv_bitmap = bytes(len(recv_bitmap))
+
+        decision = state.rx.finalizer.on_witness(
+            uid=uid, recv_bitmap=recv_bitmap)
+        rx_view = np.frombuffer(state.rx.engine.local_buf_view(),
+                                dtype=np.uint8)
+        peer_slice = bytearray(
+            rx_view[base_offset : base_offset + nbytes_].tobytes())
+        py_apply_finalize(decision, mask_bitmap=recv_bitmap,
+                          n_chunks=n_chunks, chunk_bytes=chunk_bytes,
+                          flat=peer_slice)
+        return peer_slice
+
     try:
         for i in range(n_buckets):
             g_a = grad_rng.standard_normal(n_floats).astype(np.float32)
             g_b = grad_rng.standard_normal(n_floats).astype(np.float32)
             expected = ((g_a + g_b) / 2).astype(np.float32)
+            bs = i % buckets_per_step
+
+            uid_a_send = uid_hash(rank_pair=a._rank_pair, step_seq=a.step_seq,
+                                  bucket_seq=bs, phase_id=0, peer_edge=0)
+            uid_a_recv = uid_hash(rank_pair=a._rank_pair, step_seq=a.step_seq,
+                                  bucket_seq=bs, phase_id=0, peer_edge=1)
 
             out_holder: dict = {}
             errs: list = []
 
-            def rank_thread(state, bucket_bytes, label):
+            def one_rank(state, label, gbytes, uid_send, uid_recv):
                 try:
-                    out_holder[label] = _run_clear_bucket(
-                        state, bucket_bytes=bucket_bytes,
-                        bucket_seq=i % buckets_per_step,
-                        chunk_bytes=chunk_bytes, ratio=1.0,
-                        timeout_ms=2000, drain_timeout_ms=10000,
-                    )
+                    # Stage local data into tx buf.
+                    tx_view = np.frombuffer(state.tx.engine.local_buf_view(),
+                                            dtype=np.uint8)
+                    tx_view[0:nbytes] = np.frombuffer(gbytes, dtype=np.uint8)
+                    if state.rx.engine.outstanding_recv() < 2 * n_chunks_per_bucket:
+                        state.rx.engine.post_recv_batch(
+                            n_chunks_per_bucket * 4, base_wr_id=0xC0DE_0000)
+                    se: list = []
+                    re: list = []
+                    peer_holder: list = []
+                    def st_():
+                        try: _send_normal(state, uid=uid_send,
+                                          bucket_seq=bs, base_offset=0,
+                                          nbytes_=nbytes)
+                        except Exception as e: se.append(e)
+                    def rt_():
+                        try: peer_holder.append(_recv_with_witness_drop(
+                            state, uid=uid_recv, base_offset=0,
+                            nbytes_=nbytes))
+                        except Exception as e: re.append(e)
+                    t1 = threading.Thread(target=st_)
+                    t2 = threading.Thread(target=rt_)
+                    t1.start(); t2.start()
+                    t1.join(timeout=20); t2.join(timeout=20)
+                    if se: raise se[0]
+                    if re: raise re[0]
+                    peer = peer_holder[0]
+                    local = np.frombuffer(gbytes, dtype=np.uint8)
+                    peer_arr = np.frombuffer(bytes(peer), dtype=np.uint8)
+                    avg = (local.view(np.float32) + peer_arr.view(np.float32)) / 2.0
+                    out_holder[label] = avg.astype(np.float32).tobytes()
+                    state._drop_sync(uid_send)
+                    state._drop_sync(uid_recv)
                 except Exception as e:
                     errs.append((label, e))
+
+            def rank_thread(state, bucket_bytes, label):
+                if label == "a":
+                    one_rank(state, label, bucket_bytes, uid_a_send, uid_a_recv)
+                else:
+                    one_rank(state, label, bucket_bytes, uid_a_recv, uid_a_send)
 
             t_iter = time.monotonic()
             ta = threading.Thread(target=rank_thread,
