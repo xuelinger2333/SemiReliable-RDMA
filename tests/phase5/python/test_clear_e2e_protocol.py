@@ -83,11 +83,12 @@ def _make_transport_pair() -> Tuple[ClearTransport, ClearTransport]:
     return a, b
 
 
-def _poll_b_cp_loop(transport: ClearTransport, stop: threading.Event) -> None:
-    """Background poller — drives B's control-plane recv side so BEGIN/RETIRE
-    callbacks fire."""
+def _poll_cp_loop(transports, stop: threading.Event) -> None:
+    """Background poller — drives every transport's control plane so
+    on_begin / on_witness / on_finalize / on_retire callbacks fire."""
     while not stop.is_set():
-        transport.cp.poll_once(64, 5)
+        for t in transports:
+            t.cp.poll_once(64, 1)
 
 
 # ---------- happy path ------------------------------------------------------
@@ -159,7 +160,7 @@ def test_clear_e2e_clean_wire_delivers_all_chunks():
 
     # Background poll loop on B's control plane.
     stop = threading.Event()
-    poller = threading.Thread(target=_poll_b_cp_loop, args=(b, stop))
+    poller = threading.Thread(target=_poll_cp_loop, args=([a, b], stop))
     poller.start()
     try:
         # ---- Receiver thread runs in parallel ---------------------------
@@ -297,7 +298,7 @@ def test_clear_e2e_lossy_wire_masks_missing_chunks():
     dst_view[:nbytes] = SENTINEL
 
     stop = threading.Event()
-    poller = threading.Thread(target=_poll_b_cp_loop, args=(b, stop))
+    poller = threading.Thread(target=_poll_cp_loop, args=([a, b], stop))
     poller.start()
 
     try:
