@@ -154,30 +154,59 @@ class ClearHookState:
         tx = ClearTransport(cfg)
         rx = ClearTransport(cfg)
 
-        # tx.data ↔ peer.rx.data
-        peer_rx_data_qp, peer_rx_data_mr = exchange_qp_info(
-            is_server=is_server, host=peer_host, port=port + 0,
-            local_qp=tx.data_qp_info, local_mr=tx.data_mr_info,
-            connect_timeout_s=connect_timeout_s,
-        )
-        # tx.cp ↔ peer.rx.cp (mr field unused on RC control plane bring_up)
-        peer_rx_cp_qp, _ = exchange_qp_info(
-            is_server=is_server, host=peer_host, port=port + 1,
-            local_qp=tx.control_qp_info, local_mr=tx.control_mr_info,
-            connect_timeout_s=connect_timeout_s,
-        )
-        # rx.data ↔ peer.tx.data
-        peer_tx_data_qp, peer_tx_data_mr = exchange_qp_info(
-            is_server=is_server, host=peer_host, port=port + 2,
-            local_qp=rx.data_qp_info, local_mr=rx.data_mr_info,
-            connect_timeout_s=connect_timeout_s,
-        )
-        # rx.cp ↔ peer.tx.cp
-        peer_tx_cp_qp, _ = exchange_qp_info(
-            is_server=is_server, host=peer_host, port=port + 3,
-            local_qp=rx.control_qp_info, local_mr=rx.control_mr_info,
-            connect_timeout_s=connect_timeout_s,
-        )
+        # The 4 ports establish 4 directional links:
+        #   port+0  rank0.tx.data → rank1.rx.data
+        #   port+1  rank0.tx.cp   ↔ rank1.rx.cp
+        #   port+2  rank1.tx.data → rank0.rx.data
+        #   port+3  rank1.tx.cp   ↔ rank0.rx.cp
+        # Per port, the two ranks must send DIFFERENT sides of their
+        # transport; otherwise both sides ship the same QP info and the
+        # tx-side ends up wired to peer's tx (UC traffic blackholed).
+        if rank == 0:
+            # port+0 — we ship tx.data, peer ships rx.data → we recv peer.rx.data
+            peer_rx_data_qp, peer_rx_data_mr = exchange_qp_info(
+                is_server=is_server, host=peer_host, port=port + 0,
+                local_qp=tx.data_qp_info, local_mr=tx.data_mr_info,
+                connect_timeout_s=connect_timeout_s,
+            )
+            peer_rx_cp_qp, _ = exchange_qp_info(
+                is_server=is_server, host=peer_host, port=port + 1,
+                local_qp=tx.control_qp_info, local_mr=tx.control_mr_info,
+                connect_timeout_s=connect_timeout_s,
+            )
+            # port+2 — we ship rx.data, peer ships tx.data → we recv peer.tx.data
+            peer_tx_data_qp, peer_tx_data_mr = exchange_qp_info(
+                is_server=is_server, host=peer_host, port=port + 2,
+                local_qp=rx.data_qp_info, local_mr=rx.data_mr_info,
+                connect_timeout_s=connect_timeout_s,
+            )
+            peer_tx_cp_qp, _ = exchange_qp_info(
+                is_server=is_server, host=peer_host, port=port + 3,
+                local_qp=rx.control_qp_info, local_mr=rx.control_mr_info,
+                connect_timeout_s=connect_timeout_s,
+            )
+        else:
+            # rank 1 — mirror image: ship rx.data on port+0, tx.data on port+2.
+            peer_tx_data_qp, peer_tx_data_mr = exchange_qp_info(
+                is_server=is_server, host=peer_host, port=port + 0,
+                local_qp=rx.data_qp_info, local_mr=rx.data_mr_info,
+                connect_timeout_s=connect_timeout_s,
+            )
+            peer_tx_cp_qp, _ = exchange_qp_info(
+                is_server=is_server, host=peer_host, port=port + 1,
+                local_qp=rx.control_qp_info, local_mr=rx.control_mr_info,
+                connect_timeout_s=connect_timeout_s,
+            )
+            peer_rx_data_qp, peer_rx_data_mr = exchange_qp_info(
+                is_server=is_server, host=peer_host, port=port + 2,
+                local_qp=tx.data_qp_info, local_mr=tx.data_mr_info,
+                connect_timeout_s=connect_timeout_s,
+            )
+            peer_rx_cp_qp, _ = exchange_qp_info(
+                is_server=is_server, host=peer_host, port=port + 3,
+                local_qp=tx.control_qp_info, local_mr=tx.control_mr_info,
+                connect_timeout_s=connect_timeout_s,
+            )
 
         # Pre-post a deep recv-WR pool on rx so peer's first UC writes
         # never hit an empty RQ during the post-handshake race window.
