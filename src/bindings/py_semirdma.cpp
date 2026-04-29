@@ -30,8 +30,16 @@
 #include "transport/ratio_controller.h"
 #include "transport/ghost_mask.h"
 
+#include "transport/clear/finalizer.h"
+#include "transport/clear/imm_codec.h"
+#include "transport/clear/lease_table.h"
+#include "transport/clear/messages.h"
+#include "transport/clear/rq_monitor.h"
+#include "transport/clear/witness_codec.h"
+
 namespace py = pybind11;
 using namespace semirdma;
+namespace sc = semirdma::clear;
 
 namespace {
 
@@ -282,7 +290,40 @@ PYBIND11_MODULE(_semirdma_ext, m) {
         .def("pending_size", &RatioController::pending_size)
         .def("pending_size_for", &RatioController::pending_size_for,
              py::arg("bucket_id"))
-        .def("clear_pending", &RatioController::clear_pending);
+        .def("clear_pending", &RatioController::clear_pending)
+        // ---- Phase 5 CLEAR-mode methods (additive) ----
+        .def("wait_for_ratio_clear",
+             [](RatioController& self,
+                ChunkSet& cs, double ratio, int timeout_ms,
+                uint8_t slot_id, uint8_t gen) {
+                 RatioExitReason reason = RatioExitReason::DEADLINE;
+                 WaitStats stats;
+                 bool ok;
+                 {
+                     py::gil_scoped_release release;
+                     ok = self.wait_for_ratio_clear(
+                         cs, ratio, timeout_ms, slot_id, gen,
+                         &reason, &stats);
+                 }
+                 py::dict d;
+                 d["ok"]         = ok;
+                 d["reason"]     = reason;
+                 d["latency_ms"] = stats.latency_ms;
+                 d["poll_count"] = stats.poll_count;
+                 d["completed"]  = stats.completed;
+                 d["timed_out"]  = stats.timed_out;
+                 return d;
+             },
+             py::arg("cs"), py::arg("ratio"), py::arg("timeout_ms"),
+             py::arg("slot_id"), py::arg("gen"))
+        .def("clr_drain_pending", &RatioController::clr_drain_pending,
+             py::arg("cs"), py::arg("slot_id"), py::arg("gen"))
+        .def("clr_stash_foreign", &RatioController::clr_stash_foreign,
+             py::arg("slot_id"), py::arg("gen"), py::arg("chunk_idx"))
+        .def("clr_pending_size", &RatioController::clr_pending_size)
+        .def("clr_pending_size_for", &RatioController::clr_pending_size_for,
+             py::arg("slot_id"), py::arg("gen"))
+        .def("clr_clear_pending", &RatioController::clr_clear_pending);
 
     // ---- Free function: apply_ghost_mask --------------------------------
     m.def("apply_ghost_mask",
@@ -309,4 +350,387 @@ PYBIND11_MODULE(_semirdma_ext, m) {
           "Zero-out buffer regions for chunks without CQE. "
           "`buf` must be a writable 1-byte-itemsize buffer covering "
           "[0, cs.base_offset + cs.total_bytes).");
+
+    // -----------------------------------------------------------------
+    // Phase 5 CLEAR — RatioExitReason enum (used by RatioController.
+    // wait_for_ratio_clear, registered in the RatioController binding
+    // above).
+    // -----------------------------------------------------------------
+    py::enum_<RatioExitReason>(m, "RatioExitReason")
+        .value("DELIVERED", RatioExitReason::DELIVERED)
+        .value("RATIO_MET", RatioExitReason::RATIO_MET)
+        .value("DEADLINE",  RatioExitReason::DEADLINE);
+
+    // -----------------------------------------------------------------
+    // Phase 5 CLEAR — submodule for the new types
+    // -----------------------------------------------------------------
+    py::module_ clear_mod = m.def_submodule(
+        "clear",
+        "CLEAR (Completion-Labeled Erasure Attribution for RoCE UC) types.");
+
+    // ---- enums (must mirror clear::Policy / FinalizeDecision /
+    //      WitnessEncoding values) ------------------------------------
+    py::enum_<sc::Policy>(clear_mod, "Policy")
+        .value("REPAIR_FIRST",    sc::Policy::REPAIR_FIRST)
+        .value("MASK_FIRST",      sc::Policy::MASK_FIRST)
+        .value("STALE_FILL",      sc::Policy::STALE_FILL)
+        .value("ESTIMATOR_SCALE", sc::Policy::ESTIMATOR_SCALE);
+
+    py::enum_<sc::FinalizeDecision>(clear_mod, "FinalizeDecision")
+        .value("DELIVERED",   sc::FinalizeDecision::DELIVERED)
+        .value("REPAIRED",    sc::FinalizeDecision::REPAIRED)
+        .value("MASKED",      sc::FinalizeDecision::MASKED)
+        .value("STALE",       sc::FinalizeDecision::STALE)
+        .value("FALLBACK_RC", sc::FinalizeDecision::FALLBACK_RC);
+
+    py::enum_<sc::WitnessEncoding>(clear_mod, "WitnessEncoding")
+        .value("FULL_ALL_PRESENT", sc::WitnessEncoding::FULL_ALL_PRESENT)
+        .value("FULL_ALL_ABSENT",  sc::WitnessEncoding::FULL_ALL_ABSENT)
+        .value("RAW",              sc::WitnessEncoding::RAW)
+        .value("RANGE_MISSING",    sc::WitnessEncoding::RANGE_MISSING);
+
+    py::enum_<sc::LookupOutcome>(clear_mod, "LookupOutcome")
+        .value("HIT",       sc::LookupOutcome::HIT)
+        .value("PRE_BEGIN", sc::LookupOutcome::PRE_BEGIN)
+        .value("STALE",     sc::LookupOutcome::STALE);
+
+    // ---- Range / SlotPressure / LookupResult / PendingEntry ---------
+    py::class_<sc::Range>(clear_mod, "Range")
+        .def(py::init([](uint32_t start, uint32_t length) {
+                 return sc::Range{start, length};
+             }),
+             py::arg("start"), py::arg("length"))
+        .def_readwrite("start",  &sc::Range::start)
+        .def_readwrite("length", &sc::Range::length)
+        .def("__repr__", [](const sc::Range& r) {
+            return "<Range start=" + std::to_string(r.start) +
+                   " length=" + std::to_string(r.length) + ">";
+        });
+
+    py::class_<sc::SlotPressure>(clear_mod, "SlotPressure")
+        .def_readonly("in_use",    &sc::SlotPressure::in_use)
+        .def_readonly("near_wrap", &sc::SlotPressure::near_wrap)
+        .def_readonly("total",     &sc::SlotPressure::total);
+
+    py::class_<sc::LookupResult>(clear_mod, "LookupResult")
+        .def_readonly("outcome", &sc::LookupResult::outcome)
+        .def_readonly("uid",     &sc::LookupResult::uid);
+
+    py::class_<sc::PendingEntry>(clear_mod, "PendingEntry")
+        .def_readonly("slot_id",       &sc::PendingEntry::slot_id)
+        .def_readonly("gen",           &sc::PendingEntry::gen)
+        .def_readonly("chunk_idx",     &sc::PendingEntry::chunk_idx)
+        .def_readonly("enqueued_tick", &sc::PendingEntry::enqueued_tick);
+
+    // ---- imm_codec helpers ------------------------------------------
+    clear_mod.def("encode_imm", &sc::encode_imm,
+                  py::arg("slot_id"), py::arg("chunk_idx"), py::arg("gen"));
+    clear_mod.def("imm_slot",  &sc::imm_slot,  py::arg("imm"));
+    clear_mod.def("imm_chunk", &sc::imm_chunk, py::arg("imm"));
+    clear_mod.def("imm_gen",   &sc::imm_gen,   py::arg("imm"));
+    clear_mod.def("lease_key", &sc::lease_key,
+                  py::arg("slot_id"), py::arg("gen"));
+    clear_mod.attr("kImmGenMask")     = sc::kImmGenMask;
+    clear_mod.attr("kImmChunkMask")   = sc::kImmChunkMask;
+    clear_mod.attr("kImmSlotShift")   = sc::kImmSlotShift;
+    clear_mod.attr("kImmChunkShift")  = sc::kImmChunkShift;
+    clear_mod.attr("kImmMaxChunkIdx") = sc::kImmMaxChunkIdx;
+
+    // ---- SenderLeaseTable -------------------------------------------
+    py::class_<sc::SenderLeaseTable>(clear_mod, "SenderLeaseTable")
+        .def(py::init<uint64_t>(),
+             py::arg("quarantine_ticks") = sc::kDefaultQuarantineTicks)
+        .def("acquire",
+             [](sc::SenderLeaseTable& self, uint64_t uid,
+                py::object slot_pref) {
+                 std::optional<uint8_t> hint;
+                 if (!slot_pref.is_none()) {
+                     hint = slot_pref.cast<uint8_t>();
+                 }
+                 auto r = self.acquire(uid, hint);
+                 py::dict d;
+                 d["ok"]      = r.ok;
+                 d["slot_id"] = r.slot_id;
+                 d["gen"]     = r.gen;
+                 return d;
+             },
+             py::arg("uid"), py::arg("slot_pref") = py::none())
+        .def("release",  &sc::SenderLeaseTable::release, py::arg("uid"))
+        .def("tick",     &sc::SenderLeaseTable::tick, py::arg("delta") = 1)
+        .def("now",      &sc::SenderLeaseTable::now)
+        .def("pressure", &sc::SenderLeaseTable::pressure)
+        .def("peek",
+             [](const sc::SenderLeaseTable& self, uint64_t uid) -> py::object {
+                 auto r = self.peek(uid);
+                 if (!r.has_value()) return py::none();
+                 return py::make_tuple(r->first, r->second);
+             },
+             py::arg("uid"));
+
+    // ---- ReceiverLeaseTable -----------------------------------------
+    py::class_<sc::ReceiverLeaseTable>(clear_mod, "ReceiverLeaseTable")
+        .def(py::init<size_t>(), py::arg("pending_capacity") = 4096)
+        .def("install", &sc::ReceiverLeaseTable::install,
+             py::arg("uid"), py::arg("slot_id"), py::arg("gen"))
+        .def("lookup",  &sc::ReceiverLeaseTable::lookup,
+             py::arg("slot_id"), py::arg("gen"))
+        .def("retire",  &sc::ReceiverLeaseTable::retire, py::arg("uid"))
+        .def("enqueue_pending", &sc::ReceiverLeaseTable::enqueue_pending,
+             py::arg("slot_id"), py::arg("gen"), py::arg("chunk_idx"))
+        .def("drain_pending_for",
+             &sc::ReceiverLeaseTable::drain_pending_for,
+             py::arg("slot_id"), py::arg("gen"))
+        .def("expire_pending", &sc::ReceiverLeaseTable::expire_pending,
+             py::arg("max_age_ticks"))
+        .def("tick", &sc::ReceiverLeaseTable::tick, py::arg("delta") = 1)
+        .def("now",  &sc::ReceiverLeaseTable::now)
+        .def("pending_size",    &sc::ReceiverLeaseTable::pending_size)
+        .def("pending_dropped", &sc::ReceiverLeaseTable::pending_dropped)
+        .def("pressure",        &sc::ReceiverLeaseTable::pressure);
+
+    // ---- decide_finalize free function (pure decision kernel) -------
+    clear_mod.def(
+        "decide_finalize",
+        [](uint32_t n_chunks, py::buffer recv_bitmap, uint32_t chunk_bytes,
+           sc::Policy policy, uint64_t repair_budget_bytes,
+           uint64_t max_repair_bytes_per_uid) {
+            py::buffer_info info = recv_bitmap.request(/*writable=*/false);
+            if (info.itemsize != 1 || info.ndim != 1) {
+                throw std::runtime_error(
+                    "decide_finalize: recv_bitmap must be 1-D byte buffer");
+            }
+            auto r = sc::decide_finalize(
+                n_chunks,
+                reinterpret_cast<const uint8_t*>(info.ptr),
+                static_cast<size_t>(info.size),
+                chunk_bytes, policy,
+                repair_budget_bytes, max_repair_bytes_per_uid);
+            py::list ranges;
+            for (const auto& rg : r.repair_ranges) {
+                ranges.append(py::make_tuple(rg.start, rg.length));
+            }
+            py::dict d;
+            d["decision"]              = r.decision;
+            d["repair_ranges"]         = ranges;
+            d["missing_count"]         = r.missing_count;
+            d["missing_bytes"]         = r.missing_bytes;
+            d["budget_consumed_bytes"] = r.budget_consumed_bytes;
+            return d;
+        },
+        py::arg("n_chunks"), py::arg("recv_bitmap"), py::arg("chunk_bytes"),
+        py::arg("policy"), py::arg("repair_budget_bytes"),
+        py::arg("max_repair_bytes_per_uid") = 0);
+
+    // ---- FinalizerConfig / FinalizerStats ---------------------------
+    py::class_<sc::FinalizerConfig>(clear_mod, "FinalizerConfig")
+        .def(py::init([](uint64_t budget, uint64_t cap) {
+                 sc::FinalizerConfig c;
+                 c.repair_budget_bytes_per_step = budget;
+                 c.max_repair_bytes_per_uid     = cap;
+                 return c;
+             }),
+             py::arg("repair_budget_bytes_per_step") = 16ull * 1024 * 1024,
+             py::arg("max_repair_bytes_per_uid")     = 0)
+        .def_readwrite("repair_budget_bytes_per_step",
+                       &sc::FinalizerConfig::repair_budget_bytes_per_step)
+        .def_readwrite("max_repair_bytes_per_uid",
+                       &sc::FinalizerConfig::max_repair_bytes_per_uid);
+
+    py::class_<sc::FinalizerStats>(clear_mod, "FinalizerStats")
+        .def_readonly("n_uids_seen",        &sc::FinalizerStats::n_uids_seen)
+        .def_readonly("n_finalized",        &sc::FinalizerStats::n_finalized)
+        .def_readonly("total_repair_bytes",
+                      &sc::FinalizerStats::total_repair_bytes)
+        .def_readonly("budget_refills",     &sc::FinalizerStats::budget_refills)
+        .def_readonly("budget_underruns",   &sc::FinalizerStats::budget_underruns)
+        .def_property_readonly("n_decisions", [](const sc::FinalizerStats& s) {
+            py::dict d;
+            d["DELIVERED"]   = s.n_decisions[(int)sc::FinalizeDecision::DELIVERED];
+            d["REPAIRED"]    = s.n_decisions[(int)sc::FinalizeDecision::REPAIRED];
+            d["MASKED"]      = s.n_decisions[(int)sc::FinalizeDecision::MASKED];
+            d["STALE"]       = s.n_decisions[(int)sc::FinalizeDecision::STALE];
+            d["FALLBACK_RC"] = s.n_decisions[(int)sc::FinalizeDecision::FALLBACK_RC];
+            return d;
+        });
+
+    // ---- Finalizer --------------------------------------------------
+    // Callbacks marshalled as Python callables. The mask_bitmap pointers
+    // passed to send_finalize / apply_mask are non-owning into a
+    // std::vector that lives only for the duration of the C++ call;
+    // we copy into py::bytes before invoking the Python callback.
+    py::class_<sc::Finalizer>(clear_mod, "Finalizer")
+        .def(py::init<sc::FinalizerConfig>(),
+             py::arg("cfg") = sc::FinalizerConfig{})
+        .def("on_send_repair_req",
+             [](sc::Finalizer& self, py::function cb) {
+                 self.on_send_repair_req(
+                     [cb = std::move(cb)](uint64_t uid,
+                                          const sc::Range* ranges,
+                                          uint16_t n) {
+                         py::gil_scoped_acquire gil;
+                         py::list rs;
+                         for (uint16_t i = 0; i < n; ++i) {
+                             rs.append(py::make_tuple(ranges[i].start,
+                                                       ranges[i].length));
+                         }
+                         cb(uid, rs);
+                     });
+             })
+        .def("on_send_finalize",
+             [](sc::Finalizer& self, py::function cb) {
+                 self.on_send_finalize(
+                     [cb = std::move(cb)](uint64_t uid,
+                                          sc::FinalizeDecision d,
+                                          sc::WitnessEncoding enc,
+                                          const uint8_t* body, size_t len) {
+                         py::gil_scoped_acquire gil;
+                         py::bytes payload(
+                             body ? reinterpret_cast<const char*>(body) : "",
+                             len);
+                         cb(uid, d, enc, payload);
+                     });
+             })
+        .def("on_send_retire",
+             [](sc::Finalizer& self, py::function cb) {
+                 self.on_send_retire(
+                     [cb = std::move(cb)](uint64_t uid, uint8_t slot,
+                                          uint8_t gen) {
+                         py::gil_scoped_acquire gil;
+                         cb(uid, slot, gen);
+                     });
+             })
+        .def("on_apply_mask",
+             [](sc::Finalizer& self, py::function cb) {
+                 self.on_apply_mask(
+                     [cb = std::move(cb)](uint64_t uid,
+                                          sc::FinalizeDecision d,
+                                          const uint8_t* mask, size_t len,
+                                          uint32_t n_chunks) {
+                         py::gil_scoped_acquire gil;
+                         py::bytes payload(
+                             mask ? reinterpret_cast<const char*>(mask) : "",
+                             len);
+                         cb(uid, d, payload, n_chunks);
+                     });
+             })
+        .def("track", &sc::Finalizer::track,
+             py::arg("uid"), py::arg("slot"), py::arg("gen"),
+             py::arg("n_chunks"), py::arg("chunk_bytes"), py::arg("policy"))
+        .def("on_witness",
+             [](sc::Finalizer& self, uint64_t uid, py::buffer recv_bitmap) {
+                 py::buffer_info info = recv_bitmap.request(/*writable=*/false);
+                 if (info.itemsize != 1 || info.ndim != 1) {
+                     throw std::runtime_error(
+                         "on_witness: recv_bitmap must be 1-D byte buffer");
+                 }
+                 return self.on_witness(
+                     uid,
+                     reinterpret_cast<const uint8_t*>(info.ptr),
+                     static_cast<size_t>(info.size));
+             },
+             py::arg("uid"), py::arg("recv_bitmap"))
+        .def("on_repair_complete", &sc::Finalizer::on_repair_complete,
+             py::arg("uid"))
+        .def("on_step_boundary",   &sc::Finalizer::on_step_boundary)
+        .def("is_tracked",         &sc::Finalizer::is_tracked, py::arg("uid"))
+        .def("repair_budget_remaining_bytes",
+             &sc::Finalizer::repair_budget_remaining_bytes)
+        .def_property_readonly("stats", &sc::Finalizer::stats);
+
+    // ---- RQMonitor ---------------------------------------------------
+    py::class_<sc::RQMonitorConfig>(clear_mod, "RQMonitorConfig")
+        .def(py::init([](int32_t low, int32_t target, int32_t init) {
+                 sc::RQMonitorConfig c;
+                 c.low_watermark   = low;
+                 c.refill_target   = target;
+                 c.initial_credits = init;
+                 return c;
+             }),
+             py::arg("low_watermark")   = 16,
+             py::arg("refill_target")   = 64,
+             py::arg("initial_credits") = 64)
+        .def_readwrite("low_watermark",   &sc::RQMonitorConfig::low_watermark)
+        .def_readwrite("refill_target",   &sc::RQMonitorConfig::refill_target)
+        .def_readwrite("initial_credits", &sc::RQMonitorConfig::initial_credits);
+
+    py::class_<sc::RQMonitorStats>(clear_mod, "RQMonitorStats")
+        .def_readonly("low_watermark_events",
+                      &sc::RQMonitorStats::low_watermark_events)
+        .def_readonly("replenish_events", &sc::RQMonitorStats::replenish_events)
+        .def_readonly("total_consumed",   &sc::RQMonitorStats::total_consumed)
+        .def_readonly("total_posted",     &sc::RQMonitorStats::total_posted);
+
+    py::class_<sc::RQMonitor>(clear_mod, "RQMonitor")
+        .def(py::init<sc::RQMonitorConfig>(),
+             py::arg("cfg") = sc::RQMonitorConfig{})
+        .def("on_low_watermark",
+             [](sc::RQMonitor& self, py::function cb) {
+                 self.on_low_watermark(
+                     [cb = std::move(cb)](uint16_t peer, int32_t credits) {
+                         py::gil_scoped_acquire gil;
+                         cb(peer, credits);
+                     });
+             })
+        .def("on_replenish_request",
+             [](sc::RQMonitor& self, py::function cb) {
+                 self.on_replenish_request(
+                     [cb = std::move(cb)](uint16_t peer, int32_t k) {
+                         py::gil_scoped_acquire gil;
+                         cb(peer, k);
+                     });
+             })
+        .def("register_peer",   &sc::RQMonitor::register_peer,
+             py::arg("peer_edge"))
+        .def("record_consumed", &sc::RQMonitor::record_consumed,
+             py::arg("peer_edge"), py::arg("n") = 1)
+        .def("record_posted",   &sc::RQMonitor::record_posted,
+             py::arg("peer_edge"), py::arg("n"))
+        .def("credits", &sc::RQMonitor::credits, py::arg("peer_edge"))
+        .def("is_low",  &sc::RQMonitor::is_low,  py::arg("peer_edge"))
+        .def_property_readonly("stats", &sc::RQMonitor::stats);
+
+    // ---- witness_codec encode/decode (for Python shadow oracle) -----
+    clear_mod.def(
+        "encode_witness",
+        [](py::buffer bitmap, uint32_t n_chunks) {
+            py::buffer_info info = bitmap.request(/*writable=*/false);
+            if (info.itemsize != 1 || info.ndim != 1) {
+                throw std::runtime_error(
+                    "encode_witness: bitmap must be 1-D byte buffer");
+            }
+            auto r = sc::encode_witness(
+                reinterpret_cast<const uint8_t*>(info.ptr),
+                static_cast<size_t>(info.size), n_chunks);
+            py::dict d;
+            d["encoding"]   = r.encoding;
+            d["body"]       = py::bytes(
+                reinterpret_cast<const char*>(r.body.data()), r.body.size());
+            d["recv_count"] = r.recv_count;
+            return d;
+        },
+        py::arg("bitmap"), py::arg("n_chunks"));
+
+    clear_mod.def(
+        "decode_witness",
+        [](sc::WitnessEncoding encoding, py::buffer body, uint32_t n_chunks) {
+            py::buffer_info info = body.request(/*writable=*/false);
+            if (info.itemsize != 1 || info.ndim != 1) {
+                throw std::runtime_error(
+                    "decode_witness: body must be 1-D byte buffer");
+            }
+            std::vector<uint8_t> out;
+            uint32_t recv_count = 0;
+            bool ok = sc::decode_witness(
+                encoding,
+                reinterpret_cast<const uint8_t*>(info.ptr),
+                static_cast<size_t>(info.size),
+                n_chunks, out, recv_count);
+            py::dict d;
+            d["ok"]         = ok;
+            d["bitmap"]     = py::bytes(
+                reinterpret_cast<const char*>(out.data()), out.size());
+            d["recv_count"] = recv_count;
+            return d;
+        },
+        py::arg("encoding"), py::arg("body"), py::arg("n_chunks"));
 }

@@ -10,6 +10,7 @@ pybind11_add_module(_semirdma_ext MODULE
 
 target_link_libraries(_semirdma_ext PRIVATE
     semirdma_transport
+    clear_transport
 )
 
 # setup.py (invoked by pip install -e .) places the compiled .so next to
