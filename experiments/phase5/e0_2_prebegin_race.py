@@ -58,29 +58,75 @@ def _env() -> tuple[str, int]:
     return dev, gid
 
 
-def _wrap_send_begin_with_delay(transport, rng_lock, rng,
-                                 delay_ms_min, delay_ms_max):
-    """Replace transport.cp.send_begin with a wrapper that sleeps a random
-    1-10 ms before delegating. Returns the original for restore."""
-    orig = transport.cp.send_begin
+def _send_uc_first_then_begin(state, *, uid: int, bucket_seq: int,
+                                base_offset: int, nbytes: int,
+                                chunk_bytes: int, delay_s: float,
+                                drain_timeout_ms: int = 5000):
+    """Custom send orchestration that inverts the BEGIN/UC order.
 
-    def delayed_send_begin(*args, **kwargs):
-        with rng_lock:
-            d = rng.uniform(delay_ms_min, delay_ms_max)
-        time.sleep(d / 1000.0)
-        return orig(*args, **kwargs)
+    Standard ``clear_send_bucket`` does: acquire → BEGIN → UC writes →
+    drain SQ → wait FINALIZE. Here we acquire → UC writes → drain SQ →
+    sleep → BEGIN → wait FINALIZE, so UC chunks land in the peer's rx
+    buffer BEFORE the peer's lease is installed via on_begin_rx.
 
-    transport.cp.send_begin = delayed_send_begin
-    return orig
+    Returns (slot, gen, finalize_decision_or_None, finalize_received).
+    """
+    from semirdma._semirdma_ext.clear import BeginPayload, encode_imm
+    from semirdma.clear.protocol import drain_send_completions
+    from semirdma._semirdma_ext.clear import Policy
+
+    transport = state.tx
+    n_chunks = (nbytes + chunk_bytes - 1) // chunk_bytes
+
+    r = transport.sender_leases.acquire(uid)
+    if not r["ok"]:
+        raise RuntimeError("sender_leases.acquire failed")
+    slot, gen = r["slot_id"], r["gen"]
+
+    # 1. Post UC writes FIRST.
+    for i in range(n_chunks):
+        offset = i * chunk_bytes
+        length = min(chunk_bytes, nbytes - offset)
+        imm = encode_imm(slot_id=slot, chunk_idx=i, gen=gen)
+        transport.engine.post_write(
+            wr_id=i,
+            local_offset=base_offset + offset,
+            remote_offset=base_offset + offset,
+            length=length,
+            remote=transport._peer_data_mr,
+            with_imm=True,
+            imm_data=imm,
+        )
+    drain_send_completions(transport.engine, expected=n_chunks,
+                           timeout_ms=drain_timeout_ms)
+
+    # 2. Sleep — UC writes are now sitting in peer's rx CQ unprocessed.
+    time.sleep(delay_s)
+
+    # 3. Send BEGIN late.
+    bp = BeginPayload(
+        slot_id=slot, gen=gen, phase_id=0, policy=Policy.MASK_FIRST,
+        peer_edge=0, step_seq=state.step_seq, bucket_seq=bucket_seq,
+        n_chunks=n_chunks, deadline_us=200_000,
+        chunk_bytes=chunk_bytes, checksum_seed=0,
+    )
+    if not transport.cp.send_begin(uid=uid, payload=bp):
+        raise RuntimeError("control_plane.send_begin failed")
+
+    # 4. Wait for FINALIZE via the existing sync object.
+    sync = state._get_sync(uid)
+    received = sync.finalize_event.wait(timeout=drain_timeout_ms / 1000.0)
+    return slot, gen, sync.finalize_decision, received
 
 
 def run_cell(*, n_buckets: int, buckets_per_step: int,
              n_floats: int, chunk_bytes: int,
              delay_ms_min: float, delay_ms_max: float,
              seed: int) -> CellResult:
-    from semirdma.clear.hook import (
-        ClearHookState, _run_clear_bucket, step_advance,
-    )
+    from semirdma.clear.hook import ClearHookState, step_advance
+    from semirdma.clear.protocol import clear_recv_bucket
+    from semirdma.clear.runtime import apply_finalize as py_apply_finalize
+    from semirdma.clear.manifest import uid_hash
     from semirdma.clear.transport import ClearTransportConfig
 
     dev, gid = _env()
@@ -95,11 +141,6 @@ def run_cell(*, n_buckets: int, buckets_per_step: int,
 
     delay_rng = random.Random(seed)
     delay_lock = threading.Lock()
-    _wrap_send_begin_with_delay(a.tx, delay_lock, delay_rng,
-                                delay_ms_min, delay_ms_max)
-    _wrap_send_begin_with_delay(b.tx, delay_lock, delay_rng,
-                                delay_ms_min, delay_ms_max)
-
     nbytes = n_floats * 4
     n_chunks_per_bucket = (nbytes + chunk_bytes - 1) // chunk_bytes
     grad_rng = np.random.default_rng(seed=seed ^ 0xC1EA9)
@@ -108,40 +149,120 @@ def run_cell(*, n_buckets: int, buckets_per_step: int,
     iter_ms_samples: list[float] = []
     t0 = time.monotonic()
 
+    def one_rank(state: "ClearHookState", *, bucket_bytes: bytes,
+                 uid_send: int, uid_recv: int, bucket_seq: int,
+                 delay_s: float, base_offset: int, nbytes: int,
+                 holder: dict, label: str, errs: list):
+        try:
+            # Top up rx recv WRs.
+            if state.rx.engine.outstanding_recv() < 2 * n_chunks_per_bucket:
+                state.rx.engine.post_recv_batch(
+                    n_chunks_per_bucket * 4, base_wr_id=0xC0DE_0000)
+
+            # Stage local bytes.
+            tx_buf = np.frombuffer(state.tx.engine.local_buf_view(), dtype=np.uint8)
+            tx_buf[base_offset : base_offset + nbytes] = np.frombuffer(
+                bucket_bytes, dtype=np.uint8)
+
+            send_err: list = []
+            recv_err: list = []
+            recv_holder: list = []
+            peer_slice_holder: list = []
+
+            def send_thread():
+                try:
+                    _send_uc_first_then_begin(
+                        state, uid=uid_send, bucket_seq=bucket_seq,
+                        base_offset=base_offset, nbytes=nbytes,
+                        chunk_bytes=chunk_bytes, delay_s=delay_s,
+                    )
+                except Exception as e:
+                    send_err.append(e)
+
+            def recv_thread():
+                try:
+                    sync = state._get_sync(uid_recv)
+                    if not sync.begin_event.wait(timeout=15.0):
+                        raise TimeoutError(f"BEGIN not received uid={uid_recv:x}")
+                    rr = clear_recv_bucket(
+                        state.rx, uid=uid_recv,
+                        slot=sync.begin_slot, gen=sync.begin_gen,
+                        n_chunks=n_chunks_per_bucket,
+                        base_offset=base_offset, chunk_bytes=chunk_bytes,
+                        ratio=1.0, timeout_ms=2000,
+                    )
+                    rx_view = np.frombuffer(state.rx.engine.local_buf_view(),
+                                            dtype=np.uint8)
+                    peer_slice_holder.append(bytearray(
+                        rx_view[base_offset : base_offset + nbytes].tobytes()))
+                    recv_holder.append(rr)
+                except Exception as e:
+                    recv_err.append(e)
+
+            st = threading.Thread(target=send_thread)
+            rt = threading.Thread(target=recv_thread)
+            st.start(); rt.start()
+            st.join(timeout=20); rt.join(timeout=20)
+            if send_err: raise send_err[0]
+            if recv_err: raise recv_err[0]
+
+            rr = recv_holder[0]
+            peer_slice = peer_slice_holder[0]
+            py_apply_finalize(rr.decision, mask_bitmap=rr.recv_bitmap,
+                              n_chunks=n_chunks_per_bucket,
+                              chunk_bytes=chunk_bytes, flat=peer_slice)
+            local_arr = np.frombuffer(bucket_bytes, dtype=np.uint8)
+            peer_arr = np.frombuffer(bytes(peer_slice), dtype=np.uint8)
+            a32 = local_arr.view(np.float32)
+            b32 = peer_arr.view(np.float32)
+            avg = (a32 + b32) / float(state.world_size)
+            holder[label] = avg.astype(np.float32).tobytes()
+            state._drop_sync(uid_send)
+            state._drop_sync(uid_recv)
+        except Exception as e:
+            errs.append((label, e))
+
     try:
         for i in range(n_buckets):
             g_a = grad_rng.standard_normal(n_floats).astype(np.float32)
             g_b = grad_rng.standard_normal(n_floats).astype(np.float32)
             expected = ((g_a + g_b) / 2).astype(np.float32)
 
-            out_holder: dict = {}
+            with delay_lock:
+                d_a = delay_rng.uniform(delay_ms_min, delay_ms_max) / 1000.0
+                d_b = delay_rng.uniform(delay_ms_min, delay_ms_max) / 1000.0
+
+            # Compute uids for this bucket — match _run_clear_bucket's scheme.
+            bs = i % buckets_per_step
+            uid_a_send = uid_hash(rank_pair=a._rank_pair, step_seq=a.step_seq,
+                                  bucket_seq=bs, phase_id=0, peer_edge=0)
+            uid_a_recv = uid_hash(rank_pair=a._rank_pair, step_seq=a.step_seq,
+                                  bucket_seq=bs, phase_id=0, peer_edge=1)
+            uid_b_send = uid_a_recv  # rank 1 sends edge=1
+            uid_b_recv = uid_a_send  # rank 1 receives edge=0
+
+            holder: dict = {}
             errs: list = []
-
-            def rank_thread(state, bucket_bytes, label):
-                try:
-                    out_holder[label] = _run_clear_bucket(
-                        state, bucket_bytes=bucket_bytes,
-                        bucket_seq=i % buckets_per_step,
-                        chunk_bytes=chunk_bytes, ratio=1.0,
-                        timeout_ms=2000, drain_timeout_ms=5000,
-                    )
-                except Exception as e:
-                    errs.append((label, e))
-
             t_iter = time.monotonic()
-            ta = threading.Thread(target=rank_thread,
-                                  args=(a, g_a.tobytes(), "a"))
-            tb = threading.Thread(target=rank_thread,
-                                  args=(b, g_b.tobytes(), "b"))
+            ta = threading.Thread(target=one_rank, kwargs=dict(
+                state=a, bucket_bytes=g_a.tobytes(),
+                uid_send=uid_a_send, uid_recv=uid_a_recv,
+                bucket_seq=bs, delay_s=d_a, base_offset=0, nbytes=nbytes,
+                holder=holder, label="a", errs=errs))
+            tb = threading.Thread(target=one_rank, kwargs=dict(
+                state=b, bucket_bytes=g_b.tobytes(),
+                uid_send=uid_b_send, uid_recv=uid_b_recv,
+                bucket_seq=bs, delay_s=d_b, base_offset=0, nbytes=nbytes,
+                holder=holder, label="b", errs=errs))
             ta.start(); tb.start()
-            ta.join(timeout=15); tb.join(timeout=15)
+            ta.join(timeout=30); tb.join(timeout=30)
             iter_ms_samples.append((time.monotonic() - t_iter) * 1000.0)
 
             if errs:
                 raise RuntimeError(f"bucket {i} thread error: {errs}")
 
-            avg_a = np.frombuffer(out_holder["a"], dtype=np.float32)
-            avg_b = np.frombuffer(out_holder["b"], dtype=np.float32)
+            avg_a = np.frombuffer(holder["a"], dtype=np.float32)
+            avg_b = np.frombuffer(holder["b"], dtype=np.float32)
             if not np.array_equal(avg_a, expected):
                 n_mismatches += 1
             if not np.array_equal(avg_b, expected):
