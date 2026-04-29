@@ -52,9 +52,10 @@ endif()
 # Default OFF — Phase 2 build path is unaffected when the option is not passed.
 option(SEMIRDMA_BUILD_BINDINGS "Build pybind11 Python bindings (requires pybind11)" OFF)
 if(SEMIRDMA_BUILD_BINDINGS)
-    # Produce position-independent code so the static transport lib can be
-    # linked into the _semirdma_ext shared module.
+    # Produce position-independent code so the static transport libs can
+    # be linked into the _semirdma_ext shared module.
     set_property(TARGET semirdma_transport PROPERTY POSITION_INDEPENDENT_CODE ON)
+    set_property(TARGET clear_transport    PROPERTY POSITION_INDEPENDENT_CODE ON)
     find_package(pybind11 CONFIG QUIET)
     if(NOT pybind11_FOUND)
         message(FATAL_ERROR
