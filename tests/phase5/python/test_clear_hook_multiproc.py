@@ -69,12 +69,47 @@ def _worker(rank: int, port_base: int, dev: str, gid: int,
         else:
             grad = np.linspace(2.0, -3.0, n_floats, dtype=np.float32)
 
+        # Instrument bg callback firings so we can see what arrived.
+        diag = {"begin_rx": 0, "finalize_tx": 0, "retire_tx": 0}
+        orig_on_begin = state.rx.cp.on_begin
+        orig_on_finalize = state.tx.cp.on_finalize
+        orig_on_retire = state.tx.cp.on_retire
+        # Re-wrap each callback by reading the current ones from hook.py
+        # — we can't intercept the C++-side ones, so just count via finalize_event.
+        # Easier: poll counters from the lease tables.
+
         try:
             avg = _run_clear_bucket(
                 state, bucket_bytes=grad.tobytes(), bucket_seq=0,
                 chunk_bytes=4096, ratio=1.0,
                 timeout_ms=2000, drain_timeout_ms=5000,
             )
+        except Exception as e:
+            # Capture transport state at failure.
+            try:
+                rx_recv_outstanding = state.rx.engine.outstanding_recv()
+                tx_recv_outstanding = state.tx.engine.outstanding_recv()
+                cp_rx_stats = dict(state.rx.cp.stats())
+                cp_tx_stats = dict(state.tx.cp.stats())
+                rx_lease_pressure = state.rx.receiver_leases.size()
+                tx_lease_pressure = state.tx.sender_leases.pressure().in_use
+                sync_keys = list(state._sync.keys())
+                sync_states = {hex(k): {
+                    "begin_set": s.begin_event.is_set(),
+                    "finalize_set": s.finalize_event.is_set(),
+                } for k, s in state._sync.items()}
+                diag = {
+                    "rx_recv_outstanding": rx_recv_outstanding,
+                    "tx_recv_outstanding": tx_recv_outstanding,
+                    "cp_rx_stats": cp_rx_stats,
+                    "cp_tx_stats": cp_tx_stats,
+                    "rx_lease_size": rx_lease_pressure,
+                    "tx_lease_in_use": tx_lease_pressure,
+                    "sync_states": sync_states,
+                }
+            except Exception as ee:
+                diag = {"diag_err": str(ee)}
+            raise RuntimeError(f"{e}\nDIAG: {diag}") from e
         finally:
             state.shutdown()
 
