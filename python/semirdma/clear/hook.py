@@ -116,6 +116,85 @@ class ClearHookState:
     # ------------------------------------------------------------------
 
     @classmethod
+    def for_rank(
+        cls,
+        *,
+        rank: int,
+        world_size: int,
+        peer_host: str,
+        port: int,
+        cfg: ClearTransportConfig,
+        connect_timeout_s: float = 30.0,
+    ) -> "ClearHookState":
+        """Build one rank's hook state via TCP bootstrap with the peer.
+
+        World size 2 only (matching ``for_in_process_pair`` scope). The
+        bootstrap uses **4 sequential TCP ports** starting at ``port``:
+
+          - port+0: my.tx.data ↔ peer.rx.data
+          - port+1: my.tx.cp   ↔ peer.rx.cp   (control plane MR is unused)
+          - port+2: my.rx.data ↔ peer.tx.data
+          - port+3: my.rx.cp   ↔ peer.tx.cp
+
+        Rank 0 listens on each port; rank 1 connects. Both sides bring
+        up afterwards, with the rx data plane pre-posting recv WRs to
+        avoid the symmetric UC bring-up race that bit ``for_in_process_pair``.
+        """
+        if world_size != 2:
+            raise NotImplementedError(
+                f"ClearHookState.for_rank: world_size=2 only "
+                f"(got {world_size}); ring allreduce is future work")
+        if rank not in (0, 1):
+            raise ValueError(f"rank must be 0 or 1, got {rank}")
+
+        from semirdma._bootstrap import exchange_qp_info
+
+        is_server = (rank == 0)
+
+        tx = ClearTransport(cfg)
+        rx = ClearTransport(cfg)
+
+        # tx.data ↔ peer.rx.data
+        peer_rx_data_qp, peer_rx_data_mr = exchange_qp_info(
+            is_server=is_server, host=peer_host, port=port + 0,
+            local_qp=tx.data_qp_info, local_mr=tx.data_mr_info,
+            connect_timeout_s=connect_timeout_s,
+        )
+        # tx.cp ↔ peer.rx.cp (mr field unused on RC control plane bring_up)
+        peer_rx_cp_qp, _ = exchange_qp_info(
+            is_server=is_server, host=peer_host, port=port + 1,
+            local_qp=tx.control_qp_info, local_mr=tx.control_mr_info,
+            connect_timeout_s=connect_timeout_s,
+        )
+        # rx.data ↔ peer.tx.data
+        peer_tx_data_qp, peer_tx_data_mr = exchange_qp_info(
+            is_server=is_server, host=peer_host, port=port + 2,
+            local_qp=rx.data_qp_info, local_mr=rx.data_mr_info,
+            connect_timeout_s=connect_timeout_s,
+        )
+        # rx.cp ↔ peer.tx.cp
+        peer_tx_cp_qp, _ = exchange_qp_info(
+            is_server=is_server, host=peer_host, port=port + 3,
+            local_qp=rx.control_qp_info, local_mr=rx.control_mr_info,
+            connect_timeout_s=connect_timeout_s,
+        )
+
+        # Pre-post a deep recv-WR pool on rx so peer's first UC writes
+        # never hit an empty RQ during the post-handshake race window.
+        rx_pool = max(0, cfg.rq_depth - 16)
+
+        tx.bring_up_data(peer_rx_data_qp, peer_rx_data_mr)
+        tx.bring_up_control(peer_rx_cp_qp)
+        rx.bring_up_data(peer_tx_data_qp, peer_tx_data_mr,
+                         pre_post_recv=rx_pool)
+        rx.bring_up_control(peer_tx_cp_qp)
+
+        state = cls(rank=rank, world_size=world_size, cfg=cfg, tx=tx, rx=rx)
+        state._rank_pair = canonical_rank_pair(0, 1)
+        state._wire_callbacks_and_start_poller()
+        return state
+
+    @classmethod
     def for_in_process_pair(
         cls,
         cfg: ClearTransportConfig,
