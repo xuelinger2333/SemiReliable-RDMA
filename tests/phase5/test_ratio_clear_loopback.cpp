@@ -45,7 +45,7 @@ protected:
 
 constexpr size_t kChunkBytes  = 256;
 constexpr size_t kBufBytes    = 4 * 1024 * 1024;  // 4 MiB
-constexpr int    kSqDepth     = 32;
+constexpr int    kSqDepth     = 256;
 constexpr int    kRqDepth     = 4096;
 
 // Build sender + receiver UCQPEngines and bring them up against each other.
