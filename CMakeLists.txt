@@ -25,6 +25,7 @@ target_link_libraries(semirdma_transport PUBLIC ${IBVERBS_LIB} Threads::Threads)
 # existing flat / layer_aware paths.
 add_library(clear_transport STATIC
     src/transport/clear/witness_codec.cpp
+    src/transport/clear/lease_table.cpp
 )
 target_include_directories(clear_transport PUBLIC src/)
 target_link_libraries(clear_transport PUBLIC semirdma_transport)
