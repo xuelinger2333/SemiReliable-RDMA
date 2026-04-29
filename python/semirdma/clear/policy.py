@@ -57,6 +57,10 @@ _DEFAULT_KIND_TABLE: Dict[str, Policy] = {
     "norm":         Policy.REPAIR_FIRST,   # catch-all for *Norm modules
     "lm_head":      Policy.REPAIR_FIRST,
     "classifier":   Policy.REPAIR_FIRST,
+    # Common torch abbreviations (e.g. "layer1.0.bn1.weight").
+    "bn":           Policy.REPAIR_FIRST,
+    "ln":           Policy.REPAIR_FIRST,
+    "gn":           Policy.REPAIR_FIRST,
     # Conv / Linear default to mask-first.
     "conv":         Policy.MASK_FIRST,
     "linear":       Policy.MASK_FIRST,
