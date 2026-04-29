@@ -95,6 +95,11 @@ class ClearHookState:
     # Cache of canonical rank_pair (depends only on rank + peer_rank).
     _rank_pair: int = 0
 
+    # Optional per-call timing log. When non-None, ``_run_clear_bucket``
+    # appends one dict per invocation with stage-by-stage ms. Off by
+    # default; trainer enables by setting state.perf_log = [].
+    perf_log: Optional[list] = None
+
     def _get_sync(self, uid: int) -> _PerUidSync:
         with self._sync_lock:
             s = self._sync.get(uid)
@@ -365,10 +370,13 @@ def _run_clear_bucket(
     recv threads on tx / rx transports, awaits both, computes
     (local + peer_after_mask) / world_size, returns as bytes.
     """
+    import time as _time
     chunk_bytes = chunk_bytes or state.cfg.chunk_bytes
     policy = policy or state.default_policy
     nbytes = len(bucket_bytes)
     n_chunks = (nbytes + chunk_bytes - 1) // chunk_bytes
+    _t_enter = _time.perf_counter()
+    _t_send = _t_recv = _t_finalize = _t_avg = 0.0
 
     # Recv WRs were pre-posted on each rx engine during bring_up_data
     # (pre_post_recv pool sized at cfg.rq_depth - 16). Top up if the pool
@@ -408,7 +416,13 @@ def _run_clear_bucket(
     recv_decision_holder: list = []
     recv_bitmap_holder: list = []
 
+    _send_started = [0.0]
+    _send_done = [0.0]
+    _recv_started = [0.0]
+    _recv_done = [0.0]
+
     def send_thread():
+        _send_started[0] = _time.perf_counter()
         try:
             sync = state._get_sync(uid_we_send)
             send_res = clear_send_bucket(
@@ -430,10 +444,13 @@ def _run_clear_bucket(
                     RuntimeError(f"FINALIZE not received for uid={uid_we_send:x}"))
         except Exception as e:
             send_err.append(e)
+        finally:
+            _send_done[0] = _time.perf_counter()
 
     peer_slice_holder: list = []  # snapshot of peer bytes captured atomically
 
     def recv_thread():
+        _recv_started[0] = _time.perf_counter()
         try:
             sync = state._get_sync(uid_we_recv)
             # Wait for BEGIN to install the lease.
@@ -460,11 +477,15 @@ def _run_clear_bucket(
             recv_bitmap_holder.append(recv_res.recv_bitmap)
         except Exception as e:
             recv_err.append(e)
+        finally:
+            _recv_done[0] = _time.perf_counter()
 
+    _t_threads_start = _time.perf_counter()
     st = threading.Thread(target=send_thread, name="clear_tx")
     rt = threading.Thread(target=recv_thread, name="clear_rx")
     st.start(); rt.start()
     st.join(); rt.join()
+    _t_threads_end = _time.perf_counter()
 
     if send_err: raise send_err[0]
     if recv_err: raise recv_err[0]
@@ -475,6 +496,7 @@ def _run_clear_bucket(
     # ---- Apply mask to peer bytes (snapshot captured inside recv_thread
     # to avoid the race where peer's NEXT bucket overwrites this offset
     # before we read it).
+    _t_fin_start = _time.perf_counter()
     peer_slice = peer_slice_holder[0]
     py_apply_finalize(
         decision,
@@ -482,8 +504,10 @@ def _run_clear_bucket(
         n_chunks=n_chunks, chunk_bytes=chunk_bytes,
         flat=peer_slice,
     )
+    _t_fin_end = _time.perf_counter()
 
     # ---- Average locally ---------------------------------------------
+    _t_avg_start = _time.perf_counter()
     local_arr = np.frombuffer(bucket_bytes, dtype=np.uint8)
     peer_arr = np.frombuffer(bytes(peer_slice), dtype=np.uint8)
     # Reinterpret as float32 for arithmetic if size aligns; otherwise
@@ -504,7 +528,24 @@ def _run_clear_bucket(
     # same (step, bucket).
     state._drop_sync(uid_we_send)
     state._drop_sync(uid_we_recv)
+    _t_avg_end = _time.perf_counter()
 
+    if state.perf_log is not None:
+        state.perf_log.append({
+            "step_seq": state.step_seq,
+            "bucket_seq": bucket_seq,
+            "n_chunks": n_chunks,
+            "nbytes": nbytes,
+            "stage_ms": (_t_threads_start - _t_enter) * 1000.0,
+            "threads_ms": (_t_threads_end - _t_threads_start) * 1000.0,
+            "send_ms": (_send_done[0] - _send_started[0]) * 1000.0
+                       if _send_done[0] else 0.0,
+            "recv_ms": (_recv_done[0] - _recv_started[0]) * 1000.0
+                       if _recv_done[0] else 0.0,
+            "finalize_ms": (_t_fin_end - _t_fin_start) * 1000.0,
+            "average_ms": (_t_avg_end - _t_avg_start) * 1000.0,
+            "total_ms": (_t_avg_end - _t_enter) * 1000.0,
+        })
     return out
 
 
@@ -527,9 +568,11 @@ def clear_allreduce_hook(state, bucket):
     Imports torch lazily so this module loads in non-torch environments
     (the W2.3a pure-Python tests run on Windows where torch may be absent).
     """
+    import time as _time
     import torch
     from torch import futures
 
+    _t0 = _time.perf_counter()
     flat = bucket.buffer()
     if flat.device.type != "cpu":
         raise RuntimeError(
@@ -541,7 +584,9 @@ def clear_allreduce_hook(state, bucket):
     bucket_id = state.manifest.observe(_signature_from_bucket(bucket))
 
     with state._bucket_lock:
+        _t_to_bytes_start = _time.perf_counter()
         bucket_bytes = bytes(flat.numpy().tobytes())
+        _t_to_bytes_end = _time.perf_counter()
         avg_bytes = _run_clear_bucket(
             state,
             bucket_bytes=bucket_bytes,
@@ -552,9 +597,18 @@ def clear_allreduce_hook(state, bucket):
         # is exactly per-step boundary; with smaller bucket_cap_mb it
         # advances more often than DDP "steps" but uids stay unique.
         step_advance(state)
+    _t_from_start = _time.perf_counter()
     avg_arr = np.frombuffer(avg_bytes, dtype=np.uint8).view(
         flat.numpy().dtype).reshape(flat.shape).copy()
     out_t = torch.from_numpy(avg_arr)
+    _t_from_end = _time.perf_counter()
+
+    if state.perf_log is not None and state.perf_log:
+        # Annotate the most recent _run_clear_bucket entry with the
+        # outer-hook stages.
+        state.perf_log[-1]["to_bytes_ms"] = (_t_to_bytes_end - _t_to_bytes_start) * 1000.0
+        state.perf_log[-1]["from_numpy_ms"] = (_t_from_end - _t_from_start) * 1000.0
+        state.perf_log[-1]["hook_total_ms"] = (_t_from_end - _t0) * 1000.0
 
     fut: "futures.Future[torch.Tensor]" = futures.Future()
     fut.set_result(out_t)

@@ -309,6 +309,12 @@ def _train(cfg: DictConfig, rank: int, world_size: int) -> None:
     ddp_model = DDP(model, bucket_cap_mb=bucket_cap_mb)
     _hook_state = _install_hook(ddp_model, cfg, rank)  # keep-alive
 
+    # Enable per-bucket timing log for clear_t1 transport. The hook checks
+    # state.perf_log: if non-None it appends one dict per bucket exchange
+    # with stage-by-stage ms breakdowns.
+    if cfg.transport == "clear_t1" and _hook_state is not None and rank == 0:
+        _hook_state.perf_log = []
+
     opt = torch.optim.SGD(
         ddp_model.parameters(),
         lr=cfg.optim.lr,
@@ -379,6 +385,23 @@ def _train(cfg: DictConfig, rank: int, world_size: int) -> None:
         loss_fh.close()
         iter_fh.close()
         grad_fh.close()
+
+        # Dump CLEAR per-bucket timing log if enabled.
+        if (cfg.transport == "clear_t1" and _hook_state is not None and
+            getattr(_hook_state, "perf_log", None)):
+            perf = _hook_state.perf_log
+            keys = ["step_seq", "bucket_seq", "n_chunks", "nbytes",
+                    "to_bytes_ms", "stage_ms", "threads_ms",
+                    "send_ms", "recv_ms", "finalize_ms",
+                    "average_ms", "from_numpy_ms",
+                    "total_ms", "hook_total_ms"]
+            with open(out_dir / "clear_perf.csv", "w", newline="") as fh:
+                w = csv.writer(fh)
+                w.writerow(keys)
+                for r in perf:
+                    w.writerow([f"{r.get(k, ''):.3f}" if isinstance(r.get(k), float)
+                                else r.get(k, "") for k in keys])
+            logger.info("wrote clear_perf.csv with %d rows", len(perf))
 
 
 @hydra.main(version_base=None, config_path="../configs", config_name="stage_a_baseline")
