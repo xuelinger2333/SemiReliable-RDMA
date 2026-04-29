@@ -29,8 +29,10 @@ transport_cfg:
   # but E1's pass criterion is "+5% of phase4_flat iter_ms" — so the
   # chunk_bytes must match the comparator.
   chunk_bytes: 16384
-  sq_depth: 256
-  rq_depth: 4096
+  # ResNet-18 single-bucket = ~2900 chunks at chunk_bytes=16384.
+  # Need both SQ and RQ deep enough to hold one bucket's worth of WRs.
+  sq_depth: 4096
+  rq_depth: 8192
   cp_recv_slots: 64
   cp_send_slots: 16
   repair_budget_bytes_per_step: 0   # T1 = mask-only
