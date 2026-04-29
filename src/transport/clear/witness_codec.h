@@ -77,4 +77,12 @@ inline void bitmap_set(uint8_t* bitmap, uint32_t bit) {
 
 uint32_t bitmap_popcount(const uint8_t* bitmap, uint32_t n_bits);
 
+// Walk a recv_bitmap and emit a sorted list of (start, length) runs where
+// the bit is *unset* (i.e. chunks that did not arrive). Used by the
+// witness encoder for RANGE_MISSING and by the finalizer to produce
+// REPAIR_REQ ranges.
+std::vector<Range> compute_missing_ranges(const uint8_t* bitmap,
+                                          size_t bitmap_bytes,
+                                          uint32_t n_chunks);
+
 }  // namespace semirdma::clear

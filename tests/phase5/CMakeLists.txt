@@ -4,7 +4,7 @@
 # subsequent W1.x increments (lease_table, control_plane, finalizer).
 
 foreach(test_name test_witness_codec test_lease_table test_control_plane_codec
-                  test_imm_codec)
+                  test_imm_codec test_finalizer test_rq_monitor)
     add_executable(${test_name} ${test_name}.cpp)
     target_link_libraries(${test_name}
         PRIVATE clear_transport GTest::gtest_main)

@@ -14,8 +14,9 @@ size_t bitmap_byte_count(uint32_t n_bits) {
     return (static_cast<size_t>(n_bits) + 7u) >> 3;
 }
 
-// Walk the bitmap and emit a list of (start, length) runs of *absent* chunks.
-// Used both for size estimation and for actual RANGE_MISSING encoding.
+}  // namespace
+
+// Public: defined in witness_codec.h; reused by finalizer.cpp.
 std::vector<Range> compute_missing_ranges(const uint8_t* bitmap,
                                           size_t bitmap_bytes,
                                           uint32_t n_chunks) {
@@ -34,8 +35,6 @@ std::vector<Range> compute_missing_ranges(const uint8_t* bitmap,
     }
     return ranges;
 }
-
-}  // namespace
 
 uint32_t bitmap_popcount(const uint8_t* bitmap, uint32_t n_bits) {
     uint32_t count = 0;

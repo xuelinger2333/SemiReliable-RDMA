@@ -28,6 +28,8 @@ add_library(clear_transport STATIC
     src/transport/clear/lease_table.cpp
     src/transport/clear/control_plane_codec.cpp
     src/transport/clear/control_plane.cpp
+    src/transport/clear/finalizer.cpp
+    src/transport/clear/rq_monitor.cpp
 )
 target_include_directories(clear_transport PUBLIC src/)
 target_link_libraries(clear_transport PUBLIC semirdma_transport)
