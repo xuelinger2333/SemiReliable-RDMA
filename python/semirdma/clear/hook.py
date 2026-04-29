@@ -316,6 +316,8 @@ def _run_clear_bucket(
         except Exception as e:
             send_err.append(e)
 
+    peer_slice_holder: list = []  # snapshot of peer bytes captured atomically
+
     def recv_thread():
         try:
             sync = state._get_sync(uid_we_recv)
@@ -332,6 +334,13 @@ def _run_clear_bucket(
                 ratio=ratio, timeout_ms=timeout_ms,
                 policy=policy,
             )
+            # Snapshot peer bytes IMMEDIATELY after wait_for_ratio_clear
+            # exits — before peer's next bucket can overwrite this offset.
+            # Reads via the existing rx_buf view (no extra import).
+            local_rx = np.frombuffer(state.rx.engine.local_buf_view(),
+                                     dtype=np.uint8)
+            peer_slice_holder.append(
+                bytearray(local_rx[base_offset : base_offset + nbytes].tobytes()))
             recv_decision_holder.append(recv_res.decision)
             recv_bitmap_holder.append(recv_res.recv_bitmap)
         except Exception as e:
@@ -348,9 +357,10 @@ def _run_clear_bucket(
     decision = recv_decision_holder[0]
     recv_bitmap = recv_bitmap_holder[0]
 
-    # ---- Apply mask to peer bytes (rx data buffer slice) -------------
-    rx_buf = np.frombuffer(state.rx.engine.local_buf_view(), dtype=np.uint8)
-    peer_slice = bytearray(rx_buf[base_offset : base_offset + nbytes].tobytes())
+    # ---- Apply mask to peer bytes (snapshot captured inside recv_thread
+    # to avoid the race where peer's NEXT bucket overwrites this offset
+    # before we read it).
+    peer_slice = peer_slice_holder[0]
     py_apply_finalize(
         decision,
         mask_bitmap=recv_bitmap,
