@@ -19,13 +19,24 @@ add_library(semirdma_transport STATIC
 target_include_directories(semirdma_transport PUBLIC src/)
 target_link_libraries(semirdma_transport PUBLIC ${IBVERBS_LIB} Threads::Threads)
 
-# Phase 2 tests (GTest optional — main lib builds without it)
+# Phase 5 CLEAR transport — additive library; legacy semirdma_transport remains
+# linkable on its own. Built unconditionally; CLEAR code is reachable only when
+# Python config sets transport.mode == "clear", so this is zero-cost for
+# existing flat / layer_aware paths.
+add_library(clear_transport STATIC
+    src/transport/clear/witness_codec.cpp
+)
+target_include_directories(clear_transport PUBLIC src/)
+target_link_libraries(clear_transport PUBLIC semirdma_transport)
+
+# Phase 2 + Phase 5 tests (GTest optional — main lib builds without it)
 find_package(GTest QUIET)
 if(GTest_FOUND)
     enable_testing()
     add_subdirectory(tests/phase2)
+    add_subdirectory(tests/phase5)
 else()
-    message(STATUS "GTest not found — skipping tests/phase2. "
+    message(STATUS "GTest not found — skipping tests/phase2 and tests/phase5. "
                    "Install: sudo apt install libgtest-dev && "
                    "cd /usr/src/googletest && sudo cmake . && sudo make install")
 endif()

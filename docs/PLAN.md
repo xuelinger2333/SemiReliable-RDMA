@@ -1,8 +1,10 @@
 # SemiRDMA 进度 & 下一步计划
 
-> **最后更新：** 2026-04-27
-> **当前阶段：** Phase 4 — PR-A (layer-aware mode) + PR-B (real-NIC validation) 完成；PR-C (per-bucket routing via imm_data bucket_id) 待开始；CloudLab 节点已释放，所有数据归档至 [phase4/raw_data/](phase4/raw_data/)
-> **关键前置文档：** [phase2/phase2-final.md](phase2/phase2-final.md) + [phase3/phase3-final.md](phase3/phase3-final.md) + [phase4/hybrid-dead-end.md](phase4/hybrid-dead-end.md) + [phase4/prb-results.md](phase4/prb-results.md)
+> **最后更新：** 2026-04-29
+> **当前阶段：** **Phase 5 (planning) — CLEAR pivot**。基于 [deep-research-report.md](../deep-research-report.md) 的判断，论文 headline 从「layer-aware loss tolerance」转向 **CLEAR — Completion-Labeled Erasure Attribution for RoCE UC**（见 [phase5/PHASE5_PLAN.md](phase5/PHASE5_PLAN.md)）。Phase 4 PR-A/B/C 工作降级为 scaffolding / ablation。
+> **关键前置文档：** [phase5/PHASE5_PLAN.md](phase5/PHASE5_PLAN.md) + [phase5/clear-design.md](phase5/clear-design.md) + [phase5/code-reorg.md](phase5/code-reorg.md) + [phase5/experiments.md](phase5/experiments.md) + [phase4/hybrid-dead-end.md](phase4/hybrid-dead-end.md) + [phase4/prb-results.md](phase4/prb-results.md)
+>
+> **Phase 5 决策点未确认（user sign-off pending）：** 见 [phase5/PHASE5_PLAN.md §9](phase5/PHASE5_PLAN.md)。下方 Phase 4 章节保留为完成状态参考。
 
 ---
 
