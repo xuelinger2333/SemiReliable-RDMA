@@ -328,7 +328,7 @@ def main() -> int:
 
     # Pass: every bucket completed (no exceptions) and #masked_buckets
     # is consistent with witness_drop_rate (within ±50%).
-    expected_masked = 2 * res.n_witness_dropped
+    expected_masked = res.n_witness_dropped
     pass_completes = True  # if we got here, no bucket hung
     pass_consistent = (
         res.n_mismatches >= int(expected_masked * 0.5) and
