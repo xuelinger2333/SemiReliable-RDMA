@@ -42,6 +42,17 @@ except ImportError:  # pragma: no cover — environment-dependent
     RecvResult = SendResult = None  # type: ignore[assignment]
     chunkset_to_recv_bitmap = clear_recv_bucket = clear_send_bucket = None  # type: ignore[assignment]
 
+try:
+    from .hook import (
+        ClearHookState,
+        _run_clear_bucket,
+        clear_allreduce_hook,
+        step_advance,
+    )
+except ImportError:  # pragma: no cover — environment-dependent
+    ClearHookState = None  # type: ignore[assignment]
+    _run_clear_bucket = clear_allreduce_hook = step_advance = None  # type: ignore[assignment]
+
 __all__ = [
     "BucketManifest",
     "ClearTransport",
