@@ -1,0 +1,40 @@
+# Phase 5 E1 — flat-path regression
+#
+# Reuses Stage A train_cifar10.py harness; overrides transport_cfg for
+# CLEAR (different field set than Phase 4 TransportConfig — see
+# ClearTransportConfig in python/semirdma/clear/transport.py).
+#
+# Override from CLI, e.g.:
+#   python experiments/stage_a/train_cifar10.py \
+#       --config-name phase5_e1 transport=clear_t1 loss_rate=0.0 seed=42
+
+defaults:
+  - stage_a_baseline   # inherit base settings
+  - _self_
+
+# CLEAR transports use ClearTransportConfig field names. The CLEAR
+# hook layer reads this dict via cfg.transport_cfg.
+transport: clear_t1
+steps: 500
+warmup_steps: 50
+bucket_cap_mb: 512   # E1: effectively 1 bucket per step
+
+transport_cfg:
+  dev_name: mlx5_2
+  gid_index: 1
+  # ResNet-18 + CIFAR-10 = ~47 MB single-bucket; 64 MiB MR fits with margin.
+  buffer_bytes: 67108864
+  # chunk_bytes matches Phase 4 phase4_flat for apples-to-apples iter_ms
+  # comparison. The Phase 5 plan §3 pins chunk_bytes=4096 globally for E2+,
+  # but E1's pass criterion is "+5% of phase4_flat iter_ms" — so the
+  # chunk_bytes must match the comparator.
+  chunk_bytes: 16384
+  sq_depth: 256
+  rq_depth: 4096
+  cp_recv_slots: 64
+  cp_send_slots: 16
+  repair_budget_bytes_per_step: 0   # T1 = mask-only
+
+hydra:
+  run:
+    dir: experiments/results/phase5/e1/${now:%Y-%m-%d}/${now:%H-%M-%S}_${transport}_loss${loss_rate}_seed${seed}

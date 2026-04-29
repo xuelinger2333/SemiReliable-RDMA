@@ -243,6 +243,37 @@ def _install_hook(ddp_model: DDP, cfg: DictConfig, rank: int) -> object:
         ddp_model.register_comm_hook(state, layer_aware_dispatcher_hook)
         return state
 
+    if cfg.transport == "clear_t1":
+        # Phase 5 CLEAR · T1 scope (witnessed erasure, mask-only finalize,
+        # no repair budget). Production bring-up via for_rank TCP bootstrap.
+        from semirdma.clear import (
+            ClearHookState,
+            ClearTransportConfig,
+            clear_allreduce_hook,
+        )
+        ccfg = ClearTransportConfig(
+            dev_name=cfg.transport_cfg.dev_name,
+            gid_index=cfg.transport_cfg.get("gid_index", 1),
+            buffer_bytes=cfg.transport_cfg.buffer_bytes,
+            chunk_bytes=cfg.transport_cfg.chunk_bytes,
+            sq_depth=cfg.transport_cfg.sq_depth,
+            rq_depth=cfg.transport_cfg.rq_depth,
+            cp_recv_slots=cfg.transport_cfg.get("cp_recv_slots", 64),
+            cp_send_slots=cfg.transport_cfg.get("cp_send_slots", 16),
+            repair_budget_bytes_per_step=cfg.transport_cfg.get(
+                "repair_budget_bytes_per_step", 0),  # T1: no repair
+        )
+        peer_host = os.environ.get("SEMIRDMA_PEER_HOST", cfg.dist.master_addr)
+        state = ClearHookState.for_rank(
+            rank=rank,
+            world_size=cfg.dist.world_size,
+            peer_host=peer_host,
+            port=cfg.dist.semirdma_port,
+            cfg=ccfg,
+        )
+        ddp_model.register_comm_hook(state, clear_allreduce_hook)
+        return state
+
     raise ValueError(f"transport={cfg.transport!r}")
 
 
