@@ -21,8 +21,19 @@ from .manifest import BucketManifest, uid_hash
 from .policy import Policy, PolicyRegistry, FinalizeDecision
 from .runtime import apply_finalize
 
+# ClearTransport requires the C++ extension; importing it eagerly fails
+# on machines where _semirdma_ext is not built. Tolerate that so the
+# pure-Python W2.3a tests can still run on Windows / unbuilt environments.
+try:
+    from .transport import ClearTransport, ClearTransportConfig
+except ImportError:  # pragma: no cover — environment-dependent
+    ClearTransport = None  # type: ignore[assignment]
+    ClearTransportConfig = None  # type: ignore[assignment]
+
 __all__ = [
     "BucketManifest",
+    "ClearTransport",
+    "ClearTransportConfig",
     "FinalizeDecision",
     "Policy",
     "PolicyRegistry",

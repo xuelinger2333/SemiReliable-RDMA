@@ -30,6 +30,8 @@
 #include "transport/ratio_controller.h"
 #include "transport/ghost_mask.h"
 
+#include "transport/clear/control_plane.h"
+#include "transport/clear/control_plane_codec.h"
 #include "transport/clear/finalizer.h"
 #include "transport/clear/imm_codec.h"
 #include "transport/clear/lease_table.h"
@@ -733,4 +735,276 @@ PYBIND11_MODULE(_semirdma_ext, m) {
             return d;
         },
         py::arg("encoding"), py::arg("body"), py::arg("n_chunks"));
+
+    // -----------------------------------------------------------------
+    // BeginPayload / RetirePayload / BackpressurePayload POD wrappers
+    // -----------------------------------------------------------------
+    py::class_<sc::BeginPayload>(clear_mod, "BeginPayload")
+        .def(py::init([](uint8_t slot_id, uint8_t gen, uint8_t phase_id,
+                         sc::Policy policy, uint16_t peer_edge,
+                         uint32_t step_seq, uint32_t bucket_seq,
+                         uint32_t n_chunks, uint32_t deadline_us,
+                         uint32_t chunk_bytes, uint32_t checksum_seed) {
+                 sc::BeginPayload p{};
+                 p.slot_id       = slot_id;
+                 p.gen           = gen;
+                 p.phase_id      = phase_id;
+                 p.policy        = static_cast<uint8_t>(policy);
+                 p.peer_edge     = peer_edge;
+                 p.step_seq      = step_seq;
+                 p.bucket_seq    = bucket_seq;
+                 p.n_chunks      = n_chunks;
+                 p.deadline_us   = deadline_us;
+                 p.chunk_bytes   = chunk_bytes;
+                 p.checksum_seed = checksum_seed;
+                 return p;
+             }),
+             py::arg("slot_id"), py::arg("gen"), py::arg("phase_id") = 0,
+             py::arg("policy") = sc::Policy::MASK_FIRST,
+             py::arg("peer_edge") = 0,
+             py::arg("step_seq") = 0, py::arg("bucket_seq") = 0,
+             py::arg("n_chunks") = 0, py::arg("deadline_us") = 200000,
+             py::arg("chunk_bytes") = 4096,
+             py::arg("checksum_seed") = 0)
+        .def_readwrite("slot_id",       &sc::BeginPayload::slot_id)
+        .def_readwrite("gen",           &sc::BeginPayload::gen)
+        .def_readwrite("phase_id",      &sc::BeginPayload::phase_id)
+        .def_readwrite("policy",        &sc::BeginPayload::policy)
+        .def_readwrite("peer_edge",     &sc::BeginPayload::peer_edge)
+        .def_readwrite("step_seq",      &sc::BeginPayload::step_seq)
+        .def_readwrite("bucket_seq",    &sc::BeginPayload::bucket_seq)
+        .def_readwrite("n_chunks",      &sc::BeginPayload::n_chunks)
+        .def_readwrite("deadline_us",   &sc::BeginPayload::deadline_us)
+        .def_readwrite("chunk_bytes",   &sc::BeginPayload::chunk_bytes)
+        .def_readwrite("checksum_seed", &sc::BeginPayload::checksum_seed);
+
+    py::class_<sc::RetirePayload>(clear_mod, "RetirePayload")
+        .def(py::init([](uint8_t slot_id, uint8_t gen) {
+                 sc::RetirePayload p{};
+                 p.slot_id = slot_id;
+                 p.gen     = gen;
+                 return p;
+             }),
+             py::arg("slot_id"), py::arg("gen"))
+        .def_readwrite("slot_id", &sc::RetirePayload::slot_id)
+        .def_readwrite("gen",     &sc::RetirePayload::gen);
+
+    py::class_<sc::BackpressurePayload>(clear_mod, "BackpressurePayload")
+        .def(py::init([](uint16_t peer_edge, uint16_t requested_credits) {
+                 sc::BackpressurePayload p{};
+                 p.peer_edge         = peer_edge;
+                 p.requested_credits = requested_credits;
+                 return p;
+             }),
+             py::arg("peer_edge"), py::arg("requested_credits"))
+        .def_readwrite("peer_edge",         &sc::BackpressurePayload::peer_edge)
+        .def_readwrite("requested_credits",
+                       &sc::BackpressurePayload::requested_credits);
+
+    // -----------------------------------------------------------------
+    // ControlPlaneConfig / ControlPlaneStats
+    // -----------------------------------------------------------------
+    py::class_<sc::ControlPlaneConfig>(clear_mod, "ControlPlaneConfig")
+        .def(py::init([](const std::string& dev, int gid_idx,
+                         uint16_t recv_slots, uint16_t send_slots) {
+                 sc::ControlPlaneConfig c;
+                 c.dev_name   = dev;
+                 c.gid_index  = gid_idx;
+                 c.recv_slots = recv_slots;
+                 c.send_slots = send_slots;
+                 return c;
+             }),
+             py::arg("dev_name"),
+             py::arg("gid_index")  = -1,
+             py::arg("recv_slots") = 64,
+             py::arg("send_slots") = 16)
+        .def_readwrite("dev_name",   &sc::ControlPlaneConfig::dev_name)
+        .def_readwrite("gid_index",  &sc::ControlPlaneConfig::gid_index)
+        .def_readwrite("recv_slots", &sc::ControlPlaneConfig::recv_slots)
+        .def_readwrite("send_slots", &sc::ControlPlaneConfig::send_slots);
+
+    py::class_<sc::ControlPlaneStats>(clear_mod, "ControlPlaneStats")
+        .def_readonly("sent_total",            &sc::ControlPlaneStats::sent_total)
+        .def_readonly("recv_total",            &sc::ControlPlaneStats::recv_total)
+        .def_readonly("recv_decode_errors",
+                      &sc::ControlPlaneStats::recv_decode_errors)
+        .def_readonly("send_completion_errors",
+                      &sc::ControlPlaneStats::send_completion_errors)
+        .def_readonly("recv_dropped_full",
+                      &sc::ControlPlaneStats::recv_dropped_full)
+        .def_property_readonly("sent_by_type",
+            [](const sc::ControlPlaneStats& s) {
+                py::dict d;
+                d["BEGIN"]        = s.sent_by_type[(int)sc::MsgType::BEGIN];
+                d["WITNESS"]      = s.sent_by_type[(int)sc::MsgType::WITNESS];
+                d["REPAIR_REQ"]   = s.sent_by_type[(int)sc::MsgType::REPAIR_REQ];
+                d["FINALIZE"]     = s.sent_by_type[(int)sc::MsgType::FINALIZE];
+                d["RETIRE"]       = s.sent_by_type[(int)sc::MsgType::RETIRE];
+                d["BACKPRESSURE"] = s.sent_by_type[(int)sc::MsgType::BACKPRESSURE];
+                return d;
+            })
+        .def_property_readonly("recv_by_type",
+            [](const sc::ControlPlaneStats& s) {
+                py::dict d;
+                d["BEGIN"]        = s.recv_by_type[(int)sc::MsgType::BEGIN];
+                d["WITNESS"]      = s.recv_by_type[(int)sc::MsgType::WITNESS];
+                d["REPAIR_REQ"]   = s.recv_by_type[(int)sc::MsgType::REPAIR_REQ];
+                d["FINALIZE"]     = s.recv_by_type[(int)sc::MsgType::FINALIZE];
+                d["RETIRE"]       = s.recv_by_type[(int)sc::MsgType::RETIRE];
+                d["BACKPRESSURE"] = s.recv_by_type[(int)sc::MsgType::BACKPRESSURE];
+                return d;
+            });
+
+    // -----------------------------------------------------------------
+    // ControlPlane — RC QP wrapper. Variable-length bodies are copied
+    // into py::bytes before invoking Python callbacks (the C++
+    // ParsedXxx structs hold non-owning views into recv buffers that
+    // get reposted right after dispatch).
+    // -----------------------------------------------------------------
+    py::class_<sc::ControlPlane>(clear_mod, "ControlPlane")
+        .def(py::init<sc::ControlPlaneConfig>(), py::arg("cfg"))
+        .def("bring_up", &sc::ControlPlane::bring_up, py::arg("peer"))
+        .def("local_qp_info", &sc::ControlPlane::local_qp_info)
+        .def("local_mr_info", &sc::ControlPlane::local_mr_info)
+        .def("send_begin",
+             [](sc::ControlPlane& self, uint64_t uid,
+                const sc::BeginPayload& p) {
+                 return self.send_begin(uid, p);
+             },
+             py::arg("uid"), py::arg("payload"))
+        .def("send_witness",
+             [](sc::ControlPlane& self, uint64_t uid, uint32_t recv_count,
+                sc::WitnessEncoding encoding, py::buffer body) {
+                 py::buffer_info info = body.request(/*writable=*/false);
+                 if (info.itemsize != 1 || info.ndim != 1) {
+                     throw std::runtime_error(
+                         "send_witness: body must be 1-D byte buffer");
+                 }
+                 return self.send_witness(
+                     uid, recv_count, encoding,
+                     reinterpret_cast<const uint8_t*>(info.ptr),
+                     static_cast<size_t>(info.size));
+             },
+             py::arg("uid"), py::arg("recv_count"), py::arg("encoding"),
+             py::arg("body"))
+        .def("send_repair_req",
+             [](sc::ControlPlane& self, uint64_t uid, py::list ranges) {
+                 std::vector<sc::Range> rs;
+                 rs.reserve(ranges.size());
+                 for (auto h : ranges) {
+                     auto t = h.cast<py::tuple>();
+                     if (t.size() != 2) {
+                         throw std::runtime_error(
+                             "send_repair_req: each range must be (start, length)");
+                     }
+                     rs.push_back(sc::Range{t[0].cast<uint32_t>(),
+                                            t[1].cast<uint32_t>()});
+                 }
+                 return self.send_repair_req(
+                     uid, rs.data(), static_cast<uint16_t>(rs.size()));
+             },
+             py::arg("uid"), py::arg("ranges"))
+        .def("send_finalize",
+             [](sc::ControlPlane& self, uint64_t uid,
+                sc::FinalizeDecision decision,
+                sc::WitnessEncoding mask_encoding, py::buffer mask_body) {
+                 py::buffer_info info = mask_body.request(/*writable=*/false);
+                 if (info.itemsize != 1 || info.ndim != 1) {
+                     throw std::runtime_error(
+                         "send_finalize: mask_body must be 1-D byte buffer");
+                 }
+                 return self.send_finalize(
+                     uid, decision, mask_encoding,
+                     reinterpret_cast<const uint8_t*>(info.ptr),
+                     static_cast<size_t>(info.size));
+             },
+             py::arg("uid"), py::arg("decision"),
+             py::arg("mask_encoding"), py::arg("mask_body"))
+        .def("send_retire",
+             [](sc::ControlPlane& self, uint64_t uid,
+                const sc::RetirePayload& p) {
+                 return self.send_retire(uid, p);
+             },
+             py::arg("uid"), py::arg("payload"))
+        .def("send_backpressure",
+             [](sc::ControlPlane& self, uint64_t uid,
+                const sc::BackpressurePayload& p) {
+                 return self.send_backpressure(uid, p);
+             },
+             py::arg("uid"), py::arg("payload"))
+        .def("poll_once",
+             [](sc::ControlPlane& self, int max_completions, int timeout_ms) {
+                 py::gil_scoped_release release;
+                 return self.poll_once(max_completions, timeout_ms);
+             },
+             py::arg("max_completions") = 32, py::arg("timeout_ms") = 0)
+        .def("on_begin",
+             [](sc::ControlPlane& self, py::function cb) {
+                 self.on_begin(
+                     [cb = std::move(cb)](const sc::ParsedBegin& b) {
+                         py::gil_scoped_acquire gil;
+                         cb(b.uid,
+                            b.payload.slot_id, b.payload.gen,
+                            b.payload.phase_id, b.payload.policy,
+                            b.payload.peer_edge, b.payload.step_seq,
+                            b.payload.bucket_seq, b.payload.n_chunks,
+                            b.payload.deadline_us, b.payload.chunk_bytes,
+                            b.payload.checksum_seed);
+                     });
+             })
+        .def("on_witness",
+             [](sc::ControlPlane& self, py::function cb) {
+                 self.on_witness(
+                     [cb = std::move(cb)](const sc::ParsedWitness& w) {
+                         py::gil_scoped_acquire gil;
+                         py::bytes body(
+                             w.body ? reinterpret_cast<const char*>(w.body) : "",
+                             w.body_len);
+                         cb(w.uid, w.recv_count, w.encoding, body);
+                     });
+             })
+        .def("on_repair_req",
+             [](sc::ControlPlane& self, py::function cb) {
+                 self.on_repair_req(
+                     [cb = std::move(cb)](const sc::ParsedRepairReq& r) {
+                         py::gil_scoped_acquire gil;
+                         py::list rs;
+                         for (uint16_t i = 0; i < r.n_ranges; ++i) {
+                             rs.append(py::make_tuple(
+                                 r.ranges[i].start, r.ranges[i].length));
+                         }
+                         cb(r.uid, rs);
+                     });
+             })
+        .def("on_finalize",
+             [](sc::ControlPlane& self, py::function cb) {
+                 self.on_finalize(
+                     [cb = std::move(cb)](const sc::ParsedFinalize& f) {
+                         py::gil_scoped_acquire gil;
+                         py::bytes body(
+                             f.mask_body
+                                 ? reinterpret_cast<const char*>(f.mask_body)
+                                 : "",
+                             f.mask_body_len);
+                         cb(f.uid, f.decision, f.mask_encoding, body);
+                     });
+             })
+        .def("on_retire",
+             [](sc::ControlPlane& self, py::function cb) {
+                 self.on_retire(
+                     [cb = std::move(cb)](const sc::ParsedRetire& r) {
+                         py::gil_scoped_acquire gil;
+                         cb(r.uid, r.payload.slot_id, r.payload.gen);
+                     });
+             })
+        .def("on_backpressure",
+             [](sc::ControlPlane& self, py::function cb) {
+                 self.on_backpressure(
+                     [cb = std::move(cb)](const sc::ParsedBackpressure& b) {
+                         py::gil_scoped_acquire gil;
+                         cb(b.uid, b.payload.peer_edge,
+                            b.payload.requested_credits);
+                     });
+             })
+        .def_property_readonly("stats", &sc::ControlPlane::stats);
 }
