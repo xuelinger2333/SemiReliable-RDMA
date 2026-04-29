@@ -94,7 +94,7 @@ def _worker(rank: int, port_base: int, dev: str, gid: int,
                             if not k.startswith("_") and isinstance(getattr(s, k), int)}
                 cp_rx_stats = _stat(state.rx.cp.stats)
                 cp_tx_stats = _stat(state.tx.cp.stats)
-                rx_lease_pressure = state.rx.receiver_leases.size()
+                rx_lease_pressure = "n/a"
                 tx_lease_pressure = state.tx.sender_leases.pressure().in_use
                 sync_keys = list(state._sync.keys())
                 sync_states = {hex(k): {
