@@ -319,17 +319,18 @@ TEST(Finalizer, RepairCompleteWithoutPendingRepairFails) {
 }
 
 TEST(Finalizer, FinalMaskBodyReadable) {
-    // For MASKED policy with a sparse missing pattern, mask body should be
-    // RANGE-encoded; decoding it back should reconstruct recv_bitmap.
+    // Mask body is whatever encoding witness_codec picks as smallest wire
+    // size. Pick N=512 with 2 sparse missing → RANGE (8+16=24 B) clearly
+    // beats RAW (64 B), so we can also assert encoding choice here.
     sc::Finalizer f;
     CallbackProbe p;
     wire(f, p);
 
-    constexpr uint32_t N = 64;
+    constexpr uint32_t N = 512;
     ASSERT_TRUE(f.track(1, 0, 0, N, 4096, sc::Policy::MASK_FIRST));
     auto bm = all_present(N);
     bm[5 >> 3] &= ~uint8_t(1 << (5 & 7));
-    bm[40 >> 3] &= ~uint8_t(1 << (40 & 7));
+    bm[400 >> 3] &= ~uint8_t(1 << (400 & 7));
     f.on_witness(1, bm.data(), bm.size());
 
     EXPECT_EQ(p.last_finalize_decision, sc::FinalizeDecision::MASKED);
@@ -345,5 +346,36 @@ TEST(Finalizer, FinalMaskBodyReadable) {
         EXPECT_EQ(sc::bitmap_get(bm.data(), bm.size(), i),
                   sc::bitmap_get(reconstructed.data(), reconstructed.size(), i))
             << "bit " << i;
+    }
+}
+
+TEST(Finalizer, FinalMaskBodyReadableSmallNUsesRaw) {
+    // Companion to the test above: at small N, RAW beats RANGE because the
+    // bitmap itself is tiny. We accept whichever encoding the codec picks
+    // and only require that the body roundtrips.
+    sc::Finalizer f;
+    CallbackProbe p;
+    wire(f, p);
+
+    constexpr uint32_t N = 64;
+    ASSERT_TRUE(f.track(2, 0, 0, N, 4096, sc::Policy::MASK_FIRST));
+    auto bm = all_present(N);
+    bm[5 >> 3] &= ~uint8_t(1 << (5 & 7));
+    bm[40 >> 3] &= ~uint8_t(1 << (40 & 7));
+    f.on_witness(2, bm.data(), bm.size());
+
+    // For 2 missing in 64 chunks: RAW is 8 B, RANGE is 24 B → encoder
+    // picks RAW.
+    EXPECT_EQ(p.last_finalize_mask_encoding, sc::WitnessEncoding::RAW);
+
+    std::vector<uint8_t> reconstructed;
+    uint32_t cnt = 0;
+    ASSERT_TRUE(sc::decode_witness(p.last_finalize_mask_encoding,
+                                   p.last_finalize_mask_body.data(),
+                                   p.last_finalize_mask_body.size(),
+                                   N, reconstructed, cnt));
+    for (uint32_t i = 0; i < N; ++i) {
+        EXPECT_EQ(sc::bitmap_get(bm.data(), bm.size(), i),
+                  sc::bitmap_get(reconstructed.data(), reconstructed.size(), i));
     }
 }
