@@ -547,6 +547,11 @@ def clear_allreduce_hook(state, bucket):
             bucket_bytes=bucket_bytes,
             bucket_seq=bucket_id,
         )
+        # Auto-advance step after each bucket so consecutive hook calls
+        # never reuse a uid. With bucket_cap_mb=512 (1 bucket/step) this
+        # is exactly per-step boundary; with smaller bucket_cap_mb it
+        # advances more often than DDP "steps" but uids stay unique.
+        step_advance(state)
     avg_arr = np.frombuffer(avg_bytes, dtype=np.uint8).view(
         flat.numpy().dtype).reshape(flat.shape).copy()
     out_t = torch.from_numpy(avg_arr)
