@@ -10,3 +10,12 @@ foreach(test_name test_witness_codec test_lease_table test_control_plane_codec)
     target_include_directories(${test_name} PRIVATE ${PROJECT_SOURCE_DIR}/src)
     add_test(NAME ${test_name} COMMAND ${test_name})
 endforeach()
+
+# RDMA-gated loopback test. Skips itself at runtime if RDMA_LOOPBACK_DEVICE
+# is not set, so it's safe to include unconditionally in ctest.
+add_executable(test_control_plane_loopback test_control_plane_loopback.cpp)
+target_link_libraries(test_control_plane_loopback
+    PRIVATE clear_transport GTest::gtest_main)
+target_include_directories(test_control_plane_loopback
+    PRIVATE ${PROJECT_SOURCE_DIR}/src)
+add_test(NAME test_control_plane_loopback COMMAND test_control_plane_loopback)

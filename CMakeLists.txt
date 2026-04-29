@@ -27,9 +27,12 @@ add_library(clear_transport STATIC
     src/transport/clear/witness_codec.cpp
     src/transport/clear/lease_table.cpp
     src/transport/clear/control_plane_codec.cpp
+    src/transport/clear/control_plane.cpp
 )
 target_include_directories(clear_transport PUBLIC src/)
 target_link_libraries(clear_transport PUBLIC semirdma_transport)
+# control_plane.cpp uses UCQPEngine which already links ibverbs via
+# semirdma_transport, so no extra link is needed here.
 
 # Phase 2 + Phase 5 tests (GTest optional — main lib builds without it)
 find_package(GTest QUIET)

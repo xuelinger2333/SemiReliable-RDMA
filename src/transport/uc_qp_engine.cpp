@@ -373,6 +373,62 @@ uint64_t UCQPEngine::post_write(uint64_t        wr_id,
 }
 
 // ---------------------------------------------------------------------------
+// post_send — IBV_WR_SEND for the CLEAR control plane.  Plain SEND is
+// receiver-side delivered into a posted Recv WR (via post_recv_buffer).
+// ---------------------------------------------------------------------------
+uint64_t UCQPEngine::post_send(uint64_t wr_id, size_t local_offset, size_t length)
+{
+    struct ibv_sge sge;
+    std::memset(&sge, 0, sizeof(sge));
+    sge.addr   = reinterpret_cast<uint64_t>(buf_ + local_offset);
+    sge.length = static_cast<uint32_t>(length);
+    sge.lkey   = mr_->lkey;
+
+    struct ibv_send_wr wr, *bad_wr = nullptr;
+    std::memset(&wr, 0, sizeof(wr));
+    wr.wr_id      = wr_id;
+    wr.sg_list    = &sge;
+    wr.num_sge    = 1;
+    wr.opcode     = IBV_WR_SEND;
+    wr.send_flags = IBV_SEND_SIGNALED;
+
+    int ret = ibv_post_send(qp_, &wr, &bad_wr);
+    if (ret) {
+        throw std::runtime_error(std::string("ibv_post_send (SEND) failed: ") +
+                                 strerror(ret));
+    }
+    return wr_id;
+}
+
+// ---------------------------------------------------------------------------
+// post_recv_buffer — recv WR pointing at a real buffer slice.  Required for
+// IBV_WR_SEND delivery (zero-length post_recv suffices for Write-with-Imm
+// because only the imm_data needs a CQE slot).
+// ---------------------------------------------------------------------------
+void UCQPEngine::post_recv_buffer(uint64_t wr_id, size_t local_offset,
+                                  size_t length)
+{
+    struct ibv_sge sge;
+    std::memset(&sge, 0, sizeof(sge));
+    sge.addr   = reinterpret_cast<uint64_t>(buf_ + local_offset);
+    sge.length = static_cast<uint32_t>(length);
+    sge.lkey   = mr_->lkey;
+
+    struct ibv_recv_wr wr, *bad_wr = nullptr;
+    std::memset(&wr, 0, sizeof(wr));
+    wr.wr_id   = wr_id;
+    wr.sg_list = &sge;
+    wr.num_sge = 1;
+
+    int ret = ibv_post_recv(qp_, &wr, &bad_wr);
+    if (ret) {
+        throw std::runtime_error(std::string("ibv_post_recv (buffer) failed: ") +
+                                 strerror(ret));
+    }
+    outstanding_recv_.fetch_add(1, std::memory_order_relaxed);
+}
+
+// ---------------------------------------------------------------------------
 // post_bucket_chunks — fast path
 //
 // Eliminates per-chunk Python ↔ C++ boundary cost by doing the entire

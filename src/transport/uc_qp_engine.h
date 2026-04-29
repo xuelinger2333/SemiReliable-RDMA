@@ -152,6 +152,21 @@ public:
                                 bool            with_imm,
                                 uint64_t        wr_id_base);
 
+    // Post a regular SEND (IBV_WR_SEND, no RDMA address) of `length` bytes
+    // starting at `local_offset` within the local MR.  The receiver must
+    // have a posted Receive WR pointing to a buffer of at least `length`
+    // bytes; the SEND payload is delivered to that recv buffer and surfaces
+    // as IBV_WC_RECV. Used by the CLEAR control plane (W1.3b) to ship
+    // BEGIN/WITNESS/REPAIR_REQ/FINALIZE/RETIRE/BACKPRESSURE messages over
+    // the per-peer RC QP. Returns wr_id; throws on ibv_post_send failure.
+    uint64_t post_send(uint64_t wr_id, size_t local_offset, size_t length);
+
+    // Post a Receive WR pointing at `local_offset` for up to `length` bytes.
+    // Required for IBV_WR_SEND delivery (zero-length post_recv only works
+    // for Write-with-Imm because the imm_data is the only carried payload).
+    // Throws on ibv_post_recv failure.
+    void post_recv_buffer(uint64_t wr_id, size_t local_offset, size_t length);
+
     // Post a zero-length Receive WR (required before each Write-with-Imm arrives).
     // Throws on ibv_post_recv failure.
     void post_recv(uint64_t wr_id);
