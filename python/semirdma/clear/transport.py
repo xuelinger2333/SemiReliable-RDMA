@@ -124,12 +124,25 @@ class ClearTransport:
 
     # ----- bring-up ----------------------------------------------------
 
-    def bring_up_data(self, peer_qp: RemoteQpInfo, peer_mr: RemoteMR) -> None:
-        """Bring up the UC data plane against the peer's data-plane QP+MR."""
+    def bring_up_data(self, peer_qp: RemoteQpInfo, peer_mr: RemoteMR,
+                      *, pre_post_recv: int = 0) -> None:
+        """Bring up the UC data plane against the peer's data-plane QP+MR.
+
+        ``pre_post_recv`` (default 0): if > 0, pre-post that many zero-
+        length recv WRs onto the UC RQ before returning. UC has no flow
+        control — Write-with-Imm arriving at an empty RQ is silently
+        dropped — so the caller normally pre-posts enough WRs to cover
+        peer's first burst before any handshake races. The hook layer
+        sets this to roughly cfg.rq_depth - margin so subsequent
+        per-bucket post_recv_batch calls are top-ups, not the only line
+        of defense.
+        """
         if self._data_up:
             raise RuntimeError("ClearTransport.bring_up_data called twice")
         self.engine.bring_up(peer_qp)
         self._peer_data_mr = peer_mr
+        if pre_post_recv > 0:
+            self.engine.post_recv_batch(pre_post_recv, base_wr_id=0xC0DE_0000)
         self._data_up = True
 
     def bring_up_control(self, peer_qp: RemoteQpInfo) -> None:

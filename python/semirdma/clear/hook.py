@@ -134,10 +134,16 @@ class ClearHookState:
 
         # Pair UC data planes:
         #   A.tx ─UC→ B.rx     B.tx ─UC→ A.rx
+        # Pre-post a large recv-WR pool on each rx engine so peer's UC
+        # writes never hit an empty RQ during the symmetric bring-up
+        # race. cfg.rq_depth - 16 leaves headroom for top-up posts.
+        rx_pool = max(0, cfg.rq_depth - 16)
         a_tx.bring_up_data(b_rx.data_qp_info, b_rx.data_mr_info)
-        b_rx.bring_up_data(a_tx.data_qp_info, a_tx.data_mr_info)
+        b_rx.bring_up_data(a_tx.data_qp_info, a_tx.data_mr_info,
+                           pre_post_recv=rx_pool)
         b_tx.bring_up_data(a_rx.data_qp_info, a_rx.data_mr_info)
-        a_rx.bring_up_data(b_tx.data_qp_info, b_tx.data_mr_info)
+        a_rx.bring_up_data(b_tx.data_qp_info, b_tx.data_mr_info,
+                           pre_post_recv=rx_pool)
 
         # Pair RC control planes (bidirectional):
         #   A.tx.cp ⟷ B.rx.cp     B.tx.cp ⟷ A.rx.cp
@@ -256,10 +262,12 @@ def _run_clear_bucket(
     nbytes = len(bucket_bytes)
     n_chunks = (nbytes + chunk_bytes - 1) // chunk_bytes
 
-    # Pre-post recv WRs on rx engine BEFORE the peer can issue UC writes.
-    # Use a per-call wr_id offset so consecutive bucket calls don't collide.
-    rx_wr_base = (state.step_seq * 0x100000) | (bucket_seq & 0xFFFF)
-    state.rx.engine.post_recv_batch(n_chunks, base_wr_id=rx_wr_base)
+    # Recv WRs were pre-posted on each rx engine during bring_up_data
+    # (pre_post_recv pool sized at cfg.rq_depth - 16). Top up if the pool
+    # has drained below 2× this bucket's chunk count.
+    if state.rx.engine.outstanding_recv() < 2 * n_chunks:
+        rx_wr_base = (state.step_seq * 0x100000) | (bucket_seq & 0xFFFF)
+        state.rx.engine.post_recv_batch(n_chunks * 4, base_wr_id=rx_wr_base)
 
     # Stage local bucket bytes into tx data MR.
     tx_buf = np.frombuffer(state.tx.engine.local_buf_view(), dtype=np.uint8)
