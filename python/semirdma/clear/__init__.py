@@ -30,6 +30,18 @@ except ImportError:  # pragma: no cover — environment-dependent
     ClearTransport = None  # type: ignore[assignment]
     ClearTransportConfig = None  # type: ignore[assignment]
 
+try:
+    from .protocol import (
+        RecvResult,
+        SendResult,
+        chunkset_to_recv_bitmap,
+        clear_recv_bucket,
+        clear_send_bucket,
+    )
+except ImportError:  # pragma: no cover — environment-dependent
+    RecvResult = SendResult = None  # type: ignore[assignment]
+    chunkset_to_recv_bitmap = clear_recv_bucket = clear_send_bucket = None  # type: ignore[assignment]
+
 __all__ = [
     "BucketManifest",
     "ClearTransport",
