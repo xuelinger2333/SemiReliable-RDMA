@@ -193,12 +193,19 @@ def _ssh(node: str, cmd: str, capture: bool = False, timeout: int = 60):
 
 def _cell_state(node: str, log_path: str) -> str:
     """Single-SSH probe. Returns one of: DONE, RUNNING, CRASHED, NOT_STARTED.
-    RUNNING = log file modified within last 90 s. Robust to SSH drops since
-    each call is short-lived."""
+
+    RUNNING is true iff EITHER:
+      (a) the log file was modified within the last 600 s (10 min) — the
+          trainer logs every 50 steps so a 5-min gap is normal; or
+      (b) a torchrun process is currently active on the node.
+
+    Either signal is sufficient — both being absent means CRASHED.
+    """
     probe = (
         f"if [ ! -f {log_path} ]; then echo NOT_STARTED; "
         f"elif grep -q 'training done' {log_path}; then echo DONE; "
-        f"elif [ $(($(date +%s) - $(stat -c %Y {log_path}))) -lt 90 ]; then echo RUNNING; "
+        f"elif [ $(($(date +%s) - $(stat -c %Y {log_path}))) -lt 600 ] "
+        f"     || pgrep -f 'master_port=' >/dev/null; then echo RUNNING; "
         f"else echo CRASHED; fi"
     )
     r = _ssh(node, probe, capture=True)
