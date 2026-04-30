@@ -146,8 +146,24 @@ def _torchrun_cmd(c: Cell, all_cells: List[Cell],
     master = ports["master"] + i
     semi = ports["semi"] + 4 * i
 
+    # Translate cell-label transports to actual code transport names.
+    # phase4_flat / phase4_prc are documentation labels for the same
+    # `semirdma` transport differentiated by bucket_cap_mb (512 vs 1).
+    # E1 plan pins bucket_cap_mb=512 for ALL cells, so flat/prc are
+    # behaviorally identical here — kept as separate labels so the
+    # cell-id stable mapping works and so we have 3-seed redundancy
+    # under both labels (treat as 6-seed phase4 effective sample).
+    bucket_cap_for_label = {
+        "phase4_flat": 512,
+        "phase4_prc": 512,   # E1 only; E2 will override to 1
+    }
+    code_transport = {
+        "phase4_flat": "semirdma",
+        "phase4_prc": "semirdma",
+    }.get(c.transport, c.transport)
+
     common_overrides = [
-        f"transport={c.transport}",
+        f"transport={code_transport}",
         f"loss_rate={c.drop}",
         f"seed={c.seed}",
         f"steps={steps}",
@@ -158,17 +174,17 @@ def _torchrun_cmd(c: Cell, all_cells: List[Cell],
 
     if c.transport == "clear_t1":
         config_args = ["--config-name", "phase5_e1"]
-        # phase5_e1.yaml already pins transport_cfg fields; nothing extra.
         extras: List[str] = []
     else:
         config_args = []  # use default stage_a_baseline.yaml
+        bucket_cap = bucket_cap_for_label.get(c.transport, 512)
         extras = [
             f"transport_cfg.dev_name={dev}",
             f"+transport_cfg.gid_index={gid}",
             "transport_cfg.chunk_bytes=16384",
             "transport_cfg.sq_depth=4096",
             "transport_cfg.rq_depth=8192",
-            "+bucket_cap_mb=512",
+            f"+bucket_cap_mb={bucket_cap}",
         ]
 
     cmd = (
