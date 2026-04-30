@@ -73,3 +73,35 @@ Diag injection removed (commit `<this commit>`). Ready to proceed to E1 full
 grid once user signs off on grid scoping (45-cell × 7-s/step ≈ 45 h on
 amd247 CPU; need to either trim cells, drop step count to 200, or run two
 nodes in parallel — amd245 + amd247).
+
+## E1 grid scope (locked 2026-04-30)
+
+- **Plan D**: 4 transports × 3 drops × 3 seeds × 200 steps = 36 cells
+- Trimmed: `clear_t1+oracle` deferred to E2 (needs shadow RC implementation)
+- Compute: 2-node parallel (amd247 + amd245), 18 cells per node, ~7 h wall
+- Acceptance: trend-OK ships; **no 500-step rerun**
+
+## Paper framing — E1 claim boundaries (read before writing)
+
+E1 uses **app-level chunk drop, injected before `post_write` at the sender**.
+This is NOT a network-loss test. Both `phase4_flat` and `clear_t1` go through
+the same drop path (sender-side `random.Random(seed*31+7)` advanced once per
+chunk in chunk-id order; identical drop indices across transports under the
+same seed).
+
+When writing the E1 paper section:
+
+1. **Disclose the injection mechanism explicitly** in the experiment description
+   ("app-level chunk drop, injected at sender before `post_write`"). Don't
+   surprise reviewers in §E2.
+2. **Use overhead-flavored claim wording, not robustness wording**:
+   - ✓ "CLEAR's protocol overhead does not regress flat-path performance under
+       controlled chunk-drop injection"
+   - ✗ "CLEAR is robust to packet loss" (that's E2/E3 with real network drops
+        through the XDP middlebox)
+3. The claim space E1 occupies: (no-regression on `iter_ms`, `final_loss`,
+   `control_plane_overhead`). Robustness, attribution accuracy, and burst-loss
+   resilience are E2/E3 territory.
+
+This is a genuine methodology choice (MLT [NSDI'24] uses app-level injection
+too), not a workaround — but it must be stated.
