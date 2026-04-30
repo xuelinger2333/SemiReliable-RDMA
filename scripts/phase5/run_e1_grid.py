@@ -180,47 +180,109 @@ def _torchrun_cmd(c: Cell, all_cells: List[Cell],
     return cmd
 
 
+SSH_OPTS = ["-o", "ServerAliveInterval=60",
+            "-o", "ServerAliveCountMax=10",
+            "-o", "ConnectTimeout=15"]
+
+
+def _ssh(node: str, cmd: str, capture: bool = False, timeout: int = 60):
+    """Short SSH call — returns CompletedProcess. Use for poll/probe only."""
+    full = ["ssh"] + SSH_OPTS + [f"{SSH_USER}@{node}.utah.cloudlab.us", cmd]
+    return subprocess.run(full, capture_output=capture, text=True, timeout=timeout)
+
+
+def _cell_state(node: str, log_path: str) -> str:
+    """Single-SSH probe. Returns one of: DONE, RUNNING, CRASHED, NOT_STARTED.
+    RUNNING = log file modified within last 90 s. Robust to SSH drops since
+    each call is short-lived."""
+    probe = (
+        f"if [ ! -f {log_path} ]; then echo NOT_STARTED; "
+        f"elif grep -q 'training done' {log_path}; then echo DONE; "
+        f"elif [ $(($(date +%s) - $(stat -c %Y {log_path}))) -lt 90 ]; then echo RUNNING; "
+        f"else echo CRASHED; fi"
+    )
+    r = _ssh(node, probe, capture=True)
+    return r.stdout.strip()
+
+
+def _kill_zombies_on_node(node: str, log_path: str) -> None:
+    """Best-effort kill of any torchrun tied to log_path."""
+    _ssh(node, f"pkill -f '{log_path}' 2>/dev/null; sleep 2; "
+               f"pkill -9 -f '{log_path}' 2>/dev/null; true")
+
+
 def run_one_cell_remote(c: Cell, all_cells: List[Cell],
                         node: str, dev: str, gid: int,
                         data_root: str, repo: str,
                         log_dir: str, steps: int = STEPS) -> int:
-    """Execute one cell over SSH on `node`, with retry."""
+    """Execute one cell on `node` via detached nohup + poll loop.
+
+    SSH connections are short-lived (probe + launch). The cell runs in a
+    detached shell on the node so a connection drop doesn't kill it.
+    """
     inner_cmd = _torchrun_cmd(c, all_cells, node, dev, gid, data_root, repo, steps)
-
     log_path = f"{log_dir}/{c.tag()}.log"
-    full_cmd = (
-        f"mkdir -p {log_dir} && cd {repo} && source .venv/bin/activate && "
-        f"export RDMA_LOOPBACK_DEVICE={dev} RDMA_LOOPBACK_GID_INDEX={gid} "
-        f"SEMIRDMA_PEER_HOST=127.0.0.1 HYDRA_FULL_ERROR=1 && "
-        + inner_cmd
-        + f" >{log_path} 2>&1"
-    )
+    pid_path = f"{log_dir}/{c.tag()}.pid"
 
-    ssh = ["ssh",
-           "-o", "ServerAliveInterval=60",
-           "-o", "ServerAliveCountMax=120",
-           f"{SSH_USER}@{node}.utah.cloudlab.us", full_cmd]
     print(f"[{time.strftime('%H:%M:%S')}] >>> {c.tag()} on {node}", flush=True)
 
     for attempt in range(2):
-        t0 = time.monotonic()
-        rc = subprocess.call(ssh)
-        elapsed = time.monotonic() - t0
-        # SIGABRT in teardown gives non-zero exit but training_done was logged.
-        # Check the log for 'training done' as the real success signal.
-        ok = subprocess.run(
-            ["ssh", "-o", "ServerAliveInterval=60",
-             f"{SSH_USER}@{node}.utah.cloudlab.us",
-             f"grep -q 'training done' {log_path} && echo OK || echo FAIL"],
-            capture_output=True, text=True
-        ).stdout.strip() == "OK"
-        print(f"[{time.strftime('%H:%M:%S')}] <<< {c.tag()} attempt={attempt} "
-              f"rc={rc} ok={ok} elapsed={elapsed:.0f}s", flush=True)
-        if ok:
+        state = _cell_state(node, log_path)
+        if state == "DONE":
+            print(f"[{time.strftime('%H:%M:%S')}] === {c.tag()} already DONE",
+                  flush=True)
             return 0
+        if state == "RUNNING":
+            print(f"  {c.tag()} already running on node, waiting...", flush=True)
+        else:
+            # NOT_STARTED or CRASHED → launch fresh.
+            if state == "CRASHED":
+                _ssh(node, f"mv {log_path} {log_path}.attempt{attempt} 2>/dev/null; true")
+            launch = (
+                f"mkdir -p {log_dir} && cd {repo} && source .venv/bin/activate && "
+                f"export RDMA_LOOPBACK_DEVICE={dev} RDMA_LOOPBACK_GID_INDEX={gid} "
+                f"SEMIRDMA_PEER_HOST=127.0.0.1 HYDRA_FULL_ERROR=1 && "
+                f"nohup bash -c \"{inner_cmd}\" </dev/null "
+                f">{log_path} 2>&1 & disown"
+            )
+            try:
+                _ssh(node, launch, timeout=30)
+            except subprocess.TimeoutExpired:
+                print(f"  launch SSH timeout", flush=True)
+                continue
+
+        # Poll for completion (max 45 min per cell).
+        t0 = time.monotonic()
+        deadline = t0 + 45 * 60
+        last_print = 0.0
+        while time.monotonic() < deadline:
+            time.sleep(30)
+            try:
+                state = _cell_state(node, log_path)
+            except subprocess.TimeoutExpired:
+                continue  # transient
+            if state == "DONE":
+                elapsed = time.monotonic() - t0
+                print(f"[{time.strftime('%H:%M:%S')}] <<< {c.tag()} "
+                      f"DONE attempt={attempt} elapsed={elapsed:.0f}s",
+                      flush=True)
+                return 0
+            if state == "CRASHED":
+                print(f"  {c.tag()} CRASHED (log idle, no 'training done')",
+                      flush=True)
+                break
+            now = time.monotonic()
+            if now - last_print > 300:
+                print(f"  [{time.strftime('%H:%M:%S')}] {c.tag()} still RUNNING "
+                      f"({(now - t0):.0f}s)", flush=True)
+                last_print = now
+
+        print(f"  {c.tag()} attempt={attempt} not done; cleaning up", flush=True)
+        _kill_zombies_on_node(node, log_path)
         if attempt < 1:
-            print(f"  retry in 60s (TIME_WAIT flush)...", flush=True)
+            print(f"  retry in 60s...", flush=True)
             time.sleep(60)
+
     return 1
 
 
