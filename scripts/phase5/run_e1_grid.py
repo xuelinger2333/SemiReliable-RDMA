@@ -228,11 +228,16 @@ def _cell_state(node: str, log_path: str) -> str:
 
     Either signal is sufficient — both being absent means CRASHED.
     """
+    # NOTE: probe pattern must NOT contain 'master_port=' or any string that
+    # appears in the probe command itself, because pgrep -f matches against
+    # full cmdline INCLUDING the bash -c that's running this very probe →
+    # self-match → false RUNNING forever. Use 'train_cifar10.py' which only
+    # appears in the actual training process cmdline.
     probe = (
         f"if [ ! -f {log_path} ]; then echo NOT_STARTED; "
         f"elif grep -q 'training done' {log_path}; then echo DONE; "
         f"elif [ $(($(date +%s) - $(stat -c %Y {log_path}))) -lt 600 ] "
-        f"     || pgrep -f 'master_port=' >/dev/null; then echo RUNNING; "
+        f"     || pgrep -f 'train_cifar10' >/dev/null; then echo RUNNING; "
         f"else echo CRASHED; fi"
     )
     r = _ssh(node, probe, capture=True)
