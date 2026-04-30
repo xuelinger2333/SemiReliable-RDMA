@@ -218,24 +218,31 @@ def _ssh(node: str, cmd: str, capture: bool = False, timeout: int = 60):
                           timeout=timeout)
 
 
-def _cell_state(node: str, log_path: str) -> str:
+def _cell_state(node: str, log_path: str, expected_steps: int = STEPS) -> str:
     """Single-SSH probe. Returns one of: DONE, RUNNING, CRASHED, NOT_STARTED.
+
+    DONE requires the log to contain a 'training done: N steps' line where
+    N >= expected_steps. A short prior smoke run (e.g. 5 steps) must NOT
+    be treated as DONE — re-launch fresh instead.
 
     RUNNING is true iff EITHER:
       (a) the log file was modified within the last 600 s (10 min) — the
           trainer logs every 50 steps so a 5-min gap is normal; or
       (b) a torchrun process is currently active on the node.
-
-    Either signal is sufficient — both being absent means CRASHED.
     """
     # NOTE: probe pattern must NOT contain 'master_port=' or any string that
     # appears in the probe command itself, because pgrep -f matches against
     # full cmdline INCLUDING the bash -c that's running this very probe →
     # self-match → false RUNNING forever. Use 'train_cifar10.py' which only
     # appears in the actual training process cmdline.
+    # DONE: log contains 'training done: N steps' with N >= expected_steps.
+    # We grep for the numeric N, take max, compare to expected_steps.
     probe = (
         f"if [ ! -f {log_path} ]; then echo NOT_STARTED; "
-        f"elif grep -q 'training done' {log_path}; then echo DONE; "
+        f"elif n=$(grep -oE 'training done: [0-9]+ steps' {log_path} "
+        f"        | grep -oE '[0-9]+' | sort -n | tail -1) "
+        f"     && [ -n \"$n\" ] && [ \"$n\" -ge {expected_steps} ]; "
+        f"  then echo DONE; "
         f"elif [ $(($(date +%s) - $(stat -c %Y {log_path}))) -lt 600 ] "
         f"     || pgrep -f 'train_cifar10' >/dev/null; then echo RUNNING; "
         f"else echo CRASHED; fi"
@@ -266,7 +273,7 @@ def run_one_cell_remote(c: Cell, all_cells: List[Cell],
     print(f"[{time.strftime('%H:%M:%S')}] >>> {c.tag()} on {node}", flush=True)
 
     for attempt in range(2):
-        state = _cell_state(node, log_path)
+        state = _cell_state(node, log_path, expected_steps=steps)
         if state == "DONE":
             print(f"[{time.strftime('%H:%M:%S')}] === {c.tag()} already DONE",
                   flush=True)
@@ -297,7 +304,7 @@ def run_one_cell_remote(c: Cell, all_cells: List[Cell],
         while time.monotonic() < deadline:
             time.sleep(30)
             try:
-                state = _cell_state(node, log_path)
+                state = _cell_state(node, log_path, expected_steps=steps)
             except subprocess.TimeoutExpired:
                 continue  # transient
             if state == "DONE":
