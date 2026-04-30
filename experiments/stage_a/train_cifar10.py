@@ -262,6 +262,11 @@ def _install_hook(ddp_model: DDP, cfg: DictConfig, rank: int) -> object:
             cp_send_slots=cfg.transport_cfg.get("cp_send_slots", 16),
             repair_budget_bytes_per_step=cfg.transport_cfg.get(
                 "repair_budget_bytes_per_step", 0),  # T1: no repair
+            # Match phase4's loss_seed derivation (cfg.seed * 31 + 7) so both
+            # transports drop the same chunk indices at each step under the
+            # same seed — required for E1 apples-to-apples comparison.
+            loss_rate=float(cfg.loss_rate),
+            loss_seed=int(cfg.seed) * 31 + 7,
         )
         peer_host = os.environ.get("SEMIRDMA_PEER_HOST", cfg.dist.master_addr)
         state = ClearHookState.for_rank(

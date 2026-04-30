@@ -410,6 +410,23 @@ def _run_clear_bucket(
                              bucket_seq=bucket_seq, phase_id=0,
                              peer_edge=1 if we_send_min_to_max else 0)
 
+    # ---- App-level chunk drop (zero-overhead at loss_rate=0) ----------
+    # Mirrors phase4 transport.py: sender drops chunk with prob loss_rate
+    # before post_write. Same loss_seed → same RNG sequence → same dropped
+    # indices on both ranks (apples-to-apples with phase4_flat). At
+    # loss_rate=0 the entire block is skipped — no RNG, no set alloc.
+    drop_chunks = None
+    if state.cfg.loss_rate > 0.0:
+        rng = getattr(state, "_loss_rng", None)
+        if rng is None:
+            import random as _r
+            rng = _r.Random(state.cfg.loss_seed)
+            state._loss_rng = rng
+        drop_chunks = set()
+        for _i in range(n_chunks):
+            if rng.random() < state.cfg.loss_rate:
+                drop_chunks.add(_i)
+
     # ---- Send + Recv threads ----
     send_err: list = []
     recv_err: list = []
@@ -433,6 +450,7 @@ def _run_clear_bucket(
                 nbytes=nbytes, chunk_bytes=chunk_bytes,
                 peer_data_mr=state.tx._peer_data_mr,
                 policy=policy,
+                drop_chunks=drop_chunks,
                 finalize_event=sync.finalize_event,
                 finalize_holder=[sync],   # we just need wait-side; decision
                                           # is already inside the sync object

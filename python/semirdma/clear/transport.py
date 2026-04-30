@@ -61,6 +61,13 @@ class ClearTransportConfig:
     rq_low_watermark: int = 64
     rq_refill_target: int = 256
     rq_initial_credits: int = 256
+    # E1 app-level chunk drop simulation (mirrors phase4 TransportConfig):
+    # sender drops chunk with prob loss_rate before post_write. Both ranks
+    # must use the same loss_seed so dropped indices match across transports
+    # (apples-to-apples comparison). loss_rate=0 → zero-overhead path: no
+    # RNG calls, no drop_chunks set construction in the hook hot loop.
+    loss_rate: float = 0.0
+    loss_seed: int = 0
 
 
 class ClearTransport:
