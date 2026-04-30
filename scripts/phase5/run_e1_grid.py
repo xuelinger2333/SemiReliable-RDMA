@@ -137,7 +137,8 @@ def print_distribution(cells: List[Cell]) -> None:
 
 def _torchrun_cmd(c: Cell, all_cells: List[Cell],
                   node: str, dev: str, gid: int,
-                  data_root: str, repo: str) -> str:
+                  data_root: str, repo: str,
+                  steps: int = STEPS) -> str:
     """Build the torchrun shell command for one cell. Returns a single
     space-joined string ready to embed in the SSH wrapper."""
     i = per_node_index(c, all_cells)
@@ -149,7 +150,7 @@ def _torchrun_cmd(c: Cell, all_cells: List[Cell],
         f"transport={c.transport}",
         f"loss_rate={c.drop}",
         f"seed={c.seed}",
-        f"steps={STEPS}",
+        f"steps={steps}",
         f"data.root={data_root}",
         "data.download=false",
         f"dist.semirdma_port={semi}",
@@ -182,9 +183,9 @@ def _torchrun_cmd(c: Cell, all_cells: List[Cell],
 def run_one_cell_remote(c: Cell, all_cells: List[Cell],
                         node: str, dev: str, gid: int,
                         data_root: str, repo: str,
-                        log_dir: str) -> int:
+                        log_dir: str, steps: int = STEPS) -> int:
     """Execute one cell over SSH on `node`, with retry."""
-    inner_cmd = _torchrun_cmd(c, all_cells, node, dev, gid, data_root, repo)
+    inner_cmd = _torchrun_cmd(c, all_cells, node, dev, gid, data_root, repo, steps)
 
     log_path = f"{log_dir}/{c.tag()}.log"
     full_cmd = (
@@ -195,7 +196,10 @@ def run_one_cell_remote(c: Cell, all_cells: List[Cell],
         + f" >{log_path} 2>&1"
     )
 
-    ssh = ["ssh", f"{SSH_USER}@{node}.utah.cloudlab.us", full_cmd]
+    ssh = ["ssh",
+           "-o", "ServerAliveInterval=60",
+           "-o", "ServerAliveCountMax=120",
+           f"{SSH_USER}@{node}.utah.cloudlab.us", full_cmd]
     print(f"[{time.strftime('%H:%M:%S')}] >>> {c.tag()} on {node}", flush=True)
 
     for attempt in range(2):
@@ -205,7 +209,8 @@ def run_one_cell_remote(c: Cell, all_cells: List[Cell],
         # SIGABRT in teardown gives non-zero exit but training_done was logged.
         # Check the log for 'training done' as the real success signal.
         ok = subprocess.run(
-            ["ssh", f"{SSH_USER}@{node}.utah.cloudlab.us",
+            ["ssh", "-o", "ServerAliveInterval=60",
+             f"{SSH_USER}@{node}.utah.cloudlab.us",
              f"grep -q 'training done' {log_path} && echo OK || echo FAIL"],
             capture_output=True, text=True
         ).stdout.strip() == "OK"
@@ -221,13 +226,13 @@ def run_one_cell_remote(c: Cell, all_cells: List[Cell],
 
 def node_runner(node: str, cell_ids: List[int],
                 dev: str, gid: int, data_root: str,
-                repo: str, log_dir: str) -> int:
+                repo: str, log_dir: str, steps: int = STEPS) -> int:
     cells = enumerate_cells()
     failed = []
     for cid in cell_ids:
         c = cells[cid]
         rc = run_one_cell_remote(c, cells, node, dev, gid,
-                                  data_root, repo, log_dir)
+                                  data_root, repo, log_dir, steps=steps)
         if rc != 0:
             failed.append(cid)
     if failed:
@@ -260,6 +265,7 @@ def launch(args) -> int:
             "--data-root", args.data_root,
             "--repo", args.repo,
             "--log-dir", args.log_dir,
+            "--steps", str(args.steps),
         ]
         log = open(f"{args.local_log_dir}/{node}.runner.log", "w")
         procs[node] = subprocess.Popen(cmd, stdout=log, stderr=subprocess.STDOUT)
@@ -289,16 +295,28 @@ def main():
                     default="/users/chen123/SemiRDMA/experiments/results/phase5/e1/logs")
     ap.add_argument("--local-log-dir", type=str,
                     default="experiments/results/phase5/e1/logs")
+    ap.add_argument("--steps", type=int, default=STEPS,
+                    help="Override step count (smoke=5, grid=200)")
+    ap.add_argument("--smoke-cell", type=int, default=None,
+                    help="Run a single cell id with --steps; for runner sanity")
     args = ap.parse_args()
 
     if args.print_dist:
         print_distribution(enumerate_cells())
         return 0
+    if args.smoke_cell is not None:
+        cells = enumerate_cells()
+        c = cells[args.smoke_cell]
+        node = assign_node(c)
+        print(f"SMOKE: cell c{args.smoke_cell:02d} on {node} steps={args.steps}")
+        return run_one_cell_remote(c, cells, node, args.dev, args.gid,
+                                    args.data_root, args.repo,
+                                    args.log_dir, steps=args.steps)
     if args.node_runner:
         cell_ids = [int(x) for x in args.cells.split(",")]
-        Path(args.log_dir).mkdir(parents=True, exist_ok=True)  # local view
         return node_runner(args.node, cell_ids, args.dev, args.gid,
-                           args.data_root, args.repo, args.log_dir)
+                           args.data_root, args.repo, args.log_dir,
+                           steps=args.steps)
     if args.launch:
         Path(args.local_log_dir).mkdir(parents=True, exist_ok=True)
         return launch(args)
