@@ -506,13 +506,6 @@ def _run_clear_bucket(
     )
     _t_fin_end = _time.perf_counter()
 
-    # E1 bit-equality probe: hash inputs at step 0 only.
-    if state.step_seq == 0 and not getattr(state, "_dbg_did_step0", False):
-        import hashlib as _h
-        in_h = _h.sha256(bucket_bytes).hexdigest()
-        peer_h = _h.sha256(bytes(peer_slice)).hexdigest()
-        logger.info("CLR_DBG step=0 in_sha256=%s peer_sha256=%s", in_h, peer_h)
-
     # ---- Average locally ---------------------------------------------
     _t_avg_start = _time.perf_counter()
     local_arr = np.frombuffer(bucket_bytes, dtype=np.uint8)
@@ -530,13 +523,6 @@ def _run_clear_bucket(
         avg = (local_arr.astype(np.uint16) + peer_arr.astype(np.uint16)) \
               // state.world_size
         out = avg.astype(np.uint8).tobytes()
-
-    # E1 bit-equality probe: hash output at step 0 only.
-    if state.step_seq == 0 and not getattr(state, "_dbg_did_step0", False):
-        import hashlib as _h
-        out_h = _h.sha256(out).hexdigest()
-        logger.info("CLR_DBG step=0 out_sha256=%s", out_h)
-        state._dbg_did_step0 = True
 
     # Cleanup sync state for these uids — they won't repeat for the
     # same (step, bucket).
