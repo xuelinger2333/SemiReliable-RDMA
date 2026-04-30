@@ -186,9 +186,20 @@ SSH_OPTS = ["-o", "ServerAliveInterval=60",
 
 
 def _ssh(node: str, cmd: str, capture: bool = False, timeout: int = 60):
-    """Short SSH call — returns CompletedProcess. Use for poll/probe only."""
+    """Short SSH call — returns CompletedProcess. Use for poll/probe only.
+
+    stdin/stdout/stderr are explicitly redirected to DEVNULL when not
+    captured, because Windows OpenSSH can keep stderr open after the
+    remote command finishes (mosh-style EOF lag), causing subprocess
+    timeout to fire on already-completed launches.
+    """
     full = ["ssh"] + SSH_OPTS + [f"{SSH_USER}@{node}.utah.cloudlab.us", cmd]
-    return subprocess.run(full, capture_output=capture, text=True, timeout=timeout)
+    if capture:
+        return subprocess.run(full, capture_output=True, text=True,
+                              timeout=timeout, stdin=subprocess.DEVNULL)
+    return subprocess.run(full, stdin=subprocess.DEVNULL,
+                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                          timeout=timeout)
 
 
 def _cell_state(node: str, log_path: str) -> str:
@@ -253,9 +264,9 @@ def run_one_cell_remote(c: Cell, all_cells: List[Cell],
                 f">{log_path} 2>&1 & disown"
             )
             try:
-                _ssh(node, launch, timeout=30)
+                _ssh(node, launch, timeout=90)
             except subprocess.TimeoutExpired:
-                print(f"  launch SSH timeout", flush=True)
+                print(f"  launch SSH timeout (90s)", flush=True)
                 continue
 
         # Poll for completion (max 45 min per cell).
