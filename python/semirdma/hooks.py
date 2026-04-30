@@ -236,9 +236,24 @@ def _run_semirdma_bucket(
         remote_typed = remote_np.view(flat.numpy().dtype).reshape(flat.shape)
         remote_t = torch.from_numpy(remote_typed)
 
+        # E1 bit-equality probe: hash inputs + output at step 0 only so we
+        # can compare phase4_flat vs clear_t1 averaged outputs on identical
+        # inputs. Removed once the loss-gap bug is closed.
+        if not getattr(state, "_dbg_did_step0", False):
+            import hashlib as _h
+            in_h = _h.sha256(flat.numpy().tobytes()).hexdigest()
+            peer_h = _h.sha256(remote_t.numpy().tobytes()).hexdigest()
+            logger.info("P4F_DBG step=0 in_sha256=%s peer_sha256=%s", in_h, peer_h)
+
         # Average in-place into flat to avoid a second allocation.
         flat.add_(remote_t)
         flat.div_(state.world_size)
+
+        if not getattr(state, "_dbg_did_step0", False):
+            import hashlib as _h
+            out_h = _h.sha256(flat.numpy().tobytes()).hexdigest()
+            logger.info("P4F_DBG step=0 out_sha256=%s", out_h)
+            state._dbg_did_step0 = True
 
         # Also drain any sender-side CQEs that piled up; ignore count.
         state.tx.drain_send_completions()
