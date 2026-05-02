@@ -618,6 +618,11 @@ def clear_allreduce_hook(state, bucket):
         # soon as the expected fraction is delivered. Floor at 0.5 to
         # keep the wait meaningful at extreme loss_rate.
         target_ratio = max(0.5, 1.0 - float(state.cfg.loss_rate))
+        if state.step_seq < 3:
+            logger.info(
+                "DBG_FIX step=%d bucket=%d loss_rate=%.4f target_ratio=%.4f",
+                state.step_seq, bucket_id,
+                float(state.cfg.loss_rate), target_ratio)
         avg_bytes = _run_clear_bucket(
             state,
             bucket_bytes=bucket_bytes,
