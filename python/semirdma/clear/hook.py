@@ -609,10 +609,20 @@ def clear_allreduce_hook(state, bucket):
         _t_to_bytes_start = _time.perf_counter()
         bucket_bytes = bytes(flat.numpy().tobytes())
         _t_to_bytes_end = _time.perf_counter()
+        # Under app-level chunk drop, dropped chunks NEVER arrive at the
+        # receiver. Holding ratio=1.0 (default) makes wait_for_ratio_clear
+        # block until timeout_ms — wasting ~5 s per bucket whenever
+        # cfg.loss_rate > 0 (measured +5000 ms in clear_perf send_ms /
+        # recv_ms; see docs/phase5/results/e1_clear_perf_decode.md).
+        # Lower the target ratio to 1 - loss_rate so the wait exits as
+        # soon as the expected fraction is delivered. Floor at 0.5 to
+        # keep the wait meaningful at extreme loss_rate.
+        target_ratio = max(0.5, 1.0 - float(state.cfg.loss_rate))
         avg_bytes = _run_clear_bucket(
             state,
             bucket_bytes=bucket_bytes,
             bucket_seq=bucket_id,
+            ratio=target_ratio,
             timeout_ms=5000,         # ratio_clear deadline per bucket
             drain_timeout_ms=10000,  # SQ-drain + FINALIZE/BEGIN waits
         )
