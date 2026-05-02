@@ -15,6 +15,7 @@ LOGDIR=${LOGDIR:-$REPO/experiments/results/phase5/e1/logs}
 DEV=${DEV:-mlx5_2}
 GID=${GID:-1}
 STEPS=${STEPS:-200}
+CELL_TIMEOUT=${CELL_TIMEOUT:-3000}  # 50 min; clear_t1 with loss>0 needs ~40 min
 
 # Cell descriptors: id transport drop seed master_port semi_port
 case "$NODE" in
@@ -29,6 +30,15 @@ case "$NODE" in
       "34 clear_t1   0.05 42 29517 29768"
     )
     ;;
+  amd247_retry)
+    # Re-run cells that hit the 30 min timeout under the original
+    # CELL_TIMEOUT=1800; new default is 3000 s.
+    CELLS=(
+      "30 clear_t1 0.01 41 29515 29760"
+      "32 clear_t1 0.01 43 29516 29764"
+      "34 clear_t1 0.05 42 29517 29768"
+    )
+    ;;
   amd245)
     CELLS=(
       "21 phase4_prc 0.01 41 29610 29840"
@@ -39,6 +49,13 @@ case "$NODE" in
       "31 clear_t1   0.01 42 29615 29860"
       "33 clear_t1   0.05 41 29616 29864"
       "35 clear_t1   0.05 43 29617 29868"
+    )
+    ;;
+  amd245_retry)
+    CELLS=(
+      "31 clear_t1 0.01 42 29615 29860"
+      "33 clear_t1 0.05 41 29616 29864"
+      "35 clear_t1 0.05 43 29617 29868"
     )
     ;;
   *) echo "unknown node: $NODE"; exit 1;;
@@ -88,7 +105,7 @@ for desc in "${CELLS[@]}"; do
   fi
 
   echo "$(ts) >>> $TAG master=$MASTER_PORT semi=$SEMI_PORT"
-  PYTHONPATH="$REPO/python" timeout 1800 torchrun \
+  PYTHONPATH="$REPO/python" timeout "$CELL_TIMEOUT" torchrun \
     --nproc_per_node=2 --master_port="$MASTER_PORT" \
     "$REPO/experiments/stage_a/train_cifar10.py" \
     $CFG_ARGS \
