@@ -614,15 +614,14 @@ def clear_allreduce_hook(state, bucket):
         # block until timeout_ms — wasting ~5 s per bucket whenever
         # cfg.loss_rate > 0 (measured +5000 ms in clear_perf send_ms /
         # recv_ms; see docs/phase5/results/e1_clear_perf_decode.md).
-        # Lower the target ratio to 1 - loss_rate so the wait exits as
-        # soon as the expected fraction is delivered. Floor at 0.5 to
-        # keep the wait meaningful at extreme loss_rate.
-        target_ratio = max(0.5, 1.0 - float(state.cfg.loss_rate))
-        if state.step_seq < 3:
-            logger.info(
-                "DBG_FIX step=%d bucket=%d loss_rate=%.4f target_ratio=%.4f",
-                state.step_seq, bucket_id,
-                float(state.cfg.loss_rate), target_ratio)
+        # Lower the target ratio so the wait exits via RATIO_MET as soon
+        # as the expected fraction is delivered. Drop count per bucket
+        # follows Binomial(n_chunks, loss_rate); a 2× margin on loss_rate
+        # (i.e. ratio = 1 - 2 * loss_rate) covers the variance for
+        # n_chunks ~ 2729 with high confidence (~3 sigma). Floor at 0.5
+        # so extreme loss_rate still produces a meaningful wait.
+        lr = float(state.cfg.loss_rate)
+        target_ratio = max(0.5, 1.0 - 2.0 * lr) if lr > 0.0 else 1.0
         avg_bytes = _run_clear_bucket(
             state,
             bucket_bytes=bucket_bytes,
