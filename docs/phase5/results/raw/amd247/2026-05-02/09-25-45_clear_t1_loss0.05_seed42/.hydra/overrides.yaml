@@ -1,0 +1,7 @@
+- transport=clear_t1
+- loss_rate=0.05
+- seed=42
+- steps=200
+- data.root=/users/chen123/data/cifar10
+- data.download=false
+- dist.semirdma_port=29768

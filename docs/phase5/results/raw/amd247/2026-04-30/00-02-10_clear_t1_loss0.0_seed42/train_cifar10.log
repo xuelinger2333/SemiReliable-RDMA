@@ -1,0 +1,58 @@
+[2026-04-30 00:02:10,284][__main__][INFO] - Stage A config:
+transport: clear_t1
+loss_rate: 0.0
+seed: 42
+steps: 50
+warmup_steps: 50
+data:
+  root: /users/chen123/data/cifar10
+  download: false
+  batch_size: 128
+  num_workers: 2
+  pin_memory: false
+model:
+  name: resnet18
+  num_classes: 10
+optim:
+  name: sgd
+  lr: 0.1
+  momentum: 0.9
+  weight_decay: 0.0005
+dist:
+  world_size: 2
+  master_addr: 127.0.0.1
+  master_port: 29500
+  semirdma_port: 29700
+transport_cfg:
+  dev_name: mlx5_2
+  buffer_bytes: 67108864
+  chunk_bytes: 16384
+  sq_depth: 4096
+  rq_depth: 8192
+  ratio: 0.95
+  timeout_ms: 20
+  gid_index: 1
+  cp_recv_slots: 64
+  cp_send_slots: 16
+  repair_budget_bytes_per_step: 0
+bucket_cap_mb: 512
+
+[2026-04-30 00:02:11,103][semirdma._bootstrap][INFO] - bootstrap: listening on 127.0.0.1:29700
+[2026-04-30 00:02:11,124][semirdma._bootstrap][INFO] - bootstrap: connected to 127.0.0.1:29700
+[2026-04-30 00:02:11,124][semirdma._bootstrap][INFO] - bootstrap: peer ('127.0.0.1', 37854) connected
+[2026-04-30 00:02:11,124][semirdma._bootstrap][INFO] - bootstrap: listening on 127.0.0.1:29701
+[2026-04-30 00:02:11,325][semirdma._bootstrap][INFO] - bootstrap: connected to 127.0.0.1:29701
+[2026-04-30 00:02:11,325][semirdma._bootstrap][INFO] - bootstrap: peer ('127.0.0.1', 51640) connected
+[2026-04-30 00:02:11,325][semirdma._bootstrap][INFO] - bootstrap: listening on 127.0.0.1:29702
+[2026-04-30 00:02:11,325][semirdma._bootstrap][INFO] - bootstrap: connected to 127.0.0.1:29702
+[2026-04-30 00:02:11,325][semirdma._bootstrap][INFO] - bootstrap: peer ('127.0.0.1', 49486) connected
+[2026-04-30 00:02:11,325][semirdma._bootstrap][INFO] - bootstrap: listening on 127.0.0.1:29703
+[2026-04-30 00:02:11,325][semirdma._bootstrap][INFO] - bootstrap: connected to 127.0.0.1:29703
+[2026-04-30 00:02:11,326][semirdma._bootstrap][INFO] - bootstrap: peer ('127.0.0.1', 37848) connected
+[2026-04-30 00:02:18,552][semirdma.clear.hook][INFO] - CLR_DBG step=0 in_sha256=9906376ea5538fd9d417dc8fa04b470929271d1e7b5ba62dcab5ec8e3771f622 peer_sha256=6f7839340beff4ddd8b3936777ea0b8bcdf7ad8488caf60b65c5a59f62bc6149
+[2026-04-30 00:02:18,554][semirdma.clear.hook][INFO] - CLR_DBG step=0 in_sha256=6f7839340beff4ddd8b3936777ea0b8bcdf7ad8488caf60b65c5a59f62bc6149 peer_sha256=9906376ea5538fd9d417dc8fa04b470929271d1e7b5ba62dcab5ec8e3771f622
+[2026-04-30 00:02:18,647][semirdma.clear.hook][INFO] - CLR_DBG step=0 out_sha256=683f9fac6ff2a49cfa391dffe8c0acd7b615cff938b92eda49db87b1745fc873
+[2026-04-30 00:02:18,648][semirdma.clear.hook][INFO] - CLR_DBG step=0 out_sha256=683f9fac6ff2a49cfa391dffe8c0acd7b615cff938b92eda49db87b1745fc873
+[2026-04-30 00:02:18,744][__main__][INFO] - step=0 loss=2.4233 iter_ms=7267.7
+[2026-04-30 00:07:47,088][__main__][INFO] - training done: 50 steps in 335.8s
+[2026-04-30 00:07:47,089][__main__][INFO] - wrote clear_perf.csv with 50 rows

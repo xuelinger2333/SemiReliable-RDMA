@@ -1,0 +1,17 @@
+[20:46:07] >>> c21_phase4_prc_loss0.01_seed41 master=29610 semi=29840
+[21:08:31] <<< c21_phase4_prc_loss0.01_seed41 DONE n=200 rc=0
+[21:09:31] >>> c23_phase4_prc_loss0.01_seed43 master=29611 semi=29844
+[21:31:27] <<< c23_phase4_prc_loss0.01_seed43 DONE n=200 rc=0
+[21:32:27] >>> c25_phase4_prc_loss0.05_seed42 master=29612 semi=29848
+[21:54:04] <<< c25_phase4_prc_loss0.05_seed42 DONE n=200 rc=0
+[21:55:04] >>> c27_clear_t1_loss0_seed41 master=29613 semi=29852
+[22:17:05] <<< c27_clear_t1_loss0_seed41 DONE n=200 rc=1
+[22:18:05] >>> c29_clear_t1_loss0_seed43 master=29614 semi=29856
+[22:40:24] <<< c29_clear_t1_loss0_seed43 DONE n=200 rc=1
+[22:41:24] >>> c31_clear_t1_loss0.01_seed42 master=29615 semi=29860
+[23:11:25] !!! c31_clear_t1_loss0.01_seed42 FAILED rc=124 n=NONE
+[23:12:25] >>> c33_clear_t1_loss0.05_seed41 master=29616 semi=29864
+[23:42:25] !!! c33_clear_t1_loss0.05_seed41 FAILED rc=124 n=NONE
+[23:43:25] >>> c35_clear_t1_loss0.05_seed43 master=29617 semi=29868
+[00:13:26] !!! c35_clear_t1_loss0.05_seed43 FAILED rc=124 n=NONE
+[00:14:26] ALL CELLS PROCESSED

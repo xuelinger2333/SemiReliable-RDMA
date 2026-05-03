@@ -1,0 +1,160 @@
+W0501 21:52:46.491000 71896 torch/distributed/run.py:851] 
+W0501 21:52:46.491000 71896 torch/distributed/run.py:851] *****************************************
+W0501 21:52:46.491000 71896 torch/distributed/run.py:851] Setting OMP_NUM_THREADS environment variable for each process to be 1 in default, to avoid your system being overloaded, please further tune the variable for optimal performance in your application as needed. 
+W0501 21:52:46.491000 71896 torch/distributed/run.py:851] *****************************************
+[2026-05-01 21:52:48,660][__main__][INFO] - Stage A config:
+transport: clear_t1
+loss_rate: 0
+seed: 42
+steps: 200
+warmup_steps: 50
+data:
+  root: /users/chen123/data/cifar10
+  download: false
+  batch_size: 128
+  num_workers: 2
+  pin_memory: false
+model:
+  name: resnet18
+  num_classes: 10
+optim:
+  name: sgd
+  lr: 0.1
+  momentum: 0.9
+  weight_decay: 0.0005
+dist:
+  world_size: 2
+  master_addr: 127.0.0.1
+  master_port: 29500
+  semirdma_port: 29756
+transport_cfg:
+  dev_name: mlx5_2
+  buffer_bytes: 67108864
+  chunk_bytes: 16384
+  sq_depth: 4096
+  rq_depth: 8192
+  ratio: 0.95
+  timeout_ms: 20
+  gid_index: 1
+  cp_recv_slots: 64
+  cp_send_slots: 16
+  repair_budget_bytes_per_step: 0
+bucket_cap_mb: 512
+
+[INFO]  Opened device: mlx5_2
+[INFO]  Opened device: mlx5_2
+[INFO]  Port active_mtu=5 (IBV_MTU_4096 enum)
+[INFO]  Port active_mtu=5 (IBV_MTU_4096 enum)
+[INFO]  Using GID index 1 (pinned via config)
+[INFO]  Using GID index 1 (pinned via config)
+[INFO]  Created UC QP, qpn=311
+[INFO]  Created UC QP, qpn=312
+[INFO]  Opened device: mlx5_2
+[INFO]  Opened device: mlx5_2
+[INFO]  Port active_mtu=5 (IBV_MTU_4096 enum)
+[INFO]  Using GID index 1 (pinned via config)
+[INFO]  Port active_mtu=5 (IBV_MTU_4096 enum)
+[INFO]  Using GID index 1 (pinned via config)
+[INFO]  Created RC QP, qpn=313
+[INFO]  Created RC QP, qpn=314
+[INFO]  Opened device: mlx5_2
+[INFO]  Opened device: mlx5_2
+[INFO]  Port active_mtu=5 (IBV_MTU_4096 enum)
+[INFO]  Using GID index 1 (pinned via config)
+[INFO]  Created UC QP, qpn=315
+[INFO]  Opened device: mlx5_2
+[INFO]  Port active_mtu=5 (IBV_MTU_4096 enum)
+[INFO]  Using GID index 1 (pinned via config)
+[INFO]  Created RC QP, qpn=316
+[2026-05-01 21:52:49,481][semirdma._bootstrap][INFO] - bootstrap: listening on 127.0.0.1:29756
+[INFO]  Port active_mtu=5 (IBV_MTU_4096 enum)
+[INFO]  Using GID index 1 (pinned via config)
+[INFO]  Created UC QP, qpn=317
+[INFO]  Opened device: mlx5_2
+[INFO]  Port active_mtu=5 (IBV_MTU_4096 enum)
+[INFO]  Using GID index 1 (pinned via config)
+[INFO]  Created RC QP, qpn=318
+[2026-05-01 21:52:49,500][semirdma._bootstrap][INFO] - bootstrap: connected to 127.0.0.1:29756
+[2026-05-01 21:52:49,500][semirdma._bootstrap][INFO] - bootstrap: peer ('127.0.0.1', 59934) connected
+[2026-05-01 21:52:49,501][semirdma._bootstrap][INFO] - bootstrap: listening on 127.0.0.1:29757
+[2026-05-01 21:52:49,701][semirdma._bootstrap][INFO] - bootstrap: connected to 127.0.0.1:29757
+[2026-05-01 21:52:49,701][semirdma._bootstrap][INFO] - bootstrap: peer ('127.0.0.1', 53912) connected
+[2026-05-01 21:52:49,701][semirdma._bootstrap][INFO] - bootstrap: listening on 127.0.0.1:29758
+[2026-05-01 21:52:49,902][semirdma._bootstrap][INFO] - bootstrap: connected to 127.0.0.1:29758
+[2026-05-01 21:52:49,902][semirdma._bootstrap][INFO] - bootstrap: peer ('127.0.0.1', 40538) connected
+[2026-05-01 21:52:49,902][semirdma._bootstrap][INFO] - bootstrap: listening on 127.0.0.1:29759
+[2026-05-01 21:52:49,902][semirdma._bootstrap][INFO] - bootstrap: connected to 127.0.0.1:29759
+[2026-05-01 21:52:49,902][semirdma._bootstrap][INFO] - bootstrap: peer ('127.0.0.1', 48358) connected
+[INFO]  QP -> INIT
+[INFO]  QP -> INIT
+[INFO]  QP -> RTR (dest_qpn=315)
+[INFO]  QP -> RTR (dest_qpn=317)
+[INFO]  QP -> RTS (sq_psn=0)
+[INFO]  QP -> RTS (sq_psn=0)
+[INFO]  QP -> INIT
+[INFO]  QP -> INIT
+[INFO]  QP -> RTR (dest_qpn=318)
+[INFO]  RC params: timeout=14 (~67.1 ms) retry_cnt=7 rnr_retry=7 min_rnr_timer=12 max_rd_atomic=1
+[INFO]  QP -> RTR (dest_qpn=316)
+[INFO]  RC params: timeout=14 (~67.1 ms) retry_cnt=7 rnr_retry=7 min_rnr_timer=12 max_rd_atomic=1
+[INFO]  QP -> RTS (sq_psn=0)
+[INFO]  QP -> RTS (sq_psn=0)
+[INFO]  QP -> INIT
+[INFO]  QP -> INIT
+[INFO]  QP -> RTR (dest_qpn=312)
+[INFO]  QP -> RTR (dest_qpn=311)
+[INFO]  QP -> RTS (sq_psn=0)
+[INFO]  QP -> RTS (sq_psn=0)
+[INFO]  QP -> INIT
+[INFO]  QP -> INIT
+[INFO]  QP -> RTR (dest_qpn=314)
+[INFO]  RC params: timeout=14 (~67.1 ms) retry_cnt=7 rnr_retry=7 min_rnr_timer=12 max_rd_atomic=1
+[INFO]  QP -> RTR (dest_qpn=313)
+[INFO]  QP -> RTS (sq_psn=0)
+[INFO]  RC params: timeout=14 (~67.1 ms) retry_cnt=7 rnr_retry=7 min_rnr_timer=12 max_rd_atomic=1
+[INFO]  QP -> RTS (sq_psn=0)
+[2026-05-01 21:52:57,175][__main__][INFO] - step=0 loss=2.4233 iter_ms=7117.1
+[2026-05-01 21:58:31,412][__main__][INFO] - step=50 loss=1.9388 iter_ms=6480.1
+[2026-05-01 22:04:05,996][__main__][INFO] - step=100 loss=1.8192 iter_ms=6826.8
+[2026-05-01 22:09:39,044][__main__][INFO] - step=150 loss=1.7241 iter_ms=6744.9
+terminate called without an active exception
+[2026-05-01 22:15:05,924][__main__][INFO] - training done: 200 steps in 1336.0s
+[2026-05-01 22:15:05,926][__main__][INFO] - wrote clear_perf.csv with 200 rows
+terminate called without an active exception
+W0501 22:15:06.106000 71896 torch/distributed/elastic/multiprocessing/api.py:1012] Sending process 71946 closing signal SIGTERM
+E0501 22:15:06.110000 71896 torch/distributed/elastic/multiprocessing/api.py:986] failed (exitcode: -6) local_rank: 0 (pid: 71945) of binary: /users/chen123/SemiRDMA/.venv/bin/python3
+Traceback (most recent call last):
+  File "/users/chen123/SemiRDMA/.venv/bin/torchrun", line 6, in <module>
+    sys.exit(main())
+  File "/users/chen123/SemiRDMA/.venv/lib/python3.10/site-packages/torch/distributed/elastic/multiprocessing/errors/__init__.py", line 362, in wrapper
+    return f(*args, **kwargs)
+  File "/users/chen123/SemiRDMA/.venv/lib/python3.10/site-packages/torch/distributed/run.py", line 990, in main
+    run(args)
+  File "/users/chen123/SemiRDMA/.venv/lib/python3.10/site-packages/torch/distributed/run.py", line 981, in run
+    elastic_launch(
+  File "/users/chen123/SemiRDMA/.venv/lib/python3.10/site-packages/torch/distributed/launcher/api.py", line 170, in __call__
+    return launch_agent(self._config, self._entrypoint, list(args))
+  File "/users/chen123/SemiRDMA/.venv/lib/python3.10/site-packages/torch/distributed/launcher/api.py", line 317, in launch_agent
+    raise ChildFailedError(
+torch.distributed.elastic.multiprocessing.errors.ChildFailedError: 
+============================================================
+/users/chen123/SemiRDMA/experiments/stage_a/train_cifar10.py FAILED
+------------------------------------------------------------
+Failures:
+[1]:
+  time      : 2026-05-01_22:15:06
+  host      : amd247.utah.cloudlab.us
+  rank      : 1 (local_rank: 1)
+  exitcode  : -6 (pid: 71946)
+  error_file: <N/A>
+  traceback : Signal 6 (SIGABRT) received by PID 71946
+------------------------------------------------------------
+Root Cause (first observed failure):
+[0]:
+  time      : 2026-05-01_22:15:06
+  host      : amd247.utah.cloudlab.us
+  rank      : 0 (local_rank: 0)
+  exitcode  : -6 (pid: 71945)
+  error_file: <N/A>
+  traceback : Signal 6 (SIGABRT) received by PID 71945
+============================================================

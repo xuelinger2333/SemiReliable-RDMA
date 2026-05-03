@@ -1,0 +1,13 @@
+- transport=phase4_flat
+- loss_rate=0.05
+- seed=41
+- steps=200
+- data.root=/users/chen123/data/cifar10
+- data.download=false
+- dist.semirdma_port=29828
+- transport_cfg.dev_name=mlx5_2
+- +transport_cfg.gid_index=1
+- transport_cfg.chunk_bytes=16384
+- transport_cfg.sq_depth=4096
+- transport_cfg.rq_depth=8192
+- +bucket_cap_mb=512

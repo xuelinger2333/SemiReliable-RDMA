@@ -1,0 +1,53 @@
+[2026-05-02 11:10:50,355][__main__][INFO] - Stage A config:
+transport: clear_t1
+loss_rate: 0.05
+seed: 41
+steps: 200
+warmup_steps: 50
+data:
+  root: /users/chen123/data/cifar10
+  download: false
+  batch_size: 128
+  num_workers: 2
+  pin_memory: false
+model:
+  name: resnet18
+  num_classes: 10
+optim:
+  name: sgd
+  lr: 0.1
+  momentum: 0.9
+  weight_decay: 0.0005
+dist:
+  world_size: 2
+  master_addr: 127.0.0.1
+  master_port: 29500
+  semirdma_port: 29864
+transport_cfg:
+  dev_name: mlx5_2
+  buffer_bytes: 67108864
+  chunk_bytes: 16384
+  sq_depth: 4096
+  rq_depth: 8192
+  ratio: 0.95
+  timeout_ms: 20
+  gid_index: 1
+  cp_recv_slots: 64
+  cp_send_slots: 16
+  repair_budget_bytes_per_step: 0
+bucket_cap_mb: 512
+
+[2026-05-02 11:10:51,178][semirdma._bootstrap][INFO] - bootstrap: listening on 127.0.0.1:29864
+[2026-05-02 11:10:51,202][semirdma._bootstrap][INFO] - bootstrap: connected to 127.0.0.1:29864
+[2026-05-02 11:10:51,202][semirdma._bootstrap][INFO] - bootstrap: peer ('127.0.0.1', 58700) connected
+[2026-05-02 11:10:51,202][semirdma._bootstrap][INFO] - bootstrap: listening on 127.0.0.1:29865
+[2026-05-02 11:10:51,403][semirdma._bootstrap][INFO] - bootstrap: connected to 127.0.0.1:29865
+[2026-05-02 11:10:51,403][semirdma._bootstrap][INFO] - bootstrap: peer ('127.0.0.1', 54644) connected
+[2026-05-02 11:10:51,403][semirdma._bootstrap][INFO] - bootstrap: listening on 127.0.0.1:29866
+[2026-05-02 11:10:51,603][semirdma._bootstrap][INFO] - bootstrap: connected to 127.0.0.1:29866
+[2026-05-02 11:10:51,603][semirdma._bootstrap][INFO] - bootstrap: peer ('127.0.0.1', 40576) connected
+[2026-05-02 11:10:51,604][semirdma._bootstrap][INFO] - bootstrap: listening on 127.0.0.1:29867
+[2026-05-02 11:10:51,604][semirdma._bootstrap][INFO] - bootstrap: connected to 127.0.0.1:29867
+[2026-05-02 11:10:51,604][semirdma._bootstrap][INFO] - bootstrap: peer ('127.0.0.1', 45892) connected
+[2026-05-02 11:10:58,995][__main__][INFO] - step=0 loss=2.3656 iter_ms=7231.4
+[2026-05-02 11:18:37,108][__main__][INFO] - step=50 loss=1.9669 iter_ms=11618.2

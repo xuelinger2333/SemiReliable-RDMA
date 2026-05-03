@@ -1,0 +1,57 @@
+[2026-05-02 08:01:51,163][__main__][INFO] - Stage A config:
+transport: clear_t1
+loss_rate: 0.05
+seed: 41
+steps: 200
+warmup_steps: 50
+data:
+  root: /users/chen123/data/cifar10
+  download: false
+  batch_size: 128
+  num_workers: 2
+  pin_memory: false
+model:
+  name: resnet18
+  num_classes: 10
+optim:
+  name: sgd
+  lr: 0.1
+  momentum: 0.9
+  weight_decay: 0.0005
+dist:
+  world_size: 2
+  master_addr: 127.0.0.1
+  master_port: 29500
+  semirdma_port: 29864
+transport_cfg:
+  dev_name: mlx5_2
+  buffer_bytes: 67108864
+  chunk_bytes: 16384
+  sq_depth: 4096
+  rq_depth: 8192
+  ratio: 0.95
+  timeout_ms: 20
+  gid_index: 1
+  cp_recv_slots: 64
+  cp_send_slots: 16
+  repair_budget_bytes_per_step: 0
+bucket_cap_mb: 512
+
+[2026-05-02 08:01:51,966][semirdma._bootstrap][INFO] - bootstrap: listening on 127.0.0.1:29864
+[2026-05-02 08:01:51,968][semirdma._bootstrap][INFO] - bootstrap: connected to 127.0.0.1:29864
+[2026-05-02 08:01:51,968][semirdma._bootstrap][INFO] - bootstrap: peer ('127.0.0.1', 38938) connected
+[2026-05-02 08:01:51,968][semirdma._bootstrap][INFO] - bootstrap: listening on 127.0.0.1:29865
+[2026-05-02 08:01:52,169][semirdma._bootstrap][INFO] - bootstrap: connected to 127.0.0.1:29865
+[2026-05-02 08:01:52,169][semirdma._bootstrap][INFO] - bootstrap: peer ('127.0.0.1', 50490) connected
+[2026-05-02 08:01:52,169][semirdma._bootstrap][INFO] - bootstrap: listening on 127.0.0.1:29866
+[2026-05-02 08:01:52,369][semirdma._bootstrap][INFO] - bootstrap: connected to 127.0.0.1:29866
+[2026-05-02 08:01:52,369][semirdma._bootstrap][INFO] - bootstrap: peer ('127.0.0.1', 56696) connected
+[2026-05-02 08:01:52,370][semirdma._bootstrap][INFO] - bootstrap: listening on 127.0.0.1:29867
+[2026-05-02 08:01:52,370][semirdma._bootstrap][INFO] - bootstrap: connected to 127.0.0.1:29867
+[2026-05-02 08:01:52,370][semirdma._bootstrap][INFO] - bootstrap: peer ('127.0.0.1', 48350) connected
+[2026-05-02 08:02:04,745][__main__][INFO] - step=0 loss=2.3656 iter_ms=12219.4
+[2026-05-02 08:11:50,658][__main__][INFO] - step=50 loss=2.0502 iter_ms=11628.4
+[2026-05-02 08:21:28,580][__main__][INFO] - step=100 loss=1.6501 iter_ms=11454.8
+[2026-05-02 08:31:12,819][__main__][INFO] - step=150 loss=1.6477 iter_ms=11576.5
+[2026-05-02 08:40:40,305][__main__][INFO] - training done: 200 steps in 2327.9s
+[2026-05-02 08:40:40,307][__main__][INFO] - wrote clear_perf.csv with 200 rows

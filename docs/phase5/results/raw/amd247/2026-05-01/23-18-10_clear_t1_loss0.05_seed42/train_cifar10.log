@@ -1,0 +1,55 @@
+[2026-05-01 23:18:10,612][__main__][INFO] - Stage A config:
+transport: clear_t1
+loss_rate: 0.05
+seed: 42
+steps: 200
+warmup_steps: 50
+data:
+  root: /users/chen123/data/cifar10
+  download: false
+  batch_size: 128
+  num_workers: 2
+  pin_memory: false
+model:
+  name: resnet18
+  num_classes: 10
+optim:
+  name: sgd
+  lr: 0.1
+  momentum: 0.9
+  weight_decay: 0.0005
+dist:
+  world_size: 2
+  master_addr: 127.0.0.1
+  master_port: 29500
+  semirdma_port: 29768
+transport_cfg:
+  dev_name: mlx5_2
+  buffer_bytes: 67108864
+  chunk_bytes: 16384
+  sq_depth: 4096
+  rq_depth: 8192
+  ratio: 0.95
+  timeout_ms: 20
+  gid_index: 1
+  cp_recv_slots: 64
+  cp_send_slots: 16
+  repair_budget_bytes_per_step: 0
+bucket_cap_mb: 512
+
+[2026-05-01 23:18:11,432][semirdma._bootstrap][INFO] - bootstrap: listening on 127.0.0.1:29768
+[2026-05-01 23:18:11,433][semirdma._bootstrap][INFO] - bootstrap: connected to 127.0.0.1:29768
+[2026-05-01 23:18:11,433][semirdma._bootstrap][INFO] - bootstrap: peer ('127.0.0.1', 56948) connected
+[2026-05-01 23:18:11,434][semirdma._bootstrap][INFO] - bootstrap: listening on 127.0.0.1:29769
+[2026-05-01 23:18:11,634][semirdma._bootstrap][INFO] - bootstrap: connected to 127.0.0.1:29769
+[2026-05-01 23:18:11,634][semirdma._bootstrap][INFO] - bootstrap: peer ('127.0.0.1', 57922) connected
+[2026-05-01 23:18:11,634][semirdma._bootstrap][INFO] - bootstrap: listening on 127.0.0.1:29770
+[2026-05-01 23:18:11,835][semirdma._bootstrap][INFO] - bootstrap: connected to 127.0.0.1:29770
+[2026-05-01 23:18:11,835][semirdma._bootstrap][INFO] - bootstrap: peer ('127.0.0.1', 41006) connected
+[2026-05-01 23:18:11,835][semirdma._bootstrap][INFO] - bootstrap: listening on 127.0.0.1:29771
+[2026-05-01 23:18:11,835][semirdma._bootstrap][INFO] - bootstrap: connected to 127.0.0.1:29771
+[2026-05-01 23:18:11,835][semirdma._bootstrap][INFO] - bootstrap: peer ('127.0.0.1', 35644) connected
+[2026-05-01 23:18:24,165][__main__][INFO] - step=0 loss=2.4233 iter_ms=12171.3
+[2026-05-01 23:27:57,883][__main__][INFO] - step=50 loss=2.0940 iter_ms=11564.6
+[2026-05-01 23:37:34,243][__main__][INFO] - step=100 loss=1.8607 iter_ms=11578.7
+[2026-05-01 23:47:13,693][__main__][INFO] - step=150 loss=1.7332 iter_ms=11429.7

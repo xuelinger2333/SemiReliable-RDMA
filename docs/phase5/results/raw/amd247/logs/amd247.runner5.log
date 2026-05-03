@@ -1,0 +1,6 @@
+[08:45:21] === c30_clear_t1_loss0.01_seed41 already DONE (n=200)
+[08:45:21] >>> c32_clear_t1_loss0.01_seed43 master=29516 semi=29764
+[09:24:42] <<< c32_clear_t1_loss0.01_seed43 DONE n=200 rc=1
+[09:25:42] >>> c34_clear_t1_loss0.05_seed42 master=29517 semi=29768
+[10:04:43] <<< c34_clear_t1_loss0.05_seed42 DONE n=200 rc=1
+[10:05:43] ALL CELLS PROCESSED

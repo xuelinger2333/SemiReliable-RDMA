@@ -1,0 +1,921 @@
+[2026-05-01 21:07:13,902][__main__][INFO] - Stage A config:
+transport: semirdma
+loss_rate: 0.05
+seed: 41
+steps: 200
+warmup_steps: 50
+data:
+  root: /users/chen123/data/cifar10
+  download: false
+  batch_size: 128
+  num_workers: 2
+  pin_memory: false
+model:
+  name: resnet18
+  num_classes: 10
+optim:
+  name: sgd
+  lr: 0.1
+  momentum: 0.9
+  weight_decay: 0.0005
+dist:
+  world_size: 2
+  master_addr: 127.0.0.1
+  master_port: 29500
+  semirdma_port: 29748
+transport_cfg:
+  dev_name: mlx5_2
+  buffer_bytes: 134217728
+  chunk_bytes: 16384
+  sq_depth: 4096
+  rq_depth: 8192
+  ratio: 0.95
+  timeout_ms: 20
+  gid_index: 1
+bucket_cap_mb: 512
+
+[2026-05-01 21:07:14,768][semirdma._bootstrap][INFO] - bootstrap: listening on 0.0.0.0:29748
+[2026-05-01 21:07:14,770][semirdma._bootstrap][INFO] - bootstrap: connected to 127.0.0.1:29748
+[2026-05-01 21:07:14,770][semirdma._bootstrap][INFO] - bootstrap: peer ('127.0.0.1', 38866) connected
+[2026-05-01 21:07:14,772][semirdma.transport][INFO] - SemiRDMATransport up: local qpn=305 -> remote qpn=303, remote rkey=0xcb9e
+[2026-05-01 21:07:14,772][semirdma.transport][INFO] - SemiRDMATransport up: local qpn=303 -> remote qpn=305, remote rkey=0x3d12
+[2026-05-01 21:07:14,772][semirdma._bootstrap][INFO] - bootstrap: listening on 0.0.0.0:29749
+[2026-05-01 21:07:14,774][semirdma._bootstrap][INFO] - bootstrap: connected to 127.0.0.1:29749
+[2026-05-01 21:07:14,774][semirdma._bootstrap][INFO] - bootstrap: peer ('127.0.0.1', 43434) connected
+[2026-05-01 21:07:14,774][semirdma.transport][INFO] - SemiRDMATransport up: local qpn=304 -> remote qpn=306, remote rkey=0x9978
+[2026-05-01 21:07:14,774][semirdma.transport][INFO] - SemiRDMATransport up: local qpn=306 -> remote qpn=304, remote rkey=0x7250
+[2026-05-01 21:07:14,774][semirdma.hooks][INFO] - SemiRDMAHookState up: rank=1, tx qpn=304, rx qpn=305
+[2026-05-01 21:07:14,774][semirdma.hooks][INFO] - SemiRDMAHookState up: rank=0, tx qpn=303, rx qpn=306
+[2026-05-01 21:07:21,917][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2597 all CQEs drained
+[2026-05-01 21:07:21,941][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=0 completed=0/2729 outstanding_recv_pre=8192 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=0
+[2026-05-01 21:07:21,958][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2597 all CQEs drained
+[2026-05-01 21:07:21,959][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=0 completed=2597/2729 outstanding_recv_pre=5595 ok=True timed_out=False latency_ms=0.30 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=0
+[2026-05-01 21:07:21,960][semirdma.transport][INFO] - await_gradient DIAG3 missing_pos: count=132  first=29  last=2724  hist10=[11,12,7,11,22,12,11,12,21,13]
+[2026-05-01 21:07:21,999][__main__][INFO] - step=0 loss=2.3656 iter_ms=6982.3
+[2026-05-01 21:07:28,558][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2599 all CQEs drained
+[2026-05-01 21:07:28,581][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=1 completed=0/2729 outstanding_recv_pre=8192 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=0
+[2026-05-01 21:07:28,685][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2599 all CQEs drained
+[2026-05-01 21:07:28,686][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=1 completed=2599/2729 outstanding_recv_pre=2996 ok=True timed_out=False latency_ms=0.63 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=2597
+[2026-05-01 21:07:28,687][semirdma.transport][INFO] - await_gradient DIAG3 missing_pos: count=130  first=10  last=2725  hist10=[11,9,11,13,14,9,14,17,11,21]
+[2026-05-01 21:07:35,314][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2602 all CQEs drained
+[2026-05-01 21:07:35,333][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=2 completed=2602/2729 outstanding_recv_pre=2993 ok=True timed_out=False latency_ms=18.16 LEFTOVER_after_wait: recv_ok=9 recv_err=0 other=0 foreign_stashed=0 unique_imm=9 pending_total=2597
+[2026-05-01 21:07:35,334][semirdma.transport][INFO] - await_gradient DIAG3 missing_pos: count=127  first=12  last=2723  hist10=[16,15,9,14,9,8,11,12,21,12]
+[2026-05-01 21:07:35,335][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2602 all CQEs drained
+[2026-05-01 21:07:35,337][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=2 completed=2602/2729 outstanding_recv_pre=2991 ok=True timed_out=False latency_ms=0.62 LEFTOVER_after_wait: recv_ok=1 recv_err=0 other=0 foreign_stashed=0 unique_imm=1 pending_total=2599
+[2026-05-01 21:07:35,338][semirdma.transport][INFO] - await_gradient DIAG3 missing_pos: count=127  first=12  last=2723  hist10=[16,15,9,14,9,8,11,12,21,12]
+[2026-05-01 21:07:41,968][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2605 all CQEs drained
+[2026-05-01 21:07:41,981][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=3 completed=2605/2729 outstanding_recv_pre=2990 ok=True timed_out=False latency_ms=11.97 LEFTOVER_after_wait: recv_ok=12 recv_err=0 other=0 foreign_stashed=0 unique_imm=12 pending_total=2597
+[2026-05-01 21:07:41,982][semirdma.transport][INFO] - await_gradient DIAG3 missing_pos: count=124  first=47  last=2726  hist10=[13,11,15,12,11,13,8,6,18,17]
+[2026-05-01 21:07:41,982][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2605 all CQEs drained
+[2026-05-01 21:07:41,983][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=3 completed=2605/2729 outstanding_recv_pre=2988 ok=True timed_out=False latency_ms=0.31 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=2599
+[2026-05-01 21:07:41,985][semirdma.transport][INFO] - await_gradient DIAG3 missing_pos: count=124  first=47  last=2726  hist10=[13,11,15,12,11,13,8,6,18,17]
+[2026-05-01 21:07:48,310][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2589 all CQEs drained
+[2026-05-01 21:07:48,333][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=4 completed=0/2729 outstanding_recv_pre=5593 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=2599
+[2026-05-01 21:07:48,535][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2589 all CQEs drained
+[2026-05-01 21:07:48,555][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=4 completed=2589/2729 outstanding_recv_pre=3006 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=2597
+[2026-05-01 21:07:48,557][semirdma.transport][INFO] - await_gradient DIAG3 missing_pos: count=140  first=14  last=2728  hist10=[15,12,3,12,15,20,19,15,15,14]
+[2026-05-01 21:07:54,963][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2608 all CQEs drained
+[2026-05-01 21:07:54,987][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=5 completed=0/2729 outstanding_recv_pre=3004 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=5188
+[2026-05-01 21:07:55,090][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2608 all CQEs drained
+[2026-05-01 21:07:55,091][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=5 completed=2608/2729 outstanding_recv_pre=2987 ok=True timed_out=False latency_ms=0.31 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=2597
+[2026-05-01 21:07:55,092][semirdma.transport][INFO] - await_gradient DIAG3 missing_pos: count=121  first=21  last=2720  hist10=[12,12,10,10,17,8,13,13,13,13]
+[2026-05-01 21:08:01,327][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2584 all CQEs drained
+[2026-05-01 21:08:01,350][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=6 completed=0/2729 outstanding_recv_pre=396 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=7796
+[2026-05-01 21:08:01,615][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2584 all CQEs drained
+[2026-05-01 21:08:01,636][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=6 completed=2584/2729 outstanding_recv_pre=3011 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=2597
+[2026-05-01 21:08:01,637][semirdma.transport][INFO] - await_gradient DIAG3 missing_pos: count=145  first=11  last=2721  hist10=[15,15,18,15,14,16,16,17,7,12]
+[2026-05-01 21:08:07,866][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2599 all CQEs drained
+[2026-05-01 21:08:07,890][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=7 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:08:08,265][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2599 all CQEs drained
+[2026-05-01 21:08:08,266][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=7 completed=2599/2729 outstanding_recv_pre=2996 ok=True timed_out=False latency_ms=0.31 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=2597
+[2026-05-01 21:08:08,267][semirdma.transport][INFO] - await_gradient DIAG3 missing_pos: count=130  first=35  last=2657  hist10=[13,8,18,19,13,14,13,9,13,10]
+[2026-05-01 21:08:14,572][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2588 all CQEs drained
+[2026-05-01 21:08:14,596][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=8 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:08:14,647][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2588 all CQEs drained
+[2026-05-01 21:08:14,668][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=8 completed=2588/2729 outstanding_recv_pre=3007 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=2597
+[2026-05-01 21:08:14,669][semirdma.transport][INFO] - await_gradient DIAG3 missing_pos: count=141  first=0  last=2689  hist10=[16,17,15,14,9,17,11,13,14,15]
+[2026-05-01 21:08:21,002][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2610 all CQEs drained
+[2026-05-01 21:08:21,026][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=9 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:08:21,271][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2610 all CQEs drained
+[2026-05-01 21:08:21,272][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=9 completed=2610/2729 outstanding_recv_pre=2985 ok=True timed_out=False latency_ms=0.31 LEFTOVER_after_wait: recv_ok=2 recv_err=0 other=0 foreign_stashed=0 unique_imm=2 pending_total=2597
+[2026-05-01 21:08:21,273][semirdma.transport][INFO] - await_gradient DIAG3 missing_pos: count=119  first=4  last=2663  hist10=[19,11,10,16,13,10,10,12,13,5]
+[2026-05-01 21:08:27,536][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2576 all CQEs drained
+[2026-05-01 21:08:27,560][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=10 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:08:27,977][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2576 all CQEs drained
+[2026-05-01 21:08:27,997][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=10 completed=2576/2729 outstanding_recv_pre=3019 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=2597
+[2026-05-01 21:08:27,998][semirdma.transport][INFO] - await_gradient DIAG3 missing_pos: count=153  first=90  last=2728  hist10=[7,16,13,13,26,19,13,17,13,16]
+[2026-05-01 21:08:34,331][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2597 all CQEs drained
+[2026-05-01 21:08:34,354][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=11 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:08:34,655][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2597 all CQEs drained
+[2026-05-01 21:08:34,656][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=11 completed=2597/2729 outstanding_recv_pre=2998 ok=True timed_out=False latency_ms=0.31 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=2597
+[2026-05-01 21:08:34,657][semirdma.transport][INFO] - await_gradient DIAG3 missing_pos: count=132  first=51  last=2724  hist10=[8,13,11,14,20,11,12,14,15,14]
+[2026-05-01 21:08:40,906][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2600 all CQEs drained
+[2026-05-01 21:08:40,930][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=12 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:08:41,326][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2600 all CQEs drained
+[2026-05-01 21:08:41,326][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=12 completed=2600/2729 outstanding_recv_pre=2995 ok=True timed_out=False latency_ms=0.31 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=2597
+[2026-05-01 21:08:41,328][semirdma.transport][INFO] - await_gradient DIAG3 missing_pos: count=129  first=9  last=2722  hist10=[13,14,6,14,11,10,14,17,17,13]
+[2026-05-01 21:08:47,364][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2581 all CQEs drained
+[2026-05-01 21:08:47,387][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=13 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:08:48,037][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2581 all CQEs drained
+[2026-05-01 21:08:48,057][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=13 completed=2581/2729 outstanding_recv_pre=3014 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=2597
+[2026-05-01 21:08:48,058][semirdma.transport][INFO] - await_gradient DIAG3 missing_pos: count=148  first=3  last=2688  hist10=[10,13,18,17,19,11,11,20,21,8]
+[2026-05-01 21:08:54,235][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2600 all CQEs drained
+[2026-05-01 21:08:54,259][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=14 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:08:54,799][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2600 all CQEs drained
+[2026-05-01 21:08:54,799][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=14 completed=2600/2729 outstanding_recv_pre=2995 ok=True timed_out=False latency_ms=0.30 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=2597
+[2026-05-01 21:08:54,801][semirdma.transport][INFO] - await_gradient DIAG3 missing_pos: count=129  first=49  last=2724  hist10=[11,10,12,14,17,9,13,14,15,14]
+[2026-05-01 21:09:01,060][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2582 all CQEs drained
+[2026-05-01 21:09:01,083][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=15 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:09:01,505][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2582 all CQEs drained
+[2026-05-01 21:09:01,526][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=15 completed=2582/2729 outstanding_recv_pre=3013 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=2597
+[2026-05-01 21:09:01,527][semirdma.transport][INFO] - await_gradient DIAG3 missing_pos: count=147  first=4  last=2716  hist10=[8,12,19,19,17,12,10,15,17,18]
+[2026-05-01 21:09:07,898][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2581 all CQEs drained
+[2026-05-01 21:09:07,921][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=16 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:09:08,186][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2581 all CQEs drained
+[2026-05-01 21:09:08,206][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=16 completed=2581/2729 outstanding_recv_pre=3014 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=2597
+[2026-05-01 21:09:08,207][semirdma.transport][INFO] - await_gradient DIAG3 missing_pos: count=148  first=18  last=2718  hist10=[8,13,19,13,24,19,13,11,9,19]
+[2026-05-01 21:09:14,473][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2586 all CQEs drained
+[2026-05-01 21:09:14,497][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=17 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:09:14,744][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2586 all CQEs drained
+[2026-05-01 21:09:14,764][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=17 completed=2586/2729 outstanding_recv_pre=3009 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=2597
+[2026-05-01 21:09:14,765][semirdma.transport][INFO] - await_gradient DIAG3 missing_pos: count=143  first=7  last=2722  hist10=[20,18,16,17,16,11,13,8,11,13]
+[2026-05-01 21:09:21,005][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2606 all CQEs drained
+[2026-05-01 21:09:21,029][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=18 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:09:21,478][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2606 all CQEs drained
+[2026-05-01 21:09:21,479][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=18 completed=2606/2729 outstanding_recv_pre=2989 ok=True timed_out=False latency_ms=0.31 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=2597
+[2026-05-01 21:09:21,480][semirdma.transport][INFO] - await_gradient DIAG3 missing_pos: count=123  first=5  last=2703  hist10=[14,10,10,11,24,13,8,11,9,13]
+[2026-05-01 21:09:27,793][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2596 all CQEs drained
+[2026-05-01 21:09:27,816][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=19 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:09:28,180][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2596 all CQEs drained
+[2026-05-01 21:09:28,181][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=19 completed=2596/2729 outstanding_recv_pre=2999 ok=True timed_out=False latency_ms=0.31 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=2597
+[2026-05-01 21:09:28,182][semirdma.transport][INFO] - await_gradient DIAG3 missing_pos: count=133  first=2  last=2708  hist10=[17,10,13,15,12,17,10,14,14,11]
+[2026-05-01 21:09:34,384][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2591 all CQEs drained
+[2026-05-01 21:09:34,407][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=20 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:09:34,841][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2591 all CQEs drained
+[2026-05-01 21:09:34,861][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=20 completed=2591/2729 outstanding_recv_pre=3004 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=2597
+[2026-05-01 21:09:34,863][semirdma.transport][INFO] - await_gradient DIAG3 missing_pos: count=138  first=12  last=2728  hist10=[17,11,12,16,14,18,18,8,9,15]
+[2026-05-01 21:09:41,174][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2601 all CQEs drained
+[2026-05-01 21:09:41,197][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=21 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:09:41,502][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2601 all CQEs drained
+[2026-05-01 21:09:41,503][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=21 completed=2601/2729 outstanding_recv_pre=2994 ok=True timed_out=False latency_ms=0.31 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=2597
+[2026-05-01 21:09:41,504][semirdma.transport][INFO] - await_gradient DIAG3 missing_pos: count=128  first=54  last=2725  hist10=[13,9,15,11,12,15,16,10,14,13]
+[2026-05-01 21:09:47,764][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2606 all CQEs drained
+[2026-05-01 21:09:47,787][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=22 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:09:48,117][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2606 all CQEs drained
+[2026-05-01 21:09:48,117][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=22 completed=2606/2729 outstanding_recv_pre=2989 ok=True timed_out=False latency_ms=0.31 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=2597
+[2026-05-01 21:09:48,119][semirdma.transport][INFO] - await_gradient DIAG3 missing_pos: count=123  first=39  last=2711  hist10=[10,12,13,11,13,16,11,7,17,13]
+[2026-05-01 21:09:54,425][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2585 all CQEs drained
+[2026-05-01 21:09:54,448][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=23 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:09:54,914][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2585 all CQEs drained
+[2026-05-01 21:09:54,935][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=23 completed=2585/2729 outstanding_recv_pre=3010 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=2597
+[2026-05-01 21:09:54,936][semirdma.transport][INFO] - await_gradient DIAG3 missing_pos: count=144  first=0  last=2714  hist10=[14,17,15,12,14,12,12,15,16,17]
+[2026-05-01 21:10:01,165][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2568 all CQEs drained
+[2026-05-01 21:10:01,188][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=24 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:10:01,636][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2568 all CQEs drained
+[2026-05-01 21:10:01,657][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=24 completed=2568/2729 outstanding_recv_pre=3027 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=2597
+[2026-05-01 21:10:01,658][semirdma.transport][INFO] - await_gradient DIAG3 missing_pos: count=161  first=14  last=2707  hist10=[17,14,16,20,11,17,20,16,16,14]
+[2026-05-01 21:10:08,035][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2579 all CQEs drained
+[2026-05-01 21:10:08,058][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=25 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:10:08,339][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2579 all CQEs drained
+[2026-05-01 21:10:08,359][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=25 completed=2579/2729 outstanding_recv_pre=3016 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=2597
+[2026-05-01 21:10:08,361][semirdma.transport][INFO] - await_gradient DIAG3 missing_pos: count=150  first=8  last=2728  hist10=[14,17,16,10,11,9,19,22,14,18]
+[2026-05-01 21:10:14,620][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2594 all CQEs drained
+[2026-05-01 21:10:14,643][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=26 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:10:15,053][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2594 all CQEs drained
+[2026-05-01 21:10:15,054][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=26 completed=2594/2729 outstanding_recv_pre=3001 ok=True timed_out=False latency_ms=0.31 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=2597
+[2026-05-01 21:10:15,055][semirdma.transport][INFO] - await_gradient DIAG3 missing_pos: count=135  first=2  last=2723  hist10=[13,17,14,8,17,13,13,17,10,13]
+[2026-05-01 21:10:21,364][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2602 all CQEs drained
+[2026-05-01 21:10:21,387][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=27 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:10:21,657][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2602 all CQEs drained
+[2026-05-01 21:10:21,658][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=27 completed=2602/2729 outstanding_recv_pre=2993 ok=True timed_out=False latency_ms=0.39 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=2597
+[2026-05-01 21:10:21,659][semirdma.transport][INFO] - await_gradient DIAG3 missing_pos: count=127  first=8  last=2726  hist10=[17,8,19,12,9,16,9,8,11,18]
+[2026-05-01 21:10:27,948][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2567 all CQEs drained
+[2026-05-01 21:10:27,971][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=28 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:10:28,330][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2567 all CQEs drained
+[2026-05-01 21:10:28,351][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=28 completed=2567/2729 outstanding_recv_pre=3028 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=2597
+[2026-05-01 21:10:28,352][semirdma.transport][INFO] - await_gradient DIAG3 missing_pos: count=162  first=14  last=2722  hist10=[16,14,9,16,15,19,16,20,17,20]
+[2026-05-01 21:10:34,827][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2582 all CQEs drained
+[2026-05-01 21:10:34,850][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=29 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:10:35,040][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2582 all CQEs drained
+[2026-05-01 21:10:35,061][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=29 completed=2582/2729 outstanding_recv_pre=3013 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=2597
+[2026-05-01 21:10:35,062][semirdma.transport][INFO] - await_gradient DIAG3 missing_pos: count=147  first=3  last=2706  hist10=[13,15,18,10,15,15,21,7,17,16]
+[2026-05-01 21:10:41,453][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2577 all CQEs drained
+[2026-05-01 21:10:41,476][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=30 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:10:41,798][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2577 all CQEs drained
+[2026-05-01 21:10:41,819][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=30 completed=2577/2729 outstanding_recv_pre=3018 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=2597
+[2026-05-01 21:10:41,820][semirdma.transport][INFO] - await_gradient DIAG3 missing_pos: count=152  first=29  last=2717  hist10=[16,7,17,19,17,17,15,11,17,16]
+[2026-05-01 21:10:48,230][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2594 all CQEs drained
+[2026-05-01 21:10:48,253][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=31 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:10:48,418][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2594 all CQEs drained
+[2026-05-01 21:10:48,419][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=31 completed=2594/2729 outstanding_recv_pre=3001 ok=True timed_out=False latency_ms=0.31 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=2597
+[2026-05-01 21:10:48,420][semirdma.transport][INFO] - await_gradient DIAG3 missing_pos: count=135  first=8  last=2696  hist10=[11,15,13,11,17,12,11,15,16,14]
+[2026-05-01 21:10:54,796][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2586 all CQEs drained
+[2026-05-01 21:10:54,820][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=32 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:10:55,123][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2586 all CQEs drained
+[2026-05-01 21:10:55,144][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=32 completed=2586/2729 outstanding_recv_pre=3009 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=2597
+[2026-05-01 21:10:55,145][semirdma.transport][INFO] - await_gradient DIAG3 missing_pos: count=143  first=73  last=2728  hist10=[8,18,14,14,15,18,11,11,12,22]
+[2026-05-01 21:11:01,255][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2590 all CQEs drained
+[2026-05-01 21:11:01,279][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=33 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:11:01,769][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2590 all CQEs drained
+[2026-05-01 21:11:01,789][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=33 completed=2590/2729 outstanding_recv_pre=3005 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=2597
+[2026-05-01 21:11:01,790][semirdma.transport][INFO] - await_gradient DIAG3 missing_pos: count=139  first=8  last=2728  hist10=[7,14,14,16,12,13,16,19,11,17]
+[2026-05-01 21:11:08,225][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2615 all CQEs drained
+[2026-05-01 21:11:08,248][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=34 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:11:08,394][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2615 all CQEs drained
+[2026-05-01 21:11:08,395][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=34 completed=2615/2729 outstanding_recv_pre=2980 ok=True timed_out=False latency_ms=0.31 LEFTOVER_after_wait: recv_ok=7 recv_err=0 other=0 foreign_stashed=0 unique_imm=7 pending_total=2597
+[2026-05-01 21:11:08,396][semirdma.transport][INFO] - await_gradient DIAG3 missing_pos: count=114  first=28  last=2719  hist10=[9,18,10,15,8,13,13,11,6,11]
+[2026-05-01 21:11:14,663][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2572 all CQEs drained
+[2026-05-01 21:11:14,686][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=35 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:11:15,004][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2572 all CQEs drained
+[2026-05-01 21:11:15,025][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=35 completed=2572/2729 outstanding_recv_pre=3023 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=2597
+[2026-05-01 21:11:15,026][semirdma.transport][INFO] - await_gradient DIAG3 missing_pos: count=157  first=5  last=2723  hist10=[13,14,15,19,15,11,19,10,23,18]
+[2026-05-01 21:11:21,251][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2580 all CQEs drained
+[2026-05-01 21:11:21,275][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=36 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:11:21,780][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2580 all CQEs drained
+[2026-05-01 21:11:21,801][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=36 completed=2580/2729 outstanding_recv_pre=3015 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=2597
+[2026-05-01 21:11:21,802][semirdma.transport][INFO] - await_gradient DIAG3 missing_pos: count=149  first=2  last=2723  hist10=[16,22,11,11,17,13,11,13,21,14]
+[2026-05-01 21:11:28,098][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2598 all CQEs drained
+[2026-05-01 21:11:28,121][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=37 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:11:28,427][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2598 all CQEs drained
+[2026-05-01 21:11:28,428][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=37 completed=2598/2729 outstanding_recv_pre=2997 ok=True timed_out=False latency_ms=0.31 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=2597
+[2026-05-01 21:11:28,429][semirdma.transport][INFO] - await_gradient DIAG3 missing_pos: count=131  first=28  last=2705  hist10=[16,18,11,16,14,7,13,11,14,11]
+[2026-05-01 21:11:34,550][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2585 all CQEs drained
+[2026-05-01 21:11:34,573][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=38 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:11:35,165][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2585 all CQEs drained
+[2026-05-01 21:11:35,185][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=38 completed=2585/2729 outstanding_recv_pre=3010 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=2597
+[2026-05-01 21:11:35,186][semirdma.transport][INFO] - await_gradient DIAG3 missing_pos: count=144  first=35  last=2712  hist10=[19,12,9,17,15,16,20,8,14,14]
+[2026-05-01 21:11:41,515][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2578 all CQEs drained
+[2026-05-01 21:11:41,538][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=39 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:11:41,768][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2578 all CQEs drained
+[2026-05-01 21:11:41,789][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=39 completed=2578/2729 outstanding_recv_pre=3017 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=2597
+[2026-05-01 21:11:41,790][semirdma.transport][INFO] - await_gradient DIAG3 missing_pos: count=151  first=22  last=2715  hist10=[14,12,17,18,15,15,17,17,12,14]
+[2026-05-01 21:11:48,249][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2603 all CQEs drained
+[2026-05-01 21:11:48,272][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=40 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:11:48,404][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2603 all CQEs drained
+[2026-05-01 21:11:48,404][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=40 completed=2603/2729 outstanding_recv_pre=2992 ok=True timed_out=False latency_ms=0.30 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=2597
+[2026-05-01 21:11:48,405][semirdma.transport][INFO] - await_gradient DIAG3 missing_pos: count=126  first=4  last=2712  hist10=[12,7,11,15,20,8,12,12,14,15]
+[2026-05-01 21:11:54,731][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2588 all CQEs drained
+[2026-05-01 21:11:54,754][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=41 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:11:55,042][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2588 all CQEs drained
+[2026-05-01 21:11:55,062][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=41 completed=2588/2729 outstanding_recv_pre=3007 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=2597
+[2026-05-01 21:11:55,063][semirdma.transport][INFO] - await_gradient DIAG3 missing_pos: count=141  first=12  last=2700  hist10=[18,11,14,11,19,9,17,14,17,11]
+[2026-05-01 21:12:01,527][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2583 all CQEs drained
+[2026-05-01 21:12:01,550][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=42 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:12:01,746][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2583 all CQEs drained
+[2026-05-01 21:12:01,766][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=42 completed=2583/2729 outstanding_recv_pre=3012 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=2597
+[2026-05-01 21:12:01,767][semirdma.transport][INFO] - await_gradient DIAG3 missing_pos: count=146  first=27  last=2693  hist10=[14,22,15,16,13,16,21,8,8,13]
+[2026-05-01 21:12:08,224][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2604 all CQEs drained
+[2026-05-01 21:12:08,248][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=43 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:12:08,395][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2604 all CQEs drained
+[2026-05-01 21:12:08,396][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=43 completed=2604/2729 outstanding_recv_pre=2991 ok=True timed_out=False latency_ms=0.31 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=2597
+[2026-05-01 21:12:08,397][semirdma.transport][INFO] - await_gradient DIAG3 missing_pos: count=125  first=0  last=2684  hist10=[12,14,17,9,10,15,13,19,9,7]
+[2026-05-01 21:12:14,957][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2594 all CQEs drained
+[2026-05-01 21:12:14,981][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=44 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:12:15,040][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2594 all CQEs drained
+[2026-05-01 21:12:15,041][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=44 completed=2594/2729 outstanding_recv_pre=3001 ok=True timed_out=False latency_ms=0.30 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=2597
+[2026-05-01 21:12:15,042][semirdma.transport][INFO] - await_gradient DIAG3 missing_pos: count=135  first=32  last=2717  hist10=[19,8,9,22,12,16,14,10,12,13]
+[2026-05-01 21:12:21,409][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2597 all CQEs drained
+[2026-05-01 21:12:21,432][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=45 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:12:21,597][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2597 all CQEs drained
+[2026-05-01 21:12:21,598][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=45 completed=2597/2729 outstanding_recv_pre=2998 ok=True timed_out=False latency_ms=0.30 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=2597
+[2026-05-01 21:12:21,599][semirdma.transport][INFO] - await_gradient DIAG3 missing_pos: count=132  first=3  last=2697  hist10=[10,9,12,15,16,16,14,15,12,13]
+[2026-05-01 21:12:28,090][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2586 all CQEs drained
+[2026-05-01 21:12:28,114][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=46 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:12:28,279][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2586 all CQEs drained
+[2026-05-01 21:12:28,299][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=46 completed=2586/2729 outstanding_recv_pre=3009 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=2597
+[2026-05-01 21:12:28,300][semirdma.transport][INFO] - await_gradient DIAG3 missing_pos: count=143  first=13  last=2721  hist10=[11,15,12,17,15,12,20,13,15,13]
+[2026-05-01 21:12:34,778][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2596 all CQEs drained
+[2026-05-01 21:12:34,802][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=47 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:12:35,043][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2596 all CQEs drained
+[2026-05-01 21:12:35,044][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=47 completed=2596/2729 outstanding_recv_pre=2999 ok=True timed_out=False latency_ms=0.30 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=2597
+[2026-05-01 21:12:35,045][semirdma.transport][INFO] - await_gradient DIAG3 missing_pos: count=133  first=6  last=2710  hist10=[8,13,17,12,16,16,4,13,16,18]
+[2026-05-01 21:12:41,482][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2572 all CQEs drained
+[2026-05-01 21:12:41,505][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=48 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:12:41,650][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2572 all CQEs drained
+[2026-05-01 21:12:41,670][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=48 completed=2572/2729 outstanding_recv_pre=3023 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=2597
+[2026-05-01 21:12:41,672][semirdma.transport][INFO] - await_gradient DIAG3 missing_pos: count=157  first=4  last=2725  hist10=[19,16,10,17,20,15,15,10,15,20]
+[2026-05-01 21:12:48,049][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2584 all CQEs drained
+[2026-05-01 21:12:48,073][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=49 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:12:48,369][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2584 all CQEs drained
+[2026-05-01 21:12:48,389][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=49 completed=2584/2729 outstanding_recv_pre=3011 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=2597
+[2026-05-01 21:12:48,391][semirdma.transport][INFO] - await_gradient DIAG3 missing_pos: count=145  first=11  last=2728  hist10=[17,19,12,16,21,10,15,11,10,14]
+[2026-05-01 21:12:54,763][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2592 all CQEs drained
+[2026-05-01 21:12:54,786][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=50 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:12:55,159][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2592 all CQEs drained
+[2026-05-01 21:12:55,180][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=50 completed=2592/2729 outstanding_recv_pre=3003 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=2597
+[2026-05-01 21:12:55,181][semirdma.transport][INFO] - await_gradient DIAG3 missing_pos: count=137  first=23  last=2660  hist10=[15,17,11,13,7,17,15,14,15,13]
+[2026-05-01 21:12:55,213][__main__][INFO] - step=50 loss=2.0574 iter_ms=6783.0
+[2026-05-01 21:13:01,585][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2602 all CQEs drained
+[2026-05-01 21:13:01,608][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=51 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:13:01,818][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2602 all CQEs drained
+[2026-05-01 21:13:01,819][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=51 completed=2602/2729 outstanding_recv_pre=2993 ok=True timed_out=False latency_ms=0.31 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=2597
+[2026-05-01 21:13:01,820][semirdma.transport][INFO] - await_gradient DIAG3 missing_pos: count=127  first=4  last=2674  hist10=[12,6,12,12,19,19,11,12,13,11]
+[2026-05-01 21:13:08,241][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2599 all CQEs drained
+[2026-05-01 21:13:08,264][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=52 completed=2599/2729 outstanding_recv_pre=2996 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=744 recv_err=0 other=0 foreign_stashed=0 unique_imm=744 pending_total=2597
+[2026-05-01 21:13:08,265][semirdma.transport][INFO] - await_gradient DIAG3 missing_pos: count=130  first=39  last=2690  hist10=[5,12,16,18,20,14,15,10,11,9]
+[2026-05-01 21:13:08,265][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2599 all CQEs drained
+[2026-05-01 21:13:08,289][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=52 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:13:14,600][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2594 all CQEs drained
+[2026-05-01 21:13:14,623][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=53 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:13:15,089][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2594 all CQEs drained
+[2026-05-01 21:13:15,090][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=53 completed=2594/2729 outstanding_recv_pre=3001 ok=True timed_out=False latency_ms=0.30 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=2597
+[2026-05-01 21:13:15,091][semirdma.transport][INFO] - await_gradient DIAG3 missing_pos: count=135  first=15  last=2727  hist10=[21,14,16,13,13,9,9,11,10,19]
+[2026-05-01 21:13:21,324][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2586 all CQEs drained
+[2026-05-01 21:13:21,348][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=54 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:13:21,652][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2586 all CQEs drained
+[2026-05-01 21:13:21,672][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=54 completed=2586/2729 outstanding_recv_pre=3009 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=2597
+[2026-05-01 21:13:21,674][semirdma.transport][INFO] - await_gradient DIAG3 missing_pos: count=143  first=45  last=2726  hist10=[7,9,17,15,20,11,15,14,15,20]
+[2026-05-01 21:13:27,917][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2590 all CQEs drained
+[2026-05-01 21:13:27,941][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=55 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:13:28,344][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2590 all CQEs drained
+[2026-05-01 21:13:28,365][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=55 completed=2590/2729 outstanding_recv_pre=3005 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=2597
+[2026-05-01 21:13:28,366][semirdma.transport][INFO] - await_gradient DIAG3 missing_pos: count=139  first=56  last=2706  hist10=[13,10,8,17,26,14,11,14,14,12]
+[2026-05-01 21:13:34,682][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2605 all CQEs drained
+[2026-05-01 21:13:34,706][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=56 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:13:34,933][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2605 all CQEs drained
+[2026-05-01 21:13:34,934][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=56 completed=2605/2729 outstanding_recv_pre=2990 ok=True timed_out=False latency_ms=0.31 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=2597
+[2026-05-01 21:13:34,935][semirdma.transport][INFO] - await_gradient DIAG3 missing_pos: count=124  first=15  last=2722  hist10=[11,15,18,7,8,15,10,9,16,15]
+[2026-05-01 21:13:41,364][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2600 all CQEs drained
+[2026-05-01 21:13:41,388][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=57 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:13:41,674][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2600 all CQEs drained
+[2026-05-01 21:13:41,675][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=57 completed=2600/2729 outstanding_recv_pre=2995 ok=True timed_out=False latency_ms=0.30 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=2597
+[2026-05-01 21:13:41,676][semirdma.transport][INFO] - await_gradient DIAG3 missing_pos: count=129  first=10  last=2723  hist10=[11,17,15,13,19,8,17,12,10,7]
+[2026-05-01 21:13:47,885][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2605 all CQEs drained
+[2026-05-01 21:13:47,908][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=58 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:13:48,342][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2605 all CQEs drained
+[2026-05-01 21:13:48,343][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=58 completed=2605/2729 outstanding_recv_pre=2990 ok=True timed_out=False latency_ms=0.39 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=2597
+[2026-05-01 21:13:48,344][semirdma.transport][INFO] - await_gradient DIAG3 missing_pos: count=124  first=21  last=2716  hist10=[12,8,13,19,11,14,15,9,6,17]
+[2026-05-01 21:13:54,900][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2598 all CQEs drained
+[2026-05-01 21:13:54,902][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2598 all CQEs drained
+[2026-05-01 21:13:54,902][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=59 completed=2598/2729 outstanding_recv_pre=2997 ok=True timed_out=False latency_ms=1.50 LEFTOVER_after_wait: recv_ok=4 recv_err=0 other=0 foreign_stashed=0 unique_imm=4 pending_total=2597
+[2026-05-01 21:13:54,903][semirdma.transport][INFO] - await_gradient DIAG3 missing_pos: count=131  first=29  last=2721  hist10=[10,14,11,10,9,12,15,15,16,19]
+[2026-05-01 21:13:54,925][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=59 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:14:01,292][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2584 all CQEs drained
+[2026-05-01 21:14:01,316][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=60 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:14:01,579][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2584 all CQEs drained
+[2026-05-01 21:14:01,599][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=60 completed=2584/2729 outstanding_recv_pre=3011 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=2597
+[2026-05-01 21:14:01,600][semirdma.transport][INFO] - await_gradient DIAG3 missing_pos: count=145  first=4  last=2708  hist10=[7,14,19,12,12,14,20,20,14,13]
+[2026-05-01 21:14:07,867][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2607 all CQEs drained
+[2026-05-01 21:14:07,891][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=61 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:14:08,100][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2607 all CQEs drained
+[2026-05-01 21:14:08,101][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=61 completed=2607/2729 outstanding_recv_pre=2988 ok=True timed_out=False latency_ms=0.31 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=2597
+[2026-05-01 21:14:08,102][semirdma.transport][INFO] - await_gradient DIAG3 missing_pos: count=122  first=35  last=2670  hist10=[11,14,16,12,12,8,12,13,12,12]
+[2026-05-01 21:14:14,422][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2592 all CQEs drained
+[2026-05-01 21:14:14,445][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=62 completed=0/2729 outstanding_recv_pre=5595 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=2597
+[2026-05-01 21:14:14,505][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2592 all CQEs drained
+[2026-05-01 21:14:14,528][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=62 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:14:20,706][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2588 all CQEs drained
+[2026-05-01 21:14:20,729][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=63 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:14:20,959][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2588 all CQEs drained
+[2026-05-01 21:14:20,980][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=63 completed=2588/2729 outstanding_recv_pre=415 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=5189
+[2026-05-01 21:14:20,981][semirdma.transport][INFO] - await_gradient DIAG3 missing_pos: count=141  first=8  last=2728  hist10=[17,14,12,18,13,3,14,19,13,18]
+[2026-05-01 21:14:27,061][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2590 all CQEs drained
+[2026-05-01 21:14:27,084][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=64 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:14:27,400][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2590 all CQEs drained
+[2026-05-01 21:14:27,420][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=64 completed=2590/2729 outstanding_recv_pre=413 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=5189
+[2026-05-01 21:14:27,421][semirdma.transport][INFO] - await_gradient DIAG3 missing_pos: count=139  first=78  last=2700  hist10=[12,11,21,12,13,17,16,12,16,9]
+[2026-05-01 21:14:33,621][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2603 all CQEs drained
+[2026-05-01 21:14:33,644][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=65 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:14:33,923][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2603 all CQEs drained
+[2026-05-01 21:14:33,923][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=65 completed=2603/2729 outstanding_recv_pre=400 ok=True timed_out=False latency_ms=0.31 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=5189
+[2026-05-01 21:14:33,925][semirdma.transport][INFO] - await_gradient DIAG3 missing_pos: count=126  first=14  last=2701  hist10=[13,13,9,14,17,8,6,14,19,13]
+[2026-05-01 21:14:39,956][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2585 all CQEs drained
+[2026-05-01 21:14:39,979][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=66 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:14:40,454][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2585 all CQEs drained
+[2026-05-01 21:14:40,474][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=66 completed=2585/2729 outstanding_recv_pre=418 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=5189
+[2026-05-01 21:14:40,475][semirdma.transport][INFO] - await_gradient DIAG3 missing_pos: count=144  first=0  last=2713  hist10=[17,19,11,15,12,17,16,14,11,12]
+[2026-05-01 21:14:46,707][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2584 all CQEs drained
+[2026-05-01 21:14:46,730][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=67 completed=0/2729 outstanding_recv_pre=3003 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=5189
+[2026-05-01 21:14:46,826][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2584 all CQEs drained
+[2026-05-01 21:14:46,850][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=67 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:14:53,186][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2603 all CQEs drained
+[2026-05-01 21:14:53,209][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=68 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:14:53,389][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2603 all CQEs drained
+[2026-05-01 21:14:53,412][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=68 completed=419/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=7773
+[2026-05-01 21:14:59,755][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2590 all CQEs drained
+[2026-05-01 21:14:59,778][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=69 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:14:59,936][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2590 all CQEs drained
+[2026-05-01 21:14:59,959][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=69 completed=419/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=7773
+[2026-05-01 21:15:06,385][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2608 all CQEs drained
+[2026-05-01 21:15:06,408][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=70 completed=419/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=7773
+[2026-05-01 21:15:06,426][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2608 all CQEs drained
+[2026-05-01 21:15:06,449][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=70 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:15:12,726][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2591 all CQEs drained
+[2026-05-01 21:15:12,749][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=71 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:15:12,924][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2591 all CQEs drained
+[2026-05-01 21:15:12,948][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=71 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:15:19,233][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2588 all CQEs drained
+[2026-05-01 21:15:19,256][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=72 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:15:19,308][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2588 all CQEs drained
+[2026-05-01 21:15:19,331][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=72 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:15:25,629][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2593 all CQEs drained
+[2026-05-01 21:15:25,650][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2593 all CQEs drained
+[2026-05-01 21:15:25,652][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=73 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:15:25,674][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=73 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:15:32,144][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2593 all CQEs drained
+[2026-05-01 21:15:32,167][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=74 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:15:32,215][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2593 all CQEs drained
+[2026-05-01 21:15:32,239][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=74 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:15:38,554][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2599 all CQEs drained
+[2026-05-01 21:15:38,577][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=75 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:15:38,791][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2599 all CQEs drained
+[2026-05-01 21:15:38,815][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=75 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:15:45,174][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2600 all CQEs drained
+[2026-05-01 21:15:45,197][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=76 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:15:45,374][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2600 all CQEs drained
+[2026-05-01 21:15:45,398][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=76 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:15:51,840][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2592 all CQEs drained
+[2026-05-01 21:15:51,863][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=77 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:15:51,891][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2592 all CQEs drained
+[2026-05-01 21:15:51,914][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=77 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:15:58,249][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2604 all CQEs drained
+[2026-05-01 21:15:58,264][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2604 all CQEs drained
+[2026-05-01 21:15:58,272][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=78 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:15:58,287][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=78 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:16:04,538][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2591 all CQEs drained
+[2026-05-01 21:16:04,561][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=79 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:16:04,582][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2591 all CQEs drained
+[2026-05-01 21:16:04,605][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=79 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:16:10,892][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2609 all CQEs drained
+[2026-05-01 21:16:10,915][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=80 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:16:11,009][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2609 all CQEs drained
+[2026-05-01 21:16:11,032][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=80 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:16:17,343][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2588 all CQEs drained
+[2026-05-01 21:16:17,366][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=81 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:16:17,401][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2588 all CQEs drained
+[2026-05-01 21:16:17,425][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=81 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:16:23,814][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2597 all CQEs drained
+[2026-05-01 21:16:23,837][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=82 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:16:23,866][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2597 all CQEs drained
+[2026-05-01 21:16:23,889][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=82 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:16:30,067][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2581 all CQEs drained
+[2026-05-01 21:16:30,090][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=83 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:16:30,132][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2581 all CQEs drained
+[2026-05-01 21:16:30,156][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=83 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:16:36,528][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2593 all CQEs drained
+[2026-05-01 21:16:36,551][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=84 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:16:36,576][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2593 all CQEs drained
+[2026-05-01 21:16:36,600][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=84 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:16:42,842][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2605 all CQEs drained
+[2026-05-01 21:16:42,865][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=85 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:16:43,043][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2605 all CQEs drained
+[2026-05-01 21:16:43,066][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=85 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:16:49,373][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2607 all CQEs drained
+[2026-05-01 21:16:49,396][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=86 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:16:49,423][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2607 all CQEs drained
+[2026-05-01 21:16:49,447][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=86 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:16:55,724][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2619 all CQEs drained
+[2026-05-01 21:16:55,747][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=87 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:16:55,775][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2619 all CQEs drained
+[2026-05-01 21:16:55,799][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=87 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:17:01,962][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2583 all CQEs drained
+[2026-05-01 21:17:01,985][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=88 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:17:02,133][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2583 all CQEs drained
+[2026-05-01 21:17:02,156][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=88 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:17:08,469][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2607 all CQEs drained
+[2026-05-01 21:17:08,492][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=89 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:17:08,530][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2607 all CQEs drained
+[2026-05-01 21:17:08,554][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=89 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:17:14,889][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2590 all CQEs drained
+[2026-05-01 21:17:14,912][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=90 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:17:14,941][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2590 all CQEs drained
+[2026-05-01 21:17:14,964][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=90 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:17:21,307][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2598 all CQEs drained
+[2026-05-01 21:17:21,309][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2598 all CQEs drained
+[2026-05-01 21:17:21,330][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=91 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:17:21,333][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=91 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:17:27,652][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2605 all CQEs drained
+[2026-05-01 21:17:27,676][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=92 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:17:27,685][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2605 all CQEs drained
+[2026-05-01 21:17:27,708][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=92 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:17:34,027][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2584 all CQEs drained
+[2026-05-01 21:17:34,050][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=93 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:17:34,051][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2584 all CQEs drained
+[2026-05-01 21:17:34,074][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=93 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:17:40,339][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2581 all CQEs drained
+[2026-05-01 21:17:40,362][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=94 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:17:40,478][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2581 all CQEs drained
+[2026-05-01 21:17:40,502][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=94 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:17:46,832][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2595 all CQEs drained
+[2026-05-01 21:17:46,856][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=95 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:17:46,884][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2595 all CQEs drained
+[2026-05-01 21:17:46,907][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=95 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:17:53,275][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2602 all CQEs drained
+[2026-05-01 21:17:53,298][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=96 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:17:53,367][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2602 all CQEs drained
+[2026-05-01 21:17:53,391][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=96 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:17:59,624][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2604 all CQEs drained
+[2026-05-01 21:17:59,647][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=97 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:17:59,669][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2604 all CQEs drained
+[2026-05-01 21:17:59,693][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=97 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:18:05,972][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2591 all CQEs drained
+[2026-05-01 21:18:05,995][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=98 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:18:06,029][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2591 all CQEs drained
+[2026-05-01 21:18:06,053][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=98 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:18:12,401][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2603 all CQEs drained
+[2026-05-01 21:18:12,422][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2603 all CQEs drained
+[2026-05-01 21:18:12,424][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=99 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:18:12,445][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=99 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:18:18,801][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2599 all CQEs drained
+[2026-05-01 21:18:18,820][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2599 all CQEs drained
+[2026-05-01 21:18:18,824][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=100 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:18:18,843][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=100 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:18:18,857][__main__][INFO] - step=100 loss=1.6069 iter_ms=6371.7
+[2026-05-01 21:18:25,214][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2613 all CQEs drained
+[2026-05-01 21:18:25,228][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2613 all CQEs drained
+[2026-05-01 21:18:25,238][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=101 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:18:25,252][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=101 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:18:31,477][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2579 all CQEs drained
+[2026-05-01 21:18:31,501][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=102 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:18:31,578][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2579 all CQEs drained
+[2026-05-01 21:18:31,602][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=102 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:18:37,887][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2588 all CQEs drained
+[2026-05-01 21:18:37,910][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=103 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:18:38,001][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2588 all CQEs drained
+[2026-05-01 21:18:38,024][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=103 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:18:44,246][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2600 all CQEs drained
+[2026-05-01 21:18:44,269][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=104 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:18:44,434][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2600 all CQEs drained
+[2026-05-01 21:18:44,457][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=104 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:18:50,702][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2583 all CQEs drained
+[2026-05-01 21:18:50,725][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=105 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:18:50,885][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2583 all CQEs drained
+[2026-05-01 21:18:50,908][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=105 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:18:57,144][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2584 all CQEs drained
+[2026-05-01 21:18:57,167][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=106 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:18:57,259][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2584 all CQEs drained
+[2026-05-01 21:18:57,282][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=106 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:19:03,422][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2594 all CQEs drained
+[2026-05-01 21:19:03,445][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=107 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:19:03,751][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2594 all CQEs drained
+[2026-05-01 21:19:03,774][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=107 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:19:10,120][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2582 all CQEs drained
+[2026-05-01 21:19:10,126][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2582 all CQEs drained
+[2026-05-01 21:19:10,143][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=108 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:19:10,150][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=108 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:19:16,318][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2602 all CQEs drained
+[2026-05-01 21:19:16,341][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=109 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:19:16,499][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2602 all CQEs drained
+[2026-05-01 21:19:16,522][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=109 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:19:22,830][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2574 all CQEs drained
+[2026-05-01 21:19:22,853][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=110 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:19:22,942][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2574 all CQEs drained
+[2026-05-01 21:19:22,965][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=110 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:19:29,255][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2621 all CQEs drained
+[2026-05-01 21:19:29,278][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=111 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:19:29,330][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2621 all CQEs drained
+[2026-05-01 21:19:29,354][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=111 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:19:35,614][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2592 all CQEs drained
+[2026-05-01 21:19:35,638][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=112 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:19:35,785][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2592 all CQEs drained
+[2026-05-01 21:19:35,809][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=112 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:19:41,889][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2589 all CQEs drained
+[2026-05-01 21:19:41,912][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=113 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:19:42,162][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2589 all CQEs drained
+[2026-05-01 21:19:42,185][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=113 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:19:48,353][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2566 all CQEs drained
+[2026-05-01 21:19:48,376][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=114 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:19:48,563][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2566 all CQEs drained
+[2026-05-01 21:19:48,587][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=114 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:19:54,863][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2612 all CQEs drained
+[2026-05-01 21:19:54,887][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=115 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:19:54,977][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2612 all CQEs drained
+[2026-05-01 21:19:55,000][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=115 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:20:01,195][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2596 all CQEs drained
+[2026-05-01 21:20:01,218][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=116 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:20:01,444][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2596 all CQEs drained
+[2026-05-01 21:20:01,467][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=116 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:20:07,725][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2608 all CQEs drained
+[2026-05-01 21:20:07,748][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=117 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:20:07,852][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2608 all CQEs drained
+[2026-05-01 21:20:07,875][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=117 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:20:14,062][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2593 all CQEs drained
+[2026-05-01 21:20:14,085][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=118 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:20:14,348][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2593 all CQEs drained
+[2026-05-01 21:20:14,371][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=118 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:20:20,578][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2595 all CQEs drained
+[2026-05-01 21:20:20,601][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=119 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:20:20,731][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2595 all CQEs drained
+[2026-05-01 21:20:20,754][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=119 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:20:27,030][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2581 all CQEs drained
+[2026-05-01 21:20:27,053][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=120 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:20:27,300][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2581 all CQEs drained
+[2026-05-01 21:20:27,323][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=120 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:20:33,490][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2587 all CQEs drained
+[2026-05-01 21:20:33,514][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=121 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:20:33,760][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2587 all CQEs drained
+[2026-05-01 21:20:33,783][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=121 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:20:40,166][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2577 all CQEs drained
+[2026-05-01 21:20:40,189][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=122 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:20:40,226][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2577 all CQEs drained
+[2026-05-01 21:20:40,249][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=122 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:20:46,398][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2604 all CQEs drained
+[2026-05-01 21:20:46,421][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=123 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:20:46,621][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2604 all CQEs drained
+[2026-05-01 21:20:46,645][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=123 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:20:52,999][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2578 all CQEs drained
+[2026-05-01 21:20:53,004][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2578 all CQEs drained
+[2026-05-01 21:20:53,023][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=124 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:20:53,027][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=124 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:20:59,365][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2603 all CQEs drained
+[2026-05-01 21:20:59,388][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=125 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:20:59,478][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2603 all CQEs drained
+[2026-05-01 21:20:59,501][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=125 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:21:05,756][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2600 all CQEs drained
+[2026-05-01 21:21:05,779][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=126 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:21:05,914][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2600 all CQEs drained
+[2026-05-01 21:21:05,937][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=126 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:21:11,952][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2600 all CQEs drained
+[2026-05-01 21:21:11,975][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=127 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:21:12,305][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2600 all CQEs drained
+[2026-05-01 21:21:12,328][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=127 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:21:18,387][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2606 all CQEs drained
+[2026-05-01 21:21:18,410][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=128 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:21:18,734][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2606 all CQEs drained
+[2026-05-01 21:21:18,757][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=128 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:21:24,837][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2582 all CQEs drained
+[2026-05-01 21:21:24,860][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=129 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:21:25,066][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2582 all CQEs drained
+[2026-05-01 21:21:25,089][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=129 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:21:31,450][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2597 all CQEs drained
+[2026-05-01 21:21:31,473][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=130 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:21:31,489][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2597 all CQEs drained
+[2026-05-01 21:21:31,513][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=130 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:21:37,748][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2612 all CQEs drained
+[2026-05-01 21:21:37,771][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=131 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:21:38,040][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2612 all CQEs drained
+[2026-05-01 21:21:38,063][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=131 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:21:44,288][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2624 all CQEs drained
+[2026-05-01 21:21:44,311][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=132 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:21:44,737][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2624 all CQEs drained
+[2026-05-01 21:21:44,760][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=132 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:21:51,052][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2578 all CQEs drained
+[2026-05-01 21:21:51,075][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=133 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:21:51,457][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2578 all CQEs drained
+[2026-05-01 21:21:51,480][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=133 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:21:57,721][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2594 all CQEs drained
+[2026-05-01 21:21:57,744][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=134 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:21:58,039][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2594 all CQEs drained
+[2026-05-01 21:21:58,062][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=134 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:22:04,162][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2612 all CQEs drained
+[2026-05-01 21:22:04,185][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=135 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:22:04,712][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2612 all CQEs drained
+[2026-05-01 21:22:04,735][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=135 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:22:10,665][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2594 all CQEs drained
+[2026-05-01 21:22:10,689][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=136 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:22:11,390][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2594 all CQEs drained
+[2026-05-01 21:22:11,413][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=136 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:22:17,446][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2597 all CQEs drained
+[2026-05-01 21:22:17,469][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=137 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:22:18,014][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2597 all CQEs drained
+[2026-05-01 21:22:18,037][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=137 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:22:24,138][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2594 all CQEs drained
+[2026-05-01 21:22:24,162][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=138 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:22:24,711][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2594 all CQEs drained
+[2026-05-01 21:22:24,734][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=138 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:22:30,732][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2596 all CQEs drained
+[2026-05-01 21:22:30,755][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=139 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:22:31,292][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2596 all CQEs drained
+[2026-05-01 21:22:31,316][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=139 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:22:37,569][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2605 all CQEs drained
+[2026-05-01 21:22:37,592][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=140 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:22:37,990][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2605 all CQEs drained
+[2026-05-01 21:22:38,014][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=140 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:22:44,330][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2626 all CQEs drained
+[2026-05-01 21:22:44,353][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=141 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:22:44,681][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2626 all CQEs drained
+[2026-05-01 21:22:44,705][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=141 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:22:50,985][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2598 all CQEs drained
+[2026-05-01 21:22:51,008][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=142 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:22:51,259][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2598 all CQEs drained
+[2026-05-01 21:22:51,282][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=142 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:22:57,395][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2598 all CQEs drained
+[2026-05-01 21:22:57,419][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=143 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:22:57,830][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2598 all CQEs drained
+[2026-05-01 21:22:57,853][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=143 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:23:03,944][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2578 all CQEs drained
+[2026-05-01 21:23:03,968][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=144 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:23:04,456][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2578 all CQEs drained
+[2026-05-01 21:23:04,480][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=144 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:23:10,578][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2589 all CQEs drained
+[2026-05-01 21:23:10,601][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=145 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:23:11,131][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2589 all CQEs drained
+[2026-05-01 21:23:11,154][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=145 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:23:17,485][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2578 all CQEs drained
+[2026-05-01 21:23:17,508][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=146 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:23:17,725][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2578 all CQEs drained
+[2026-05-01 21:23:17,748][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=146 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:23:23,881][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2590 all CQEs drained
+[2026-05-01 21:23:23,904][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=147 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:23:24,446][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2590 all CQEs drained
+[2026-05-01 21:23:24,470][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=147 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:23:30,740][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2596 all CQEs drained
+[2026-05-01 21:23:30,763][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=148 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:23:31,177][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2596 all CQEs drained
+[2026-05-01 21:23:31,200][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=148 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:23:37,368][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2610 all CQEs drained
+[2026-05-01 21:23:37,391][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=149 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:23:37,928][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2610 all CQEs drained
+[2026-05-01 21:23:37,952][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=149 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:23:44,098][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2569 all CQEs drained
+[2026-05-01 21:23:44,121][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=150 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:23:44,645][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2569 all CQEs drained
+[2026-05-01 21:23:44,668][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=150 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:23:44,700][__main__][INFO] - step=150 loss=1.5511 iter_ms=6709.1
+[2026-05-01 21:23:50,884][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2597 all CQEs drained
+[2026-05-01 21:23:50,908][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=151 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:23:51,305][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2597 all CQEs drained
+[2026-05-01 21:23:51,328][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=151 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:23:57,479][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2596 all CQEs drained
+[2026-05-01 21:23:57,502][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=152 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:23:58,108][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2596 all CQEs drained
+[2026-05-01 21:23:58,131][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=152 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:24:04,476][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2597 all CQEs drained
+[2026-05-01 21:24:04,500][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=153 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:24:04,827][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2597 all CQEs drained
+[2026-05-01 21:24:04,850][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=153 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:24:10,887][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2598 all CQEs drained
+[2026-05-01 21:24:10,910][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=154 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:24:11,498][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2598 all CQEs drained
+[2026-05-01 21:24:11,521][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=154 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:24:17,689][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2579 all CQEs drained
+[2026-05-01 21:24:17,712][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=155 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:24:18,250][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2579 all CQEs drained
+[2026-05-01 21:24:18,273][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=155 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:24:24,366][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2589 all CQEs drained
+[2026-05-01 21:24:24,390][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=156 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:24:24,969][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2589 all CQEs drained
+[2026-05-01 21:24:24,993][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=156 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:24:31,047][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2584 all CQEs drained
+[2026-05-01 21:24:31,071][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=157 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:24:31,745][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2584 all CQEs drained
+[2026-05-01 21:24:31,768][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=157 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:24:37,916][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2617 all CQEs drained
+[2026-05-01 21:24:37,939][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=158 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:24:38,403][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2617 all CQEs drained
+[2026-05-01 21:24:38,426][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=158 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:24:44,548][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2598 all CQEs drained
+[2026-05-01 21:24:44,571][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=159 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:24:45,147][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2598 all CQEs drained
+[2026-05-01 21:24:45,171][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=159 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:24:51,225][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2594 all CQEs drained
+[2026-05-01 21:24:51,248][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=160 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:24:51,814][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2594 all CQEs drained
+[2026-05-01 21:24:51,838][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=160 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:24:57,683][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2612 all CQEs drained
+[2026-05-01 21:24:57,706][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=161 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:24:58,422][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2612 all CQEs drained
+[2026-05-01 21:24:58,445][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=161 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:25:04,467][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2600 all CQEs drained
+[2026-05-01 21:25:04,490][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=162 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:25:05,188][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2600 all CQEs drained
+[2026-05-01 21:25:05,211][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=162 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:25:11,402][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2564 all CQEs drained
+[2026-05-01 21:25:11,425][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=163 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:25:11,959][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2564 all CQEs drained
+[2026-05-01 21:25:11,982][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=163 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:25:18,044][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2578 all CQEs drained
+[2026-05-01 21:25:18,068][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=164 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:25:18,712][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2578 all CQEs drained
+[2026-05-01 21:25:18,736][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=164 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:25:24,815][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2601 all CQEs drained
+[2026-05-01 21:25:24,839][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=165 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:25:25,384][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2601 all CQEs drained
+[2026-05-01 21:25:25,408][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=165 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:25:31,623][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2596 all CQEs drained
+[2026-05-01 21:25:31,646][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=166 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:25:32,170][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2596 all CQEs drained
+[2026-05-01 21:25:32,193][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=166 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:25:38,295][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2593 all CQEs drained
+[2026-05-01 21:25:38,318][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=167 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:25:38,859][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2593 all CQEs drained
+[2026-05-01 21:25:38,883][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=167 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:25:44,935][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2598 all CQEs drained
+[2026-05-01 21:25:44,958][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=168 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:25:45,620][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2598 all CQEs drained
+[2026-05-01 21:25:45,643][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=168 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:25:51,818][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2568 all CQEs drained
+[2026-05-01 21:25:51,841][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=169 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:25:52,326][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2568 all CQEs drained
+[2026-05-01 21:25:52,349][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=169 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:25:58,450][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2587 all CQEs drained
+[2026-05-01 21:25:58,473][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=170 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:25:58,962][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2587 all CQEs drained
+[2026-05-01 21:25:58,985][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=170 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:26:04,973][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2606 all CQEs drained
+[2026-05-01 21:26:04,996][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=171 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:26:05,705][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2606 all CQEs drained
+[2026-05-01 21:26:05,729][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=171 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:26:11,892][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2613 all CQEs drained
+[2026-05-01 21:26:11,915][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=172 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:26:12,477][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2613 all CQEs drained
+[2026-05-01 21:26:12,500][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=172 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:26:18,768][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2592 all CQEs drained
+[2026-05-01 21:26:18,792][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=173 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:26:19,235][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2592 all CQEs drained
+[2026-05-01 21:26:19,258][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=173 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:26:25,710][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2594 all CQEs drained
+[2026-05-01 21:26:25,733][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=174 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:26:25,863][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2594 all CQEs drained
+[2026-05-01 21:26:25,886][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=174 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:26:32,055][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2600 all CQEs drained
+[2026-05-01 21:26:32,079][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=175 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:26:32,600][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2600 all CQEs drained
+[2026-05-01 21:26:32,623][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=175 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:26:38,749][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2592 all CQEs drained
+[2026-05-01 21:26:38,772][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=176 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:26:39,338][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2592 all CQEs drained
+[2026-05-01 21:26:39,362][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=176 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:26:45,697][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2581 all CQEs drained
+[2026-05-01 21:26:45,720][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=177 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:26:46,047][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2581 all CQEs drained
+[2026-05-01 21:26:46,070][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=177 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:26:52,056][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2592 all CQEs drained
+[2026-05-01 21:26:52,080][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=178 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:26:52,700][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2592 all CQEs drained
+[2026-05-01 21:26:52,723][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=178 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:26:58,932][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2584 all CQEs drained
+[2026-05-01 21:26:58,955][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=179 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:26:59,365][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2584 all CQEs drained
+[2026-05-01 21:26:59,388][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=179 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:27:05,501][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2592 all CQEs drained
+[2026-05-01 21:27:05,524][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=180 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:27:06,071][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2592 all CQEs drained
+[2026-05-01 21:27:06,095][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=180 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:27:12,096][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2574 all CQEs drained
+[2026-05-01 21:27:12,119][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=181 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:27:12,643][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2574 all CQEs drained
+[2026-05-01 21:27:12,666][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=181 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:27:18,833][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2589 all CQEs drained
+[2026-05-01 21:27:18,856][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=182 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:27:19,406][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2589 all CQEs drained
+[2026-05-01 21:27:19,429][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=182 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:27:25,771][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2587 all CQEs drained
+[2026-05-01 21:27:25,795][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=183 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:27:26,107][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2587 all CQEs drained
+[2026-05-01 21:27:26,130][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=183 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:27:32,228][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2600 all CQEs drained
+[2026-05-01 21:27:32,251][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=184 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:27:32,872][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2600 all CQEs drained
+[2026-05-01 21:27:32,895][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=184 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:27:39,189][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2599 all CQEs drained
+[2026-05-01 21:27:39,213][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=185 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:27:39,645][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2599 all CQEs drained
+[2026-05-01 21:27:39,669][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=185 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:27:45,894][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2569 all CQEs drained
+[2026-05-01 21:27:45,917][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=186 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:27:46,384][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2569 all CQEs drained
+[2026-05-01 21:27:46,407][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=186 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:27:52,552][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2607 all CQEs drained
+[2026-05-01 21:27:52,575][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=187 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:27:53,061][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2607 all CQEs drained
+[2026-05-01 21:27:53,084][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=187 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:27:59,263][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2576 all CQEs drained
+[2026-05-01 21:27:59,287][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=188 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:27:59,779][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2576 all CQEs drained
+[2026-05-01 21:27:59,802][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=188 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:28:05,891][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2592 all CQEs drained
+[2026-05-01 21:28:05,914][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=189 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:28:06,512][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2592 all CQEs drained
+[2026-05-01 21:28:06,535][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=189 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:28:12,655][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2591 all CQEs drained
+[2026-05-01 21:28:12,678][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=190 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:28:13,187][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2591 all CQEs drained
+[2026-05-01 21:28:13,210][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=190 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:28:19,383][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2597 all CQEs drained
+[2026-05-01 21:28:19,406][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=191 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:28:19,957][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2597 all CQEs drained
+[2026-05-01 21:28:19,980][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=191 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:28:26,171][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2596 all CQEs drained
+[2026-05-01 21:28:26,195][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=192 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:28:26,660][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2596 all CQEs drained
+[2026-05-01 21:28:26,684][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=192 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:28:32,863][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2584 all CQEs drained
+[2026-05-01 21:28:32,886][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=193 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:28:33,375][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2584 all CQEs drained
+[2026-05-01 21:28:33,398][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=193 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:28:39,616][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2591 all CQEs drained
+[2026-05-01 21:28:39,639][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=194 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:28:40,045][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2591 all CQEs drained
+[2026-05-01 21:28:40,069][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=194 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:28:47,211][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2602 all CQEs drained
+[2026-05-01 21:28:47,236][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=195 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:28:47,313][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2602 all CQEs drained
+[2026-05-01 21:28:47,337][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=195 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:28:53,628][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2607 all CQEs drained
+[2026-05-01 21:28:53,651][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=196 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:28:53,999][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2607 all CQEs drained
+[2026-05-01 21:28:54,023][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=196 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:29:00,299][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2603 all CQEs drained
+[2026-05-01 21:29:00,322][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=197 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:29:00,798][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2603 all CQEs drained
+[2026-05-01 21:29:00,821][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=197 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:29:07,101][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2612 all CQEs drained
+[2026-05-01 21:29:07,125][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=198 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:29:07,503][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2612 all CQEs drained
+[2026-05-01 21:29:07,526][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=198 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:29:13,735][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2602 all CQEs drained
+[2026-05-01 21:29:13,758][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=199 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:29:14,128][semirdma.transport][INFO] - post_gradient DIAG: n_posted=2602 all CQEs drained
+[2026-05-01 21:29:14,152][semirdma.transport][INFO] - await_gradient DIAG: bucket_id=199 completed=0/2729 outstanding_recv_pre=0 ok=False timed_out=True latency_ms=20.00 LEFTOVER_after_wait: recv_ok=0 recv_err=0 other=0 foreign_stashed=0 unique_imm=0 pending_total=8192
+[2026-05-01 21:29:14,302][__main__][INFO] - training done: 200 steps in 1319.5s
