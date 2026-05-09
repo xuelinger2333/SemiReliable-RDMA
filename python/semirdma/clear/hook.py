@@ -385,7 +385,9 @@ def _run_clear_bucket(
     # FINALIZE semantics would diverge from local mask/rescale (e.g.
     # Finalizer says MASKED+ESTIMATOR_SCALE but apply uses MASK_FIRST).
     if policy is None:
-        policy = state.policy_registry.get(bucket_seq)
+        # PolicyRegistry is a pure-Python mirror; pybind11 requires the C++
+        # enum type for BeginPayload / Finalizer calls at the boundary.
+        policy = Policy(int(state.policy_registry.get(bucket_seq)))
     nbytes = len(bucket_bytes)
     n_chunks = (nbytes + chunk_bytes - 1) // chunk_bytes
     _t_enter = _time.perf_counter()
