@@ -35,7 +35,7 @@ from typing import Optional, Union
 
 import numpy as np
 
-from .policy import FinalizeDecision
+from .policy import FinalizeDecision, Policy
 
 # Anything castable to a 1-D uint8 numpy view.
 ByteBuffer = Union[bytes, bytearray, memoryview, np.ndarray]
@@ -69,13 +69,23 @@ def apply_finalize(
     flat: ByteBuffer,
     prev_flat: Optional[ByteBuffer] = None,
     recv_count: Optional[int] = None,
+    policy: Optional[Policy] = None,
 ) -> dict:
     """Apply a finalize decision in place. Returns a stats dict.
+
+    ``policy`` distinguishes ESTIMATOR_SCALE from MASK_FIRST (both yield
+    decision=MASKED at the wire level, see clear-design.md §3.3). When
+    decision == MASKED and policy == ESTIMATOR_SCALE, the missing chunks
+    are zeroed AND the entire bucket is rescaled by n_chunks/recv_count
+    so that AVG over ranks remains an unbiased estimator. Requires the
+    bucket be a multiple of 4 bytes (float32) and recv_count > 0.
 
     Stats keys:
         applied_chunks       — chunks the function actually touched
         bytes_written        — total bytes mutated
         decision             — echoed
+        scale                — rescale factor applied (1.0 unless
+                               ESTIMATOR_SCALE), reported even on no-op
     """
     # Accept either the Python IntEnum (clear.policy.FinalizeDecision) or
     # the pybind11 C++ enum (semirdma._semirdma_ext.clear.FinalizeDecision).
@@ -99,7 +109,8 @@ def apply_finalize(
         FinalizeDecision.REPAIRED,
         FinalizeDecision.FALLBACK_RC,
     ):
-        return {"applied_chunks": 0, "bytes_written": 0, "decision": decision}
+        return {"applied_chunks": 0, "bytes_written": 0,
+                "decision": decision, "scale": 1.0}
 
     bitmap_arr = _as_uint8_view(mask_bitmap, writable=False)
     if bitmap_arr.size < (n_chunks + 7) // 8:
@@ -119,10 +130,30 @@ def apply_finalize(
             flat_view[start:end] = 0
             applied += 1
             bytes_written += end - start
+        scale = 1.0
+        if policy == Policy.ESTIMATOR_SCALE:
+            # Rescale present chunks by n_chunks/recv_count so the AVG
+            # across world_size remains an unbiased estimator of the full
+            # bucket sum. recv_count is the popcount of mask_bitmap; we
+            # accept it as a pre-computed param but recompute defensively
+            # if the caller did not pass it.
+            if recv_count is None:
+                recv_count = sum(
+                    bin(int(b)).count("1") for b in bitmap_arr.tolist())
+            if recv_count > 0 and recv_count < n_chunks:
+                if flat_view.size % 4 != 0:
+                    raise ValueError(
+                        "ESTIMATOR_SCALE requires float32-aligned buffer; "
+                        f"got {flat_view.size} bytes (not a multiple of 4)")
+                scale = float(n_chunks) / float(recv_count)
+                f32 = flat_view.view(np.float32)
+                f32 *= np.float32(scale)
+                bytes_written = flat_view.size
         return {
             "applied_chunks": applied,
             "bytes_written": bytes_written,
             "decision": decision,
+            "scale": scale,
         }
 
     if decision == FinalizeDecision.STALE:
@@ -150,6 +181,7 @@ def apply_finalize(
             "applied_chunks": applied,
             "bytes_written": bytes_written,
             "decision": decision,
+            "scale": 1.0,
         }
 
     raise NotImplementedError(f"Unhandled FinalizeDecision: {decision!r}")

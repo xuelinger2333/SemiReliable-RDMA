@@ -192,6 +192,26 @@ TEST(ReceiverLeaseTable, InstallRejectsConflictingPair) {
     EXPECT_FALSE(t.install(/*uid=*/1, /*slot=*/0, /*gen=*/4));  // wrong gen
 }
 
+TEST(ReceiverLeaseTable, InstallRejectsSameUidOnDifferentSlot) {
+    // Regression: install(uid, B) when uid is already bound to slot A must
+    // be rejected. Otherwise uid_to_slot_[uid]=B overwrites the mapping while
+    // slot A remains active forever (retire(uid) only clears slot B).
+    sc::ReceiverLeaseTable t;
+    ASSERT_TRUE(t.install(/*uid=*/0x1234, /*slot=*/5, /*gen=*/2));
+    EXPECT_FALSE(t.install(/*uid=*/0x1234, /*slot=*/6, /*gen=*/3));
+    // Slot 5 still owns the uid; slot 6 must remain inactive.
+    EXPECT_EQ(t.lookup(5, 2).outcome, sc::LookupOutcome::HIT);
+    EXPECT_EQ(t.lookup(6, 3).outcome, sc::LookupOutcome::PRE_BEGIN);
+    // Retire properly clears slot 5 — post-retire it goes to PRE_BEGIN
+    // (slot.active=false), matching RetireKeepsGenForStaleDetection.
+    EXPECT_TRUE(t.retire(0x1234));
+    EXPECT_EQ(t.lookup(5, 2).outcome, sc::LookupOutcome::PRE_BEGIN);
+    // Re-install on slot 5 with a fresh gen; the old gen now resolves STALE.
+    ASSERT_TRUE(t.install(/*uid=*/0x9999, /*slot=*/5, /*gen=*/3));
+    EXPECT_EQ(t.lookup(5, 2).outcome, sc::LookupOutcome::STALE);
+    EXPECT_EQ(t.lookup(5, 3).outcome, sc::LookupOutcome::HIT);
+}
+
 TEST(ReceiverLeaseTable, GenIsMaskedToFourBits) {
     sc::ReceiverLeaseTable t;
     // Pass gen=0xF7 → low 4 bits = 7.

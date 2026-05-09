@@ -166,14 +166,15 @@ PYBIND11_MODULE(_semirdma_ext, m) {
                 int sq_depth_throttle, int drain_timeout_ms,
                 int per_wr_pace_us,
                 const RemoteMR& remote, bool with_imm,
-                uint64_t wr_id_base) {
+                uint64_t wr_id_base,
+                uint8_t bucket_id) {
                  py::gil_scoped_release release;
                  return self.post_bucket_chunks(
                      base_offset, remote_base_offset,
                      total_bytes, chunk_bytes,
                      sq_depth_throttle, drain_timeout_ms,
                      per_wr_pace_us,
-                     remote, with_imm, wr_id_base);
+                     remote, with_imm, wr_id_base, bucket_id);
              },
              py::arg("base_offset"),
              py::arg("remote_base_offset"),
@@ -184,7 +185,8 @@ PYBIND11_MODULE(_semirdma_ext, m) {
              py::arg("per_wr_pace_us"),
              py::arg("remote"),
              py::arg("with_imm"),
-             py::arg("wr_id_base"))
+             py::arg("wr_id_base"),
+             py::arg("bucket_id") = static_cast<uint8_t>(0))
         .def("post_recv", &UCQPEngine::post_recv, py::arg("wr_id"))
         .def("post_recv_batch", &UCQPEngine::post_recv_batch,
              py::arg("n"), py::arg("base_wr_id") = 0)
@@ -276,11 +278,13 @@ PYBIND11_MODULE(_semirdma_ext, m) {
                                               expected_bucket_id, &stats);
                  }
                  py::dict s;
-                 s["ok"]         = ok;
-                 s["latency_ms"] = stats.latency_ms;
-                 s["poll_count"] = stats.poll_count;
-                 s["completed"]  = stats.completed;
-                 s["timed_out"]  = stats.timed_out;
+                 s["ok"]             = ok;
+                 s["latency_ms"]     = stats.latency_ms;
+                 s["poll_count"]     = stats.poll_count;
+                 s["completed"]      = stats.completed;
+                 s["timed_out"]      = stats.timed_out;
+                 s["wc_errors"]      = stats.wc_errors;
+                 s["last_wc_status"] = stats.last_wc_status;
                  return s;
              },
              py::arg("cs"), py::arg("ratio"), py::arg("timeout_ms"),
@@ -308,12 +312,14 @@ PYBIND11_MODULE(_semirdma_ext, m) {
                          &reason, &stats);
                  }
                  py::dict d;
-                 d["ok"]         = ok;
-                 d["reason"]     = reason;
-                 d["latency_ms"] = stats.latency_ms;
-                 d["poll_count"] = stats.poll_count;
-                 d["completed"]  = stats.completed;
-                 d["timed_out"]  = stats.timed_out;
+                 d["ok"]             = ok;
+                 d["reason"]         = reason;
+                 d["latency_ms"]     = stats.latency_ms;
+                 d["poll_count"]     = stats.poll_count;
+                 d["completed"]      = stats.completed;
+                 d["timed_out"]      = stats.timed_out;
+                 d["wc_errors"]      = stats.wc_errors;
+                 d["last_wc_status"] = stats.last_wc_status;
                  return d;
              },
              py::arg("cs"), py::arg("ratio"), py::arg("timeout_ms"),
@@ -361,7 +367,8 @@ PYBIND11_MODULE(_semirdma_ext, m) {
     py::enum_<RatioExitReason>(m, "RatioExitReason")
         .value("DELIVERED", RatioExitReason::DELIVERED)
         .value("RATIO_MET", RatioExitReason::RATIO_MET)
-        .value("DEADLINE",  RatioExitReason::DEADLINE);
+        .value("DEADLINE",  RatioExitReason::DEADLINE)
+        .value("WC_ERROR",  RatioExitReason::WC_ERROR);
 
     // -----------------------------------------------------------------
     // Phase 5 CLEAR — submodule for the new types
@@ -603,16 +610,44 @@ PYBIND11_MODULE(_semirdma_ext, m) {
              })
         .def("on_apply_mask",
              [](sc::Finalizer& self, py::function cb) {
+                 // Determine target arity ONCE at registration time using
+                 // inspect.signature, so a real TypeError raised inside the
+                 // user's callback at call time is not silently swallowed
+                 // and re-dispatched. Supported arities:
+                 //   5: (uid, decision, policy, mask, n_chunks)  ← new
+                 //   4: (uid, decision, mask, n_chunks)          ← legacy
+                 // Anything else: keep the new 5-arg form and let the
+                 // user-side TypeError surface naturally.
+                 bool pass_policy = true;
+                 try {
+                     py::module_ inspect = py::module_::import("inspect");
+                     py::object sig = inspect.attr("signature")(cb);
+                     py::object params = sig.attr("parameters");
+                     ssize_t n_params = py::len(params);
+                     // Heuristic: 4-positional => legacy; otherwise pass
+                     // policy. Variadic (*args) reports param count as the
+                     // count of declared parameters which may be 1 — we
+                     // default to 5-arg (pass_policy=true) for that case.
+                     if (n_params == 4) pass_policy = false;
+                 } catch (const py::error_already_set&) {
+                     PyErr_Clear();  // builtins / C funcs without signature
+                 }
                  self.on_apply_mask(
-                     [cb = std::move(cb)](uint64_t uid,
-                                          sc::FinalizeDecision d,
-                                          const uint8_t* mask, size_t len,
-                                          uint32_t n_chunks) {
+                     [cb = std::move(cb), pass_policy](
+                         uint64_t uid,
+                         sc::FinalizeDecision d,
+                         sc::Policy policy,
+                         const uint8_t* mask, size_t len,
+                         uint32_t n_chunks) {
                          py::gil_scoped_acquire gil;
                          py::bytes payload(
                              mask ? reinterpret_cast<const char*>(mask) : "",
                              len);
-                         cb(uid, d, payload, n_chunks);
+                         if (pass_policy) {
+                             cb(uid, d, policy, payload, n_chunks);
+                         } else {
+                             cb(uid, d, payload, n_chunks);
+                         }
                      });
              })
         .def("track", &sc::Finalizer::track,

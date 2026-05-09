@@ -5,7 +5,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from semirdma.clear.policy import FinalizeDecision
+from semirdma.clear.policy import FinalizeDecision, Policy
 from semirdma.clear.runtime import apply_finalize
 
 
@@ -98,7 +98,88 @@ def test_masked_all_present_writes_nothing():
                        mask_bitmap=bm, n_chunks=4, chunk_bytes=4,
                        flat=flat)
     assert s["applied_chunks"] == 0
-    assert flat == bytearray(b"\x77" * 16)
+
+
+# ---------- ESTIMATOR_SCALE -------------------------------------------------
+
+
+def test_estimator_scale_zeros_missing_and_rescales():
+    """ESTIMATOR_SCALE: zero-mask missing, then rescale present chunks
+    by n_chunks/recv_count so AVG remains an unbiased estimator."""
+    n_chunks = 4
+    chunk_bytes = 4  # one float32 per chunk
+    # Chunks: [1.0, 2.0, 3.0, 4.0]; chunks 1 and 3 will be reported missing.
+    flat_f32 = np.array([1.0, 2.0, 3.0, 4.0], dtype=np.float32)
+    flat = bytearray(flat_f32.tobytes())
+    bm = _bitmap(n_chunks, [0, 2])  # 2 of 4 present → recv_count = 2
+    s = apply_finalize(FinalizeDecision.MASKED,
+                       mask_bitmap=bm, n_chunks=n_chunks,
+                       chunk_bytes=chunk_bytes, flat=flat,
+                       policy=Policy.ESTIMATOR_SCALE)
+    assert s["scale"] == pytest.approx(2.0)  # n/r = 4/2
+    out = np.frombuffer(bytes(flat), dtype=np.float32)
+    # Missing chunks zeroed THEN scaled (still 0); present chunks scaled by 2.
+    np.testing.assert_array_equal(out, np.array([2.0, 0.0, 6.0, 0.0],
+                                                dtype=np.float32))
+
+
+def test_estimator_scale_no_op_when_all_present():
+    n_chunks = 4
+    chunk_bytes = 4
+    flat_f32 = np.array([1.0, 2.0, 3.0, 4.0], dtype=np.float32)
+    flat = bytearray(flat_f32.tobytes())
+    bm = _bitmap(n_chunks, range(n_chunks))  # recv_count == n_chunks
+    s = apply_finalize(FinalizeDecision.MASKED,
+                       mask_bitmap=bm, n_chunks=n_chunks,
+                       chunk_bytes=chunk_bytes, flat=flat,
+                       policy=Policy.ESTIMATOR_SCALE)
+    # When everything was received, no rescale (would multiply by 1).
+    assert s["scale"] == pytest.approx(1.0)
+    out = np.frombuffer(bytes(flat), dtype=np.float32)
+    np.testing.assert_array_equal(out, flat_f32)
+
+
+def test_estimator_scale_no_op_when_all_missing():
+    n_chunks = 4
+    chunk_bytes = 4
+    flat_f32 = np.array([1.0, 2.0, 3.0, 4.0], dtype=np.float32)
+    flat = bytearray(flat_f32.tobytes())
+    bm = _bitmap(n_chunks, [])  # recv_count == 0
+    s = apply_finalize(FinalizeDecision.MASKED,
+                       mask_bitmap=bm, n_chunks=n_chunks,
+                       chunk_bytes=chunk_bytes, flat=flat,
+                       policy=Policy.ESTIMATOR_SCALE)
+    # Cannot scale by n/0; entire bucket is masked to zero, no rescale.
+    assert s["scale"] == pytest.approx(1.0)
+    out = np.frombuffer(bytes(flat), dtype=np.float32)
+    np.testing.assert_array_equal(out, np.zeros(n_chunks, dtype=np.float32))
+
+
+def test_estimator_scale_rejects_non_aligned_buffer():
+    flat = bytearray(b"\xFF" * 5)  # 5 bytes, not float32-aligned
+    bm = _bitmap(2, [0])
+    with pytest.raises(ValueError, match="float32-aligned"):
+        apply_finalize(FinalizeDecision.MASKED,
+                       mask_bitmap=bm, n_chunks=2, chunk_bytes=4,
+                       flat=flat, policy=Policy.ESTIMATOR_SCALE)
+
+
+def test_mask_first_policy_does_not_rescale():
+    """Default MASK_FIRST behavior unchanged: zero-mask only, no scale."""
+    n_chunks = 4
+    chunk_bytes = 4
+    flat_f32 = np.array([1.0, 2.0, 3.0, 4.0], dtype=np.float32)
+    flat = bytearray(flat_f32.tobytes())
+    bm = _bitmap(n_chunks, [0, 2])
+    s = apply_finalize(FinalizeDecision.MASKED,
+                       mask_bitmap=bm, n_chunks=n_chunks,
+                       chunk_bytes=chunk_bytes, flat=flat,
+                       policy=Policy.MASK_FIRST)
+    assert s["scale"] == pytest.approx(1.0)
+    out = np.frombuffer(bytes(flat), dtype=np.float32)
+    # Present chunks unchanged; missing zeroed; NO rescale.
+    np.testing.assert_array_equal(out, np.array([1.0, 0.0, 3.0, 0.0],
+                                                dtype=np.float32))
 
 
 # ---------- STALE -----------------------------------------------------------

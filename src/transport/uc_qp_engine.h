@@ -141,6 +141,12 @@ public:
     // cross-reference during debugging.
     //
     // Throws on any ibv_post_send / ibv_poll_cq error or on tail-drain timeout.
+    //
+    // bucket_id encodes into the high 8 bits of imm_data per the PR-C wire
+    // format (ratio_controller.h §"PR-C"):
+    //     imm_data = htonl((bucket_id << 24) | (chunk_id & 0xFFFFFF))
+    // Default 0 keeps backwards compat with single-bucket callers
+    // (imm_data == htonl(chunk_id), high 8 bits zero).
     ChunkSet post_bucket_chunks(size_t          base_offset,
                                 size_t          remote_base_offset,
                                 size_t          total_bytes,
@@ -150,7 +156,8 @@ public:
                                 int             per_wr_pace_us,
                                 const RemoteMR& remote,
                                 bool            with_imm,
-                                uint64_t        wr_id_base);
+                                uint64_t        wr_id_base,
+                                uint8_t         bucket_id = 0);
 
     // Post a regular SEND (IBV_WR_SEND, no RDMA address) of `length` bytes
     // starting at `local_offset` within the local MR.  The receiver must

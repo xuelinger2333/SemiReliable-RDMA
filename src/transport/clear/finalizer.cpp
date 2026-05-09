@@ -146,7 +146,8 @@ void Finalizer::terminate(uint64_t uid, const Record& r,
                        enc.body.size());
     }
     if (apply_mask_) {
-        apply_mask_(uid, decision, mask_bitmap, bitmap_bytes, r.n_chunks);
+        apply_mask_(uid, decision, r.policy,
+                    mask_bitmap, bitmap_bytes, r.n_chunks);
     }
     if (send_retire_) {
         send_retire_(uid, r.slot, r.gen);

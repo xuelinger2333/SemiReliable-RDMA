@@ -104,6 +104,14 @@ ReceiverLeaseTable::ReceiverLeaseTable(size_t pending_capacity)
 
 bool ReceiverLeaseTable::install(uint64_t uid, uint8_t slot_id, uint8_t gen) {
     if (slot_id >= kSlotCount) return false;
+    // Reject if uid is already bound to a *different* slot — otherwise we'd
+    // overwrite uid_to_slot_[uid] and leak the old slot (active forever, since
+    // retire(uid) only clears the new slot). Idempotent re-install on the same
+    // slot is still allowed below.
+    auto it = uid_to_slot_.find(uid);
+    if (it != uid_to_slot_.end() && it->second != slot_id) {
+        return false;
+    }
     SlotState& s = slots_[slot_id];
     if (s.active) {
         // Two acceptable cases that we still allow:

@@ -378,7 +378,14 @@ def _run_clear_bucket(
     """
     import time as _time
     chunk_bytes = chunk_bytes or state.cfg.chunk_bytes
-    policy = policy or state.default_policy
+    # Resolve a single source of truth for this bucket's policy. Both the
+    # send/recv path (which drives the C++ Finalizer's FINALIZE decision)
+    # AND the local apply_finalize call must use the same value, otherwise
+    # a per-bucket entry in policy_registry would only affect one half and
+    # FINALIZE semantics would diverge from local mask/rescale (e.g.
+    # Finalizer says MASKED+ESTIMATOR_SCALE but apply uses MASK_FIRST).
+    if policy is None:
+        policy = state.policy_registry.get(bucket_seq)
     nbytes = len(bucket_bytes)
     n_chunks = (nbytes + chunk_bytes - 1) // chunk_bytes
     _t_enter = _time.perf_counter()
@@ -522,11 +529,15 @@ def _run_clear_bucket(
     # before we read it).
     _t_fin_start = _time.perf_counter()
     peer_slice = peer_slice_holder[0]
+    # Use the same ``policy`` resolved at the top of this function — must
+    # match what was passed to clear_send_bucket / clear_recv_bucket so
+    # local apply semantics agree with the C++ Finalizer's FINALIZE.
     py_apply_finalize(
         decision,
         mask_bitmap=recv_bitmap,
         n_chunks=n_chunks, chunk_bytes=chunk_bytes,
         flat=peer_slice,
+        policy=policy,
     )
     _t_fin_end = _time.perf_counter()
 

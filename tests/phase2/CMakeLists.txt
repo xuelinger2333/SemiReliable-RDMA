@@ -5,7 +5,7 @@
 
 # GTest-based tests
 foreach(test_name test_chunk_roundtrip test_ratio_timeout test_ghost_mask
-                  test_bucket_id_isolation)
+                  test_bucket_id_isolation test_pending_wrap)
     add_executable(${test_name} ${test_name}.cpp)
     target_link_libraries(${test_name} PRIVATE semirdma_transport GTest::gtest_main)
     add_test(NAME ${test_name} COMMAND ${test_name})

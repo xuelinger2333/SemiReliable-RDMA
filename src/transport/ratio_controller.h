@@ -57,6 +57,13 @@ struct WaitStats {
     uint32_t poll_count  = 0;     // Number of ibv_poll_cq calls
     uint32_t completed   = 0;     // Chunks completed at return time
     bool     timed_out   = false;
+    // Count of CQEs polled with status != IBV_WC_SUCCESS during the wait.
+    // Includes RC RNR/RETRY_EXC/TIMEOUT, UC LOC_PROT/LOC_LEN/REM_ACCESS, etc.
+    // Surfaced so RC-Lossy / RC-Baseline experiments can distinguish a real
+    // QP error from a delivery timeout (otherwise both paths would just see
+    // ``timed_out=true``). Last-seen status is reported in ``last_wc_status``.
+    uint32_t wc_errors      = 0;
+    uint32_t last_wc_status = 0;  // ibv_wc_status enum value, 0 if no error
 };
 
 // Phase 5 CLEAR-mode exit classification. Reported by wait_for_ratio_clear
@@ -66,10 +73,16 @@ struct WaitStats {
 //               the missing chunks become candidates for WITNESS / repair.
 //   DEADLINE  — timeout fired before ratio was met; usual path on a
 //               lossy wire.
+//   WC_ERROR  — at least one CQE returned status != IBV_WC_SUCCESS during
+//               the wait. The wait still respects the ratio target — this
+//               flag is informational and reported via out_reason so the
+//               higher-level path (RC fallback, finalizer) can react. The
+//               bool return value is unaffected (true if ratio met).
 enum class RatioExitReason : uint8_t {
     DELIVERED = 0,
     RATIO_MET = 1,
     DEADLINE  = 2,
+    WC_ERROR  = 3,
 };
 
 class RatioController {
@@ -160,13 +173,31 @@ public:
     size_t clr_pending_size_for(uint8_t slot_id, uint8_t gen) const;
     void   clr_clear_pending();
 
+    // Test-only: advance the internal wait counter without driving the QP.
+    // Used by aliasing-protection unit tests that cannot wait_for_ratio()
+    // 256 times against a real engine. NOT for production callers.
+    void advance_wait_seq_for_tests(uint64_t n) { wait_seq_ += n; }
+
+    // Pending entries older than this many wait_for_ratio calls are evicted
+    // by drain_pending before being claimed. Set to one full bucket_id cycle
+    // so that an entry stashed under bucket_id=K cannot be falsely claimed by
+    // a future wait_for_ratio(bucket_id=K) after K has wrapped around. See
+    // P2-① in plans/p1cqe-dismiss-wait-for-ratio-zippy-engelbart.md.
+    static constexpr uint64_t kPendingMaxAgeWaits = 256;
+
 private:
     UCQPEngine& engine_;
-    // PR-C: bucket_id (mod 256) → list of LOCAL chunk_ids (24-bit) seen
-    // but not yet claimed.  std::unordered_map keeps insertion fast;
-    // per-bucket vectors are append-only until drained, then the entry
-    // is erased.
-    std::unordered_map<uint8_t, std::vector<uint32_t>> pending_cqes_;
+    // PR-C: bucket_id (mod 256) → list of (LOCAL chunk_id, deposit_seq).
+    // ``deposit_seq`` is the value of ``wait_seq_`` at the moment the entry
+    // was stashed. drain_pending evicts entries whose age exceeds
+    // kPendingMaxAgeWaits before claiming, which prevents 8-bit bucket_id
+    // wrap from causing stale CQEs to be applied to a fresh ChunkSet.
+    struct PendingEntry {
+        uint32_t chunk_id;
+        uint64_t deposit_seq;
+    };
+    std::unordered_map<uint8_t, std::vector<PendingEntry>> pending_cqes_;
+    uint64_t wait_seq_ = 0;
 
     // CLEAR (W2.1): (slot, gen) lease_key → list of LOCAL chunk_idx
     // (20-bit) seen but not yet claimed. Separate map so PR-C and CLEAR

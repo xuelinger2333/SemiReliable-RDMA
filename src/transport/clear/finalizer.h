@@ -113,8 +113,13 @@ public:
     using SendRetireFn    = std::function<void(uint64_t uid,
                                                uint8_t slot,
                                                uint8_t gen)>;
+    // policy is forwarded so downstream can distinguish ESTIMATOR_SCALE
+    // (rescale aggregated tensor by n_chunks/recv_count) from MASK_FIRST
+    // (zero-mask only). Both yield decision=MASKED, so the bitmap alone
+    // is insufficient. recv_count is derivable as popcount(mask_bitmap).
     using ApplyMaskFn     = std::function<void(uint64_t uid,
                                                FinalizeDecision decision,
+                                               Policy policy,
                                                const uint8_t* mask_bitmap,
                                                size_t bitmap_bytes,
                                                uint32_t n_chunks)>;

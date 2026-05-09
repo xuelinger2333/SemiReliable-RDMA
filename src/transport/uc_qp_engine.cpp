@@ -448,7 +448,8 @@ ChunkSet UCQPEngine::post_bucket_chunks(size_t          base_offset,
                                        int             per_wr_pace_us,
                                        const RemoteMR& remote,
                                        bool            with_imm,
-                                       uint64_t        wr_id_base)
+                                       uint64_t        wr_id_base,
+                                       uint8_t         bucket_id)
 {
     ChunkSet cs(base_offset, total_bytes, chunk_bytes);
     const size_t n_chunks = cs.size();
@@ -488,14 +489,38 @@ ChunkSet UCQPEngine::post_bucket_chunks(size_t          base_offset,
 
     for (size_t i = 0; i < n_chunks; i++) {
         // Wave throttle: hold inflight at most ``capacity``.
+        // Only IBV_WC_RDMA_WRITE CQEs decrement inflight — this fast path
+        // is sender-only, so a RECV-side CQE on this CQ would mean the
+        // QP/CQ is shared with a concurrent receive flow and the inflight
+        // accounting cannot trust opcode-blind n. We throw rather than
+        // silently drop a RECV CQE, which would be lost from the CQ.
         while (inflight >= capacity) {
             int n = ibv_poll_cq(cq_, capacity, wcs.data());
             if (n < 0) {
                 throw std::runtime_error(
                     "post_bucket_chunks: ibv_poll_cq returned error");
             }
-            if (n > 0) {
-                inflight = std::max(0, inflight - n);
+            int sends_completed = 0;
+            for (int i = 0; i < n; ++i) {
+                if (wcs[i].status != IBV_WC_SUCCESS) {
+                    throw std::runtime_error(
+                        std::string(
+                            "post_bucket_chunks: throttle WC error: ") +
+                        ibv_wc_status_str(wcs[i].status) +
+                        " (wr_id=" + std::to_string(wcs[i].wr_id) + ")");
+                }
+                if (wcs[i].opcode == IBV_WC_RDMA_WRITE) {
+                    ++sends_completed;
+                } else {
+                    throw std::runtime_error(
+                        "post_bucket_chunks: throttle saw unexpected "
+                        "opcode " + std::to_string(wcs[i].opcode) +
+                        " (fast path is sender-only; QP/CQ must not be "
+                        "shared with a recv flow)");
+                }
+            }
+            if (sends_completed > 0) {
+                inflight = std::max(0, inflight - sends_completed);
             }
         }
 
@@ -523,7 +548,11 @@ ChunkSet UCQPEngine::post_bucket_chunks(size_t          base_offset,
                                  : IBV_WR_RDMA_WRITE;
         wr.send_flags = IBV_SEND_SIGNALED;
         if (with_imm) {
-            wr.imm_data = htonl(cd.chunk_id);
+            // PR-C wire format: high 8 bits = bucket_id, low 24 = chunk_id.
+            // bucket_id=0 (default) reproduces the pre-PR-C encoding.
+            const uint32_t imm = (static_cast<uint32_t>(bucket_id) << 24) |
+                                 (cd.chunk_id & 0x00FFFFFFu);
+            wr.imm_data = htonl(imm);
         }
         wr.wr.rdma.remote_addr =
             remote.addr + remote_base_offset +
@@ -547,18 +576,45 @@ ChunkSet UCQPEngine::post_bucket_chunks(size_t          base_offset,
     Stopwatch sw;
     while (inflight > 0) {
         if (sw.elapsed_ms() >= static_cast<double>(drain_timeout_ms)) {
-            SEMIRDMA_LOG_WARN(
-                "post_bucket_chunks: tail drain timeout (inflight=%d, "
-                "n_chunks=%zu)", inflight, n_chunks);
-            break;
+            // Header documents this as a throwing condition. Surfacing the
+            // timeout prevents callers from silently advancing to the next
+            // bucket while WRs from the current bucket are still in flight
+            // (and possibly stuck on a fatal status).
+            throw std::runtime_error(
+                "post_bucket_chunks: tail drain timeout (inflight=" +
+                std::to_string(inflight) +
+                ", n_chunks=" + std::to_string(n_chunks) + ")");
         }
         int n = ibv_poll_cq(cq_, capacity, wcs.data());
         if (n < 0) {
             throw std::runtime_error(
                 "post_bucket_chunks: tail-drain ibv_poll_cq error");
         }
-        if (n > 0) {
-            inflight = std::max(0, inflight - n);
+        int sends_completed = 0;
+        for (int i = 0; i < n; ++i) {
+            // Only SEND-side CQEs (IBV_WC_RDMA_WRITE) are expected on the
+            // tail-drain path. A non-success status means the WR was
+            // dropped/rejected by the NIC. A RECV-side opcode means the
+            // QP/CQ is unexpectedly shared with a recv flow — accepting
+            // it would let inflight underflow and falsely declare drain.
+            if (wcs[i].status != IBV_WC_SUCCESS) {
+                throw std::runtime_error(
+                    std::string("post_bucket_chunks: tail-drain WC error: ") +
+                    ibv_wc_status_str(wcs[i].status) +
+                    " (wr_id=" + std::to_string(wcs[i].wr_id) + ")");
+            }
+            if (wcs[i].opcode == IBV_WC_RDMA_WRITE) {
+                ++sends_completed;
+            } else {
+                throw std::runtime_error(
+                    "post_bucket_chunks: tail-drain saw unexpected "
+                    "opcode " + std::to_string(wcs[i].opcode) +
+                    " (fast path is sender-only; QP/CQ must not be "
+                    "shared with a recv flow)");
+            }
+        }
+        if (sends_completed > 0) {
+            inflight = std::max(0, inflight - sends_completed);
         }
     }
     return cs;

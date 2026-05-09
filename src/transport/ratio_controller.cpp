@@ -34,8 +34,15 @@ size_t RatioController::drain_pending(ChunkSet& cs, uint8_t expected_bucket_id)
         return 0;
     }
     size_t drained = 0;
-    for (uint32_t chunk_id : it->second) {
-        if (cs.mark_completed(chunk_id)) {
+    for (const PendingEntry& e : it->second) {
+        // Evict entries whose age has reached one bucket_id cycle. Strict
+        // ``>=`` (not ``>``) is required: with 8-bit bucket_id, age == 256
+        // is precisely the first wait at which the same bucket_id can be
+        // legitimately reused for a *new* ChunkSet; allowing an entry of
+        // exactly that age through would let the previous cycle's stale
+        // CQE be marked on the new set.
+        if (wait_seq_ - e.deposit_seq >= kPendingMaxAgeWaits) continue;
+        if (cs.mark_completed(e.chunk_id)) {
             ++drained;
         }
         // mark_completed returning false means chunk_id is out of range
@@ -48,7 +55,8 @@ size_t RatioController::drain_pending(ChunkSet& cs, uint8_t expected_bucket_id)
 
 void RatioController::stash_foreign(uint8_t bucket_id, uint32_t chunk_id)
 {
-    pending_cqes_[bucket_id].push_back(chunk_id & IMM_CHUNK_MASK);
+    pending_cqes_[bucket_id].push_back(
+        PendingEntry{chunk_id & IMM_CHUNK_MASK, wait_seq_});
 }
 
 size_t RatioController::pending_size() const
@@ -128,18 +136,31 @@ bool RatioController::wait_for_ratio_clear(ChunkSet&         cs,
 {
     Stopwatch sw;
     uint32_t poll_count = 0;
+    uint32_t wc_errors  = 0;
+    uint32_t last_wc_status = 0;
     const size_t n_chunks = cs.size();
 
     // Drain any pending CQEs that already match (slot, gen).
     clr_drain_pending(cs, expected_slot_id, expected_gen);
 
     auto record_exit = [&](RatioExitReason reason, bool reached) {
+        // Escalate DEADLINE to WC_ERROR when at least one non-success WC was
+        // observed during the wait. DELIVERED / RATIO_MET take precedence —
+        // an error mid-flight that did not prevent the ratio from being met
+        // is still flagged via stats->wc_errors but the exit reason reflects
+        // the dominant outcome.
+        if (reason == RatioExitReason::DEADLINE && wc_errors > 0) {
+            reason = RatioExitReason::WC_ERROR;
+        }
         if (out_reason) *out_reason = reason;
         if (stats) {
             stats->latency_ms = sw.elapsed_ms();
             stats->poll_count = poll_count;
             stats->completed  = static_cast<uint32_t>(cs.num_completed());
-            stats->timed_out  = (reason == RatioExitReason::DEADLINE);
+            stats->timed_out  = (reason == RatioExitReason::DEADLINE ||
+                                 reason == RatioExitReason::WC_ERROR);
+            stats->wc_errors      = wc_errors;
+            stats->last_wc_status = last_wc_status;
         }
         return reached;
     };
@@ -161,8 +182,12 @@ bool RatioController::wait_for_ratio_clear(ChunkSet&         cs,
         ++poll_count;
 
         for (const auto& c : completions) {
+            if (c.status != IBV_WC_SUCCESS) {
+                ++wc_errors;
+                last_wc_status = static_cast<uint32_t>(c.status);
+                continue;
+            }
             if (c.opcode != IBV_WC_RECV_RDMA_WITH_IMM) continue;
-            if (c.status != IBV_WC_SUCCESS) continue;
             uint8_t  slot     = clear::imm_slot(c.imm_data);
             uint32_t chunk_id = clear::imm_chunk(c.imm_data);
             uint8_t  gen      = clear::imm_gen(c.imm_data);
@@ -191,6 +216,12 @@ bool RatioController::wait_for_ratio(ChunkSet&  cs,
 {
     Stopwatch sw;
     uint32_t poll_count = 0;
+    uint32_t wc_errors  = 0;
+    uint32_t last_wc_status = 0;
+
+    // Bump the wait counter before drain so age comparisons in
+    // drain_pending are computed against the current epoch.
+    ++wait_seq_;
 
     // Step 0: drain any pending CQEs that match the expected bucket.
     // No-op when the queue is empty (overwhelmingly the common case
@@ -205,6 +236,8 @@ bool RatioController::wait_for_ratio(ChunkSet&  cs,
                 stats->poll_count = poll_count;
                 stats->completed  = static_cast<uint32_t>(cs.num_completed());
                 stats->timed_out  = true;
+                stats->wc_errors      = wc_errors;
+                stats->last_wc_status = last_wc_status;
             }
             return false;
         }
@@ -214,18 +247,30 @@ bool RatioController::wait_for_ratio(ChunkSet&  cs,
         poll_count++;
 
         for (const auto& c : completions) {
+            // Track non-success CQEs so RC fallback / RC-Lossy experiments
+            // can distinguish a real QP error (RNR / RETRY_EXC / TIMEOUT /
+            // LOC_PROT / LOC_LEN / REM_ACCESS) from a delivery timeout.
+            // Without this counter, all of those failure modes get masked
+            // as "ratio not met before deadline".
+            if (c.status != IBV_WC_SUCCESS) {
+                ++wc_errors;
+                last_wc_status = static_cast<uint32_t>(c.status);
+                continue;
+            }
             // Only process receiver-side Write-with-Imm CQEs.
             // Sender CQEs (IBV_WC_RDMA_WRITE) are silently consumed.
-            if (c.opcode == IBV_WC_RECV_RDMA_WITH_IMM &&
-                c.status == IBV_WC_SUCCESS) {
+            if (c.opcode == IBV_WC_RECV_RDMA_WITH_IMM) {
                 uint8_t  bid = bucket_of(c.imm_data);
                 uint32_t cid = chunk_of(c.imm_data);
                 if (bid == expected_bucket_id) {
                     cs.mark_completed(cid);
                 } else {
                     // Foreign bucket — stash for a future wait_for_ratio
-                    // (or external drain_pending) call to claim.
-                    pending_cqes_[bid].push_back(cid);
+                    // (or external drain_pending) call to claim. The
+                    // deposit_seq tag lets drain_pending evict entries
+                    // older than one bucket_id cycle.
+                    pending_cqes_[bid].push_back(
+                        PendingEntry{cid, wait_seq_});
                 }
             }
         }
@@ -237,6 +282,8 @@ bool RatioController::wait_for_ratio(ChunkSet&  cs,
         stats->poll_count = poll_count;
         stats->completed  = static_cast<uint32_t>(cs.num_completed());
         stats->timed_out  = false;
+        stats->wc_errors      = wc_errors;
+        stats->last_wc_status = last_wc_status;
     }
     return true;
 }

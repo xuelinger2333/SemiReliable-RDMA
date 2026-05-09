@@ -169,8 +169,9 @@ void wire(sc::Finalizer& f, CallbackProbe& p) {
         ++p.retire_calls;
         p.last_retire_uid = uid;
     });
-    f.on_apply_mask([&](uint64_t, sc::FinalizeDecision, const uint8_t* mask,
-                        size_t len, uint32_t /*n_chunks*/) {
+    f.on_apply_mask([&](uint64_t, sc::FinalizeDecision, sc::Policy,
+                        const uint8_t* mask, size_t len,
+                        uint32_t /*n_chunks*/) {
         ++p.apply_mask_calls;
         p.last_apply_mask.assign(mask, mask + len);
     });
