@@ -155,6 +155,12 @@ class ClearHookState:
         from semirdma._bootstrap import exchange_qp_info
 
         is_server = (rank == 0)
+        # _bootstrap.exchange_qp_info uses `host` as the bind address when
+        # is_server=True and as the peer address when is_server=False.
+        # Loopback (peer_host=127.0.0.1) hides the distinction; cross-node
+        # (peer_host=10.10.1.2) makes rank 0 try to bind the peer's IP and
+        # fail with EADDRNOTAVAIL.
+        bootstrap_host = "0.0.0.0" if is_server else peer_host
 
         tx = ClearTransport(cfg)
         rx = ClearTransport(cfg)
@@ -170,45 +176,45 @@ class ClearHookState:
         if rank == 0:
             # port+0 — we ship tx.data, peer ships rx.data → we recv peer.rx.data
             peer_rx_data_qp, peer_rx_data_mr = exchange_qp_info(
-                is_server=is_server, host=peer_host, port=port + 0,
+                is_server=is_server, host=bootstrap_host, port=port + 0,
                 local_qp=tx.data_qp_info, local_mr=tx.data_mr_info,
                 connect_timeout_s=connect_timeout_s,
             )
             peer_rx_cp_qp, _ = exchange_qp_info(
-                is_server=is_server, host=peer_host, port=port + 1,
+                is_server=is_server, host=bootstrap_host, port=port + 1,
                 local_qp=tx.control_qp_info, local_mr=tx.control_mr_info,
                 connect_timeout_s=connect_timeout_s,
             )
             # port+2 — we ship rx.data, peer ships tx.data → we recv peer.tx.data
             peer_tx_data_qp, peer_tx_data_mr = exchange_qp_info(
-                is_server=is_server, host=peer_host, port=port + 2,
+                is_server=is_server, host=bootstrap_host, port=port + 2,
                 local_qp=rx.data_qp_info, local_mr=rx.data_mr_info,
                 connect_timeout_s=connect_timeout_s,
             )
             peer_tx_cp_qp, _ = exchange_qp_info(
-                is_server=is_server, host=peer_host, port=port + 3,
+                is_server=is_server, host=bootstrap_host, port=port + 3,
                 local_qp=rx.control_qp_info, local_mr=rx.control_mr_info,
                 connect_timeout_s=connect_timeout_s,
             )
         else:
             # rank 1 — mirror image: ship rx.data on port+0, tx.data on port+2.
             peer_tx_data_qp, peer_tx_data_mr = exchange_qp_info(
-                is_server=is_server, host=peer_host, port=port + 0,
+                is_server=is_server, host=bootstrap_host, port=port + 0,
                 local_qp=rx.data_qp_info, local_mr=rx.data_mr_info,
                 connect_timeout_s=connect_timeout_s,
             )
             peer_tx_cp_qp, _ = exchange_qp_info(
-                is_server=is_server, host=peer_host, port=port + 1,
+                is_server=is_server, host=bootstrap_host, port=port + 1,
                 local_qp=rx.control_qp_info, local_mr=rx.control_mr_info,
                 connect_timeout_s=connect_timeout_s,
             )
             peer_rx_data_qp, peer_rx_data_mr = exchange_qp_info(
-                is_server=is_server, host=peer_host, port=port + 2,
+                is_server=is_server, host=bootstrap_host, port=port + 2,
                 local_qp=tx.data_qp_info, local_mr=tx.data_mr_info,
                 connect_timeout_s=connect_timeout_s,
             )
             peer_rx_cp_qp, _ = exchange_qp_info(
-                is_server=is_server, host=peer_host, port=port + 3,
+                is_server=is_server, host=bootstrap_host, port=port + 3,
                 local_qp=tx.control_qp_info, local_mr=tx.control_mr_info,
                 connect_timeout_s=connect_timeout_s,
             )
